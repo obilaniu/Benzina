@@ -402,6 +402,54 @@ static int   ilsvrcConnRequestExit           (ILSVRC* s, ILSVRC_CONN* c){
  */
 
 static int   ilsvrcConnRequestSequentialBatch(ILSVRC* s, ILSVRC_CONN* c){
+	uint64_t    batchSize, startIndex, xOff, yOff, xPathLen, yPathLen;
+	const char* xPath, * yPath;
+	
+	/**
+	 * Packet too short?
+	 */
+	
+	if(c->msgLen < 60){
+		return ilsvrcConnReply(s, c, 4);
+	}
+	
+	/**
+	 * Parse header.
+	 */
+	
+	memcpy(&batchSize,    c->msg+ 8, sizeof(batchSize));
+	memcpy(&startIndex,   c->msg+16, sizeof(startIndex));
+	memcpy(&xOff,         c->msg+24, sizeof(xOff));
+	memcpy(&yOff,         c->msg+32, sizeof(yOff));
+	memcpy(&xPathLen,     c->msg+40, sizeof(xPathLen));
+	memcpy(&yPathLen,     c->msg+48, sizeof(yPathLen));
+	
+	/**
+	 * Packet of incorrect length?
+	 */
+	
+	if(c->msgLen != 56+xPathLen+1+yPathLen+1){
+		return ilsvrcConnReply(s, c, 4);
+	}
+	
+	/**
+	 * Check sanity of paths given to us.
+	 */
+	
+	xPath = c->msg + 56;
+	yPath = c->msg + 56 + xPathLen + 1;
+	if(xPath[xPathLen] != '\0'   || yPath[yPathLen] != '\0'  ||
+	   strlen(xPath) != xPathLen || strlen(yPath) != yPathLen){
+		return ilsvrcConnReply(s, c, 4);
+	}
+	
+	/**
+	 * The request is valid, handle it here.
+	 */
+	
+	//.........
+	
+	
 	return ilsvrcConnReply(s, c, 0);
 }
 
@@ -410,6 +458,56 @@ static int   ilsvrcConnRequestSequentialBatch(ILSVRC* s, ILSVRC_CONN* c){
  */
 
 static int   ilsvrcConnRequestRandomBatch    (ILSVRC* s, ILSVRC_CONN* c){
+	uint64_t    batchSize, * indexes, xOff, yOff, xPathLen, yPathLen;
+	const char* xPath, * yPath;
+	
+	/**
+	 * Packet too short?
+	 */
+	
+	if(c->msgLen < 60){
+		return ilsvrcConnReply(s, c, 4);
+	}
+	
+	/**
+	 * Parse header.
+	 */
+	
+	memcpy(&batchSize,    c->msg+ 8, sizeof(batchSize));
+	indexes = (uint64_t*)(c->msg+16);
+	
+	/**
+	 * Packet of incorrect length?
+	 */
+	
+	if(c->msgLen != 48 + batchSize*8 + xPathLen+1+yPathLen+1){
+		return ilsvrcConnReply(s, c, 4);
+	}
+	
+	memcpy(&xOff,         c->msg+16+batchSize*8, sizeof(xOff));
+	memcpy(&yOff,         c->msg+24+batchSize*8, sizeof(yOff));
+	memcpy(&xPathLen,     c->msg+32+batchSize*8, sizeof(xPathLen));
+	memcpy(&yPathLen,     c->msg+40+batchSize*8, sizeof(yPathLen));
+	
+	/**
+	 * Check sanity of paths given to us.
+	 */
+	
+	xPath = c->msg + 48 + batchSize*8;
+	yPath = c->msg + 48 + batchSize*8 + xPathLen + 1;
+	if(xPath[xPathLen] != '\0'   || yPath[yPathLen] != '\0'  ||
+	   strlen(xPath) != xPathLen || strlen(yPath) != yPathLen){
+		return ilsvrcConnReply(s, c, 4);
+	}
+	
+	/**
+	 * The request is valid, handle it here.
+	 */
+	
+	//.........
+	(void)indexes;
+	
+	
 	return ilsvrcConnReply(s, c, 0);
 }
 
