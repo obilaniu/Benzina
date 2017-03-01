@@ -5,13 +5,14 @@
  * 
  * USAGE:
  * 
- * ilsvrcserver [args] path/to/dataset.hdf5 <port>
+ * ilsvrcserver [args] path/to/dataset.hdf5
  * 
+ *   -d       madvise() for dont-need.
  *   -n       madvise() for normal access.
  *   -r       madvise() for random access.
  *   -s       madvise() for sequential access.
  *   -l       mlock()   the dataset into memory.
- *   <port>   Localhost port number to bind to. Default 5555.
+ *   -p       Localhost port number to bind to. Default 5555.
  * 
  * IMPLEMENTATION:
  * 
@@ -66,6 +67,7 @@ typedef struct ILSVRC ILSVRC;
 struct ILSVRC{
 	int       bindPort;
 	char*     pathDataset;
+	int       dontneed;   /* 0: Off     1: On */
 	int       madvMode;   /* 0: Normal  1: Random  2: Sequential */
 	int       mlockMode;  /* 0: Off     1: On */
 	int       exit;
@@ -155,10 +157,27 @@ static int   ilsvrcParseArgs(ILSVRC* s, int argc, char** argv){
 				
 				while(*p){
 					switch(*p){
+						case 'd': s->dontneed  = 1; break;
 						case 'l': s->mlockMode = 1; break;
 						case 'n': s->madvMode  = 0; break;
 						case 'r': s->madvMode  = 1; break;
 						case 's': s->madvMode  = 2; break;
+						case 'p':
+							/** 
+							 * -p cannot be followed by another single-letter option
+							 * and must be followed by a parseable port number.
+							 */
+							
+							if(p[1] != '\0' || argv[++i] == NULL){
+								return ilsvrcPrintHelp(s);
+							}
+							
+							/* This must be the port number */
+							s->bindPort = strtoul(argv[i], &p, 0);
+							if(*argv[i] == '\0' || *p != '\0'){
+								return ilsvrcPrintHelp(s);
+							}
+						break;
 						default: return ilsvrcPrintHelp(s);
 					}
 					p++;
@@ -166,12 +185,6 @@ static int   ilsvrcParseArgs(ILSVRC* s, int argc, char** argv){
 			}else{
 				/* It's the path to the dataset. */
 				s->pathDataset = argv[i];
-			}
-		}else{
-			/* This must be the port number */
-			s->bindPort = strtoul(argv[i], &p, 0);
-			if(*argv[i] == '\0' || *p == '\0'){
-				return ilsvrcPrintHelp(s);
 			}
 		}
 	}
@@ -184,7 +197,7 @@ static int   ilsvrcParseArgs(ILSVRC* s, int argc, char** argv){
  */
 
 static int   ilsvrcPrintHelp(ILSVRC* s){
-	fprintf(stderr, "Usage: ilsvrcserver [-rsnl] path/to/dataset.hdf5 <port>\n");
+	fprintf(stderr, "Usage: ilsvrcserver [-drsnl -p <port>] path/to/dataset.hdf5\n");
 	
 	return ilsvrcTeardown(s, 1);
 }
