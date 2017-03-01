@@ -109,6 +109,18 @@ static int   ilsvrcConnCleanup               (ILSVRC* s, ILSVRC_CONN* c);
 static int   ilsvrcConnRequestExit           (ILSVRC* s, ILSVRC_CONN* c);
 static int   ilsvrcConnRequestSequentialBatch(ILSVRC* s, ILSVRC_CONN* c);
 static int   ilsvrcConnRequestRandomBatch    (ILSVRC* s, ILSVRC_CONN* c);
+static int   ilsvrcHandleSequentialBatch     (uint64_t    batchSize,
+                                              uint64_t    startIndex,
+                                              const char* xPath,
+                                              const char* yPath,
+                                              uint64_t    xOff,
+                                              uint64_t    yOff);
+static int   ilsvrcHandleRandomBatch         (uint64_t    batchSize,
+                                              uint64_t*   indexes,
+                                              const char* xPath,
+                                              const char* yPath,
+                                              uint64_t    xOff,
+                                              uint64_t    yOff);
 
 
 
@@ -404,6 +416,7 @@ static int   ilsvrcConnRequestExit           (ILSVRC* s, ILSVRC_CONN* c){
 static int   ilsvrcConnRequestSequentialBatch(ILSVRC* s, ILSVRC_CONN* c){
 	uint64_t    batchSize, startIndex, xOff, yOff, xPathLen, yPathLen;
 	const char* xPath, * yPath;
+	int         ret;
 	
 	/**
 	 * Packet too short?
@@ -428,7 +441,9 @@ static int   ilsvrcConnRequestSequentialBatch(ILSVRC* s, ILSVRC_CONN* c){
 	 * Packet of incorrect length?
 	 */
 	
-	if(c->msgLen != 56+xPathLen+1+yPathLen+1){
+	if(c->msgLen != 56+xPathLen+1+yPathLen+1 ||
+	   c->msgLen <  xPathLen                 ||
+	   c->msgLen <  yPathLen){
 		return ilsvrcConnReply(s, c, 4);
 	}
 	
@@ -447,10 +462,13 @@ static int   ilsvrcConnRequestSequentialBatch(ILSVRC* s, ILSVRC_CONN* c){
 	 * The request is valid, handle it here.
 	 */
 	
-	//.........
-	
-	
-	return ilsvrcConnReply(s, c, 0);
+	ret = ilsvrcHandleSequentialBatch(batchSize,
+	                                  startIndex,
+	                                  xPath,
+	                                  yPath,
+	                                  xOff,
+	                                  yOff);
+	return ilsvrcConnReply(s, c, ret);
 }
 
 /**
@@ -460,6 +478,7 @@ static int   ilsvrcConnRequestSequentialBatch(ILSVRC* s, ILSVRC_CONN* c){
 static int   ilsvrcConnRequestRandomBatch    (ILSVRC* s, ILSVRC_CONN* c){
 	uint64_t    batchSize, * indexes, xOff, yOff, xPathLen, yPathLen;
 	const char* xPath, * yPath;
+	int         ret;
 	
 	/**
 	 * Packet too short?
@@ -480,7 +499,7 @@ static int   ilsvrcConnRequestRandomBatch    (ILSVRC* s, ILSVRC_CONN* c){
 	 * Packet of incorrect length?
 	 */
 	
-	if(c->msgLen != 48 + batchSize*8 + xPathLen+1+yPathLen+1){
+	if(c->msgLen < 48 + batchSize*8){
 		return ilsvrcConnReply(s, c, 4);
 	}
 	
@@ -488,6 +507,16 @@ static int   ilsvrcConnRequestRandomBatch    (ILSVRC* s, ILSVRC_CONN* c){
 	memcpy(&yOff,         c->msg+24+batchSize*8, sizeof(yOff));
 	memcpy(&xPathLen,     c->msg+32+batchSize*8, sizeof(xPathLen));
 	memcpy(&yPathLen,     c->msg+40+batchSize*8, sizeof(yPathLen));
+	
+	/**
+	 * Packet of incorrect length?
+	 */
+	
+	if(c->msgLen != 48 + batchSize*8 + xPathLen+1+yPathLen+1 ||
+	   c->msgLen  < xPathLen                                 ||
+	   c->msgLen  < yPathLen){
+		return ilsvrcConnReply(s, c, 4);
+	}
 	
 	/**
 	 * Check sanity of paths given to us.
@@ -504,12 +533,41 @@ static int   ilsvrcConnRequestRandomBatch    (ILSVRC* s, ILSVRC_CONN* c){
 	 * The request is valid, handle it here.
 	 */
 	
-	//.........
-	(void)indexes;
-	
-	
-	return ilsvrcConnReply(s, c, 0);
+	ret = ilsvrcHandleRandomBatch(batchSize,
+	                              indexes,
+	                              xPath,
+	                              yPath,
+	                              xOff,
+	                              yOff);
+	return ilsvrcConnReply(s, c, ret);
 }
+
+/**
+ * Implementation of the sequential batch handling code.
+ */
+
+static int   ilsvrcHandleSequentialBatch     (uint64_t    batchSize,
+                                              uint64_t    startIndex,
+                                              const char* xPath,
+                                              const char* yPath,
+                                              uint64_t    xOff,
+                                              uint64_t    yOff){
+	return 0;
+}
+
+/**
+ * Implementation of the sequential batch handling code.
+ */
+
+static int   ilsvrcHandleRandomBatch         (uint64_t    batchSize,
+                                              uint64_t*   indexes,
+                                              const char* xPath,
+                                              const char* yPath,
+                                              uint64_t    xOff,
+                                              uint64_t    yOff){
+	return 0;
+}
+
 
 /**
  * Main
