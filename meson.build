@@ -22,18 +22,18 @@ deps = [m, hdf5, zmq, turbojpeg, png, opencv_core, opencv_imgcodecs,
 
 
 # Server
-ilsvrcserver_srcs = files('ilsvrcserver.cpp')
+ilsvrcserver_srcs = files('src/ilsvrcserver.cpp')
 ilsvrcserver      = executable('ilsvrcserver', ilsvrcserver_srcs,
                                dependencies : deps)
 
 
 # Benchmark Client
-ilsvrcclient_srcs = files('ilsvrcclient.cpp')
+ilsvrcclient_srcs = files('src/ilsvrcclient.cpp')
 ilsvrcclient      = executable('ilsvrcclient', ilsvrcclient_srcs,
                                dependencies : deps)
 
 
 # Dataset Generator
-#ilsvrcgen_srcs    = files('ilsvrcgen.cpp')
+#ilsvrcgen_srcs    = files('src/ilsvrcgen.cpp')
 #ilsvrcgen         = executable('ilsvrcgen', ilsvrcgen_srcs,
 #                               dependencies : deps)
