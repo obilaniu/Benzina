@@ -57,13 +57,16 @@ typedef struct DSET_THRD_CTX DSET_THRD_CTX;
  */
 
 typedef struct DSET_THRD_CTX{
-	DSET_CTX* dsetCtx;
-	int       thrdNum;
+	DSET_CTX*             dsetCtx;
+	int                   thrdNum;
 	
-	AVCodecContext*  jpegDecCtx;
-	AVCodecContext*  h264EncCtx;
-	AVDictionary*    jpegOpts;
-	AVDictionary*    h264Opts;
+	AVCodecContext*       jpegDecCtx;
+	AVCodecContext*       h264EncCtx;
+	AVDictionary*         jpegOpts;
+	AVDictionary*         h264Opts;
+	
+	CUvideoparser         parser;
+	CUVIDPARSERPARAMS     parserParams;
 } DSET_THRD_CTX;
 
 
@@ -91,8 +94,11 @@ typedef struct DSET_THRD_CTX{
 struct DSET_CTX{
 	int              argc;
 	char**           argv;
-	const char*      srcPath;
-	const char*      dstPath;
+	struct{
+		int              cudaDev;
+		const char*      srcPath;
+		const char*      dstPath;
+	} args;
 	
 	AVCodec*         jpegDecoder;
 	AVCodec*         h264Encoder;
@@ -113,118 +119,346 @@ struct DSET_CTX{
 	int              numThrds;
 	DSET_THRD_CTX*   thrds;
 	
-	AVCodecContext*  jpegDecCtx;
-	AVCodecContext*  h264EncCtx;
-	AVDictionary*    jpegOpts;
-	AVDictionary*    h264Opts;
+	omp_lock_t       exitLock;
+	int              exiting;
+	int              exitCode;
 };
 
 
 
 /* Static Function Prototypes */
-static int    checkArgs            (DSET_CTX* ctx, int argc, char* argv[]);
-static int    initCUDA             (DSET_CTX* ctx);
-static int    initFFmpeg           (DSET_CTX* ctx);
-static int    openHDF5Src          (DSET_CTX* ctx);
-static int    readSrc              (DSET_CTX* ctx);
-static int    runConversion        (DSET_CTX* ctx);
-static int    cleanup              (DSET_CTX* ctx, int ret);
+static int    ilsvrcInit                    (DSET_CTX* ctx, int argc, char** argv);
+static int    ilsvrcParseArg                (DSET_CTX* ctx, int argc, char** argv);
+static int    ilsvrcCheckArgs               (DSET_CTX* ctx);
+static int    ilsvrcInitCUDA                (DSET_CTX* ctx);
+static int    ilsvrcInitFFmpeg              (DSET_CTX* ctx);
+static int    ilsvrcInitHDF5                (DSET_CTX* ctx);
+static int    ilsvrcInitOpenMP              (DSET_CTX* ctx);
+static int    ilsvrcRun                     (DSET_CTX* ctx);
+static int    ilsvrcWriteDst                (DSET_CTX* ctx);
+static int    ilsvrcCleanup                 (DSET_CTX* ctx, int ret);
+static int    ilsvrcThrdInit                (DSET_THRD_CTX* ctx);
+static int    ilsvrcThrdInitCUDA            (DSET_THRD_CTX* ctx);
+static int    ilsvrcThrdInitFFmpeg          (DSET_THRD_CTX* ctx);
+static int    ilsvrcThrdRequestExit         (DSET_THRD_CTX* ctx, int ret);
+static int    ilsvrcThrdHasRequestedExit    (DSET_THRD_CTX* ctx);
+static int    ilsvrcThrdGetRequestedExitCode(DSET_THRD_CTX* ctx);
+static int    ilsvrcThrdRunIterBody         (DSET_THRD_CTX* ctx, size_t i);
+static int    ilsvrcThrdFini                (DSET_THRD_CTX* ctx);
 
 
 
 /* Static Function Definitions */
 
 /**
- * Check arguments.
+ * Initialize.
  */
 
-static int   checkArgs            (DSET_CTX* ctx, int argc, char* argv[]){
-	struct stat src, dst;
+static int    ilsvrcInit                    (DSET_CTX* ctx, int argc, char** argv){
 	memset(ctx, 0, sizeof(*ctx));
-	ctx->argc    = argc;
-	ctx->argv    = argv;
-	ctx->srcPath = argv[1];
-	ctx->dstPath = argv[2];
+	ctx->argc = argc;
+	ctx->argv = argv;
 	
-	if(argc < 3){
-		return cleanup(ctx, ILSVRC_EXIT_FAIL_ARGS);
+	return ilsvrcParseArg(ctx, 1, argv);
+}
+
+/**
+ * Parse one argument.
+ */
+
+static int    ilsvrcParseArg                (DSET_CTX* ctx, int argc, char** argv){
+	switch(argc){
+		case 1:  ctx->args.srcPath = argv[argc++]; break;
+		case 2:  ctx->args.dstPath = argv[argc++]; break;
+		default: argc++; break;
 	}
 	
-	if(stat(ctx->srcPath, &src) != 0        ||
+	if(argc < ctx->argc){
+		return ilsvrcParseArg(ctx, argc, argv);
+	}else{
+		return ilsvrcCheckArgs(ctx);
+	}
+}
+
+/**
+ * Check arguments valid.
+ */
+
+static int    ilsvrcCheckArgs               (DSET_CTX* ctx){
+	struct stat src, dst;
+	
+	if(!ctx->args.srcPath){
+		fprintf(stderr, "Path to source dataset not provided!\n");
+		return ilsvrcCleanup(ctx, ILSVRC_EXIT_FAIL_ARGS);
+	}
+	
+	if(!ctx->args.dstPath){
+		fprintf(stderr, "Path to destination dataset not provided!\n");
+		return ilsvrcCleanup(ctx, ILSVRC_EXIT_FAIL_ARGS);
+	}
+	
+	if(!ctx->args.srcPath                   ||
+	   stat(ctx->args.srcPath, &src) != 0   ||
 	   !S_ISREG(src.st_mode)                ||
 	   !((src.st_mode & S_IRUSR) == S_IRUSR)){
-		fprintf(stderr, "Cannot read source dataset %s!\n", argv[1]);
-		return cleanup(ctx, ILSVRC_EXIT_FAIL_ARGS);
+		fprintf(stderr, "Cannot read source dataset %s!\n", ctx->args.srcPath);
+		return ilsvrcCleanup(ctx, ILSVRC_EXIT_FAIL_ARGS);
 	}
 	
-	if(stat(ctx->dstPath, &dst) == 0){
-		fprintf(stderr, "Destination dataset %s already exists!\n", argv[2]);
-		return cleanup(ctx, ILSVRC_EXIT_FAIL_ARGS);
+	if(stat(ctx->args.dstPath, &dst) == 0){
+		fprintf(stderr, "Destination dataset %s already exists!\n", ctx->args.dstPath);
+		return ilsvrcCleanup(ctx, ILSVRC_EXIT_FAIL_ARGS);
 	}
 	
-	return initCUDA(ctx);
+	return ilsvrcInitCUDA(ctx);
 }
 
 /**
  * Initialize CUDA.
  */
 
-static int   initCUDA             (DSET_CTX* ctx){
+static int    ilsvrcInitCUDA                (DSET_CTX* ctx){
 	cuInit(0);
-	cudaSetDevice(0);
+	cudaSetDevice(ctx->args.cudaDev);
 	
-	CUvideoparser         parser;
-	CUVIDPARSERPARAMS     parserParams;
-	//CUVIDSOURCEDATAPACKET packet;
-	
-	memset(&parserParams, 0, sizeof(parserParams));
-	parserParams.CodecType              = cudaVideoCodec_H264;
-	parserParams.ulMaxNumDecodeSurfaces = 8;
-	parserParams.ulClockRate            = 0;
-	parserParams.ulErrorThreshold       = 100;
-	parserParams.ulMaxDisplayDelay      = 4;
-	parserParams.pUserData              = ctx;
-	parserParams.pfnSequenceCallback    = (PFNVIDSEQUENCECALLBACK)NULL;
-	parserParams.pfnDecodePicture       = (PFNVIDDECODECALLBACK)  NULL;
-	parserParams.pfnDisplayPicture      = (PFNVIDDISPLAYCALLBACK) NULL;
-	parserParams.pExtVideoInfo          = NULL;
-	
-	cuvidCreateVideoParser (&parser, &parserParams);
-	//cuvidParseVideoData    (parser, &packet);
-	cuvidDestroyVideoParser(parser);
-	
-	return initFFmpeg(ctx);
+	return ilsvrcInitFFmpeg(ctx);
 }
 
 /**
  * Initialize FFmpeg.
  */
 
-static int   initFFmpeg           (DSET_CTX* ctx){
-	int i;
-	
+static int    ilsvrcInitFFmpeg              (DSET_CTX* ctx){
 	avcodec_register_all();
 	ctx->jpegDecoder = avcodec_find_decoder_by_name("mjpeg");
 	ctx->h264Encoder = avcodec_find_encoder_by_name("libx264");
 	if(!ctx->jpegDecoder){
 		fprintf(stderr, "Could not open JPEG decoder!\n");
-		return cleanup(ctx, ILSVRC_EXIT_FAIL_FFMPEG);
+		return ilsvrcCleanup(ctx, ILSVRC_EXIT_FAIL_FFMPEG);
 	}
 	if(!ctx->h264Encoder){
 		fprintf(stderr, "Could not open x264 encoder!\n");
-		return cleanup(ctx, ILSVRC_EXIT_FAIL_FFMPEG);
+		return ilsvrcCleanup(ctx, ILSVRC_EXIT_FAIL_FFMPEG);
 	}
 	
-	ctx->jpegDecCtx  = avcodec_alloc_context3(ctx->jpegDecoder);
-	ctx->h264EncCtx  = avcodec_alloc_context3(ctx->h264Encoder);
-	if(!ctx->jpegDecCtx){
-		fprintf(stderr, "Could not allocate JPEG decoding context!\n");
-		return cleanup(ctx, ILSVRC_EXIT_FAIL_FFMPEG);
+	return ilsvrcInitHDF5(ctx);
+}
+
+/**
+ * Initialize HDF5 and open source HDF5 dataset.
+ */
+
+static int    ilsvrcInitHDF5                (DSET_CTX* ctx){
+	if(H5open() < 0){
+		fprintf(stderr, "Could not initialize HDF5 library!\n");
+		return ilsvrcCleanup(ctx, ILSVRC_EXIT_FAIL_HDF5);
 	}
-	if(!ctx->h264EncCtx){
-		fprintf(stderr, "Could not allocate h264 encoding context!\n");
-		return cleanup(ctx, ILSVRC_EXIT_FAIL_FFMPEG);
+	
+	ctx->srcFile = H5Fopen(ctx->args.srcPath, H5F_ACC_RDONLY, H5P_DEFAULT);
+	if(ctx->srcFile < 0){
+		fprintf(stderr, "Could not open source dataset %s as HDF5 file!\n",
+		        ctx->args.srcPath);
+		return ilsvrcCleanup(ctx, ILSVRC_EXIT_FAIL_HDF5);
 	}
+	
+	ctx->srcFileEncoded = H5Dopen(ctx->srcFile, "encoded_images", H5P_DEFAULT);
+	ctx->srcFileTargets = H5Dopen(ctx->srcFile, "targets",        H5P_DEFAULT);
+	if(ctx->srcFileEncoded < 0){
+		fprintf(stderr, "Could not open dataset \"/encoded_images\" within HDF5 file!\n");
+		return ilsvrcCleanup(ctx, ILSVRC_EXIT_FAIL_HDF5);
+	}
+	if(ctx->srcFileTargets < 0){
+		fprintf(stderr, "Could not open dataset \"/targets\" within HDF5 file!\n");
+		return ilsvrcCleanup(ctx, ILSVRC_EXIT_FAIL_HDF5);
+	}
+	
+	ctx->srcFileEncodedSpace = H5Dget_space(ctx->srcFileEncoded);
+	ctx->srcFileEncodedType  = H5Dget_type (ctx->srcFileEncoded);
+	if(ctx->srcFileEncodedSpace < 0||
+	   ctx->srcFileEncodedType  < 0){
+		fprintf(stderr, "Could not get dataspace or datatype!\n");
+		return ilsvrcCleanup(ctx, ILSVRC_EXIT_FAIL_HDF5);
+	}
+	
+	ctx->srcFileEncodedNDims = H5Sget_simple_extent_ndims(ctx->srcFileEncodedSpace);
+	if(ctx->srcFileEncodedNDims != 1){
+		fprintf(stderr, "Dataset in unexpected format!\n");
+		return ilsvrcCleanup(ctx, ILSVRC_EXIT_FAIL_HDF5);
+	}
+	if(H5Sget_simple_extent_dims(ctx->srcFileEncodedSpace,
+	                             ctx->srcFileEncodedDims,
+	                             NULL) != 1){
+		fprintf(stderr, "Could not get dataset dimensions!\n");
+		return ilsvrcCleanup(ctx, ILSVRC_EXIT_FAIL_HDF5);
+	}
+	
+	ctx->srcFileSplit      = H5Aopen(ctx->srcFile, "split", H5P_DEFAULT);
+	if(ctx->srcFileSplit < 0){
+		fprintf(stderr, "No splits attribute!\n");
+		return ilsvrcCleanup(ctx, ILSVRC_EXIT_FAIL_HDF5);
+	}
+	
+	ctx->srcFileSplitType  = H5Aget_type    (ctx->srcFileSplit);
+	ctx->srcFileSplitSpace = H5Aget_space   (ctx->srcFileSplit);
+	int numMembers         = H5Tget_nmembers(ctx->srcFileSplitType);
+	printf("Split datatype has %d members:\n", numMembers);
+	for(int i=0;i<numMembers;i++){
+		char*  name = H5Tget_member_name(ctx->srcFileSplitType, i);
+		hid_t  type = H5Tget_member_type(ctx->srcFileSplitType, i);
+		size_t size = H5Tget_size(type);
+		printf("\t%s (%zu bytes)\n", name, size);
+		H5free_memory(name);
+	}
+	
+	if(H5Aget_info(ctx->srcFileSplit, &ctx->srcFileSplitInfo) < 0){
+		fprintf(stderr, "Could not get splits attribute info!\n");
+		return ilsvrcCleanup(ctx, ILSVRC_EXIT_FAIL_HDF5);
+	}
+	
+	typedef struct SPLITATTRTYPE{
+		char     split[5];
+		char     source[14];
+		uint64_t start;
+		uint64_t stop;
+		void*    indices;
+		char     available;
+		char     comment;
+	} __attribute__((packed)) SPLITATTRTYPE;
+	printf("Attribute size: %zu\n", sizeof(SPLITATTRTYPE));
+	SPLITATTRTYPE* splits = (SPLITATTRTYPE*)malloc(ctx->srcFileSplitInfo.data_size);
+	H5Aread(ctx->srcFileSplit, ctx->srcFileSplitType, splits);
+	
+	ctx->nTrain = splits[0].stop-splits[0].start;
+	ctx->nVal   = splits[3].stop-splits[3].start;
+	ctx->nTest  = splits[6].stop-splits[6].start;
+	ctx->nTotal = ctx->nTrain + ctx->nVal + ctx->nTest;
+	
+	printf("Dataset splits:\n");
+	printf("\tTrain: %7llu\n", ctx->nTrain);
+	printf("\tVal:   %7llu\n", ctx->nVal);
+	printf("\tTest:  %7llu\n", ctx->nTest);
+	printf("\tTotal: %7llu\n", ctx->nTotal);
+	
+	return ilsvrcInitOpenMP(ctx);
+}
+
+/**
+ * Initialize OpenMP/threading/mutex-related state.
+ */
+
+static int    ilsvrcInitOpenMP              (DSET_CTX* ctx){
+	omp_init_lock(&ctx->exitLock);
+	
+	ctx->numThrds = omp_get_max_threads();
+	if(ctx->numThrds <= 0){
+		fprintf(stderr, "Invalid number of OpenMP threads (%d)!\n", ctx->numThrds);
+		return ilsvrcCleanup(ctx, ILSVRC_EXIT_FAIL_OPENMP);
+	}
+	printf("Using %d threads for conversion.\n", ctx->numThrds);
+	
+	ctx->thrds = (DSET_THRD_CTX*)calloc(ctx->numThrds, sizeof(*ctx->thrds));
+	if(ctx->thrds == NULL){
+		return ilsvrcCleanup(ctx, ILSVRC_EXIT_FAIL_OPENMP);
+	}
+	
+	return ilsvrcRun(ctx);
+}
+
+/**
+ * Run dataset conversion (possibly in parallel)
+ */
+
+static int   ilsvrcRun                      (DSET_CTX* ctx){
+	#pragma omp parallel num_threads(ctx->numThrds)
+	{
+		hsize_t        i;
+		DSET_THRD_CTX* thrdCtx;
+		int            thrdNum;
+		
+		thrdNum          = omp_get_thread_num();
+		thrdCtx          = ctx->thrds + thrdNum;
+		thrdCtx->thrdNum = thrdNum;
+		thrdCtx->dsetCtx = ctx;
+		ilsvrcThrdInit(thrdCtx);
+		
+		#pragma omp for ordered schedule(dynamic, 1)
+		for(i=0;i<ctx->nTotal;i++){
+			ilsvrcThrdRunIterBody(thrdCtx, i);
+		}
+		
+		ilsvrcThrdFini(thrdCtx);
+	}
+	
+	return ilsvrcWriteDst(ctx);
+}
+
+/**
+ * Write destination HDF5 dataset.
+ */
+
+static int   ilsvrcWriteDst                 (DSET_CTX* ctx){
+	int i;
+	
+	for(i=0;i<ctx->numThrds;i++){
+		printf("Thread %d exited with code %d\n", i,
+		       ilsvrcThrdGetRequestedExitCode(ctx->thrds+i));
+	}
+	
+	return ilsvrcCleanup(ctx, ILSVRC_EXIT_SUCCESS);
+}
+
+/**
+ * Cleanup.
+ */
+
+static int   ilsvrcCleanup                  (DSET_CTX* ctx, int ret){
+	H5Fclose(ctx->srcFile);
+	H5Dclose(ctx->srcFileEncoded);
+	H5Dclose(ctx->srcFileTargets);
+	
+	return ret;
+}
+
+/**
+ * Thread init.
+ */
+
+static int    ilsvrcThrdInit                (DSET_THRD_CTX* ctx){
+	return ilsvrcThrdInitCUDA(ctx);
+}
+
+/**
+ * Initialize per-thread CUDA resources.
+ */
+
+static int    ilsvrcThrdInitCUDA            (DSET_THRD_CTX* ctx){
+	//CUVIDSOURCEDATAPACKET packet;
+	
+	memset(&ctx->parserParams, 0, sizeof(ctx->parserParams));
+	ctx->parserParams.CodecType              = cudaVideoCodec_H264;
+	ctx->parserParams.ulMaxNumDecodeSurfaces = 8;
+	ctx->parserParams.ulClockRate            = 0;
+	ctx->parserParams.ulErrorThreshold       = 100;
+	ctx->parserParams.ulMaxDisplayDelay      = 4;
+	ctx->parserParams.pUserData              = ctx;
+	ctx->parserParams.pfnSequenceCallback    = (PFNVIDSEQUENCECALLBACK)NULL;
+	ctx->parserParams.pfnDecodePicture       = (PFNVIDDECODECALLBACK)  NULL;
+	ctx->parserParams.pfnDisplayPicture      = (PFNVIDDISPLAYCALLBACK) NULL;
+	ctx->parserParams.pExtVideoInfo          = NULL;
+	
+	cuvidCreateVideoParser (&ctx->parser, &ctx->parserParams);
+	//cuvidParseVideoData    (ctx->parser, &ctx->packet);
+	cuvidDestroyVideoParser(ctx->parser);
+	
+	return ilsvrcThrdInitFFmpeg(ctx);
+}
+
+/**
+ * Initialize per-thread FFmpeg resources.
+ */
+
+static int    ilsvrcThrdInitFFmpeg          (DSET_THRD_CTX* ctx){
+	int i;
 	
 	/**
 	 * H264 ENCODER SETTINGS
@@ -288,13 +522,24 @@ static int   initFFmpeg           (DSET_CTX* ctx){
 	 *                                                  H264 standard)
 	 */
 	
+	ctx->jpegDecCtx  = avcodec_alloc_context3(ctx->dsetCtx->jpegDecoder);
+	ctx->h264EncCtx  = avcodec_alloc_context3(ctx->dsetCtx->h264Encoder);
+	if(!ctx->jpegDecCtx){
+		fprintf(stderr, "Could not allocate JPEG decoding context!\n");
+		return ilsvrcThrdRequestExit(ctx, ILSVRC_EXIT_FAIL_FFMPEG);
+	}
+	if(!ctx->h264EncCtx){
+		fprintf(stderr, "Could not allocate h264 encoding context!\n");
+		return ilsvrcThrdRequestExit(ctx, ILSVRC_EXIT_FAIL_FFMPEG);
+	}
+	
 	i = 0;
 	av_dict_set    (&ctx->h264Opts, "x264-params",     "log=-1:chromaloc=1",   0);i++;
 	av_dict_set_int(&ctx->h264Opts, "forced-idr",      1,                      0);i++;
 	av_dict_set_int(&ctx->h264Opts, "crf",             13,                     0);i++;
 	if(av_dict_count(ctx->h264Opts) != i){
 		fprintf(stderr, "Failed to create options dictionary!\n");
-		return cleanup(ctx, ILSVRC_EXIT_FAIL_FFMPEG);
+		return ilsvrcThrdRequestExit(ctx, ILSVRC_EXIT_FAIL_FFMPEG);
 	}
 	
 	ctx->h264EncCtx->sample_aspect_ratio    = av_make_q(1, 1);
@@ -311,227 +556,127 @@ static int   initFFmpeg           (DSET_CTX* ctx){
 	ctx->h264EncCtx->gop_size               = 0;
 	ctx->h264EncCtx->profile                = FF_PROFILE_H264_HIGH;
 	
-	if(avcodec_open2(ctx->jpegDecCtx, ctx->jpegDecoder, &ctx->jpegOpts) < 0||
-	   avcodec_open2(ctx->h264EncCtx, ctx->h264Encoder, &ctx->h264Opts) < 0){
+	if(avcodec_open2(ctx->jpegDecCtx, ctx->dsetCtx->jpegDecoder, &ctx->jpegOpts) < 0||
+	   avcodec_open2(ctx->h264EncCtx, ctx->dsetCtx->h264Encoder, &ctx->h264Opts) < 0){
 		fprintf(stderr, "Failed to create encoder/decoder contexts!\n");
-		return cleanup(ctx, ILSVRC_EXIT_FAIL_FFMPEG);
+		return ilsvrcThrdRequestExit(ctx, ILSVRC_EXIT_FAIL_FFMPEG);
 	}
 	
-	return openHDF5Src(ctx);
+	return 0;
 }
 
 /**
- * Open source HDF5 dataset.
+ * Request exit.
  */
 
-static int   openHDF5Src           (DSET_CTX* ctx){
-	if(H5open() < 0){
-		fprintf(stderr, "Could not initialize HDF5 library!\n");
-		return cleanup(ctx, ILSVRC_EXIT_FAIL_HDF5);
-	}
-	
-	ctx->srcFile = H5Fopen(ctx->srcPath, H5F_ACC_RDONLY, H5P_DEFAULT);
-	if(ctx->srcFile < 0){
-		fprintf(stderr, "Could not open source dataset %s as HDF5 file!\n",
-		        ctx->srcPath);
-		return cleanup(ctx, ILSVRC_EXIT_FAIL_HDF5);
-	}
-	
-	ctx->srcFileEncoded = H5Dopen(ctx->srcFile, "encoded_images", H5P_DEFAULT);
-	ctx->srcFileTargets = H5Dopen(ctx->srcFile, "targets",        H5P_DEFAULT);
-	if(ctx->srcFileEncoded < 0){
-		fprintf(stderr, "Could not open dataset \"/encoded_images\" within HDF5 file!\n");
-		return cleanup(ctx, ILSVRC_EXIT_FAIL_HDF5);
-	}
-	if(ctx->srcFileTargets < 0){
-		fprintf(stderr, "Could not open dataset \"/targets\" within HDF5 file!\n");
-		return cleanup(ctx, ILSVRC_EXIT_FAIL_HDF5);
-	}
-	
-	ctx->srcFileEncodedSpace = H5Dget_space(ctx->srcFileEncoded);
-	ctx->srcFileEncodedType  = H5Dget_type (ctx->srcFileEncoded);
-	if(ctx->srcFileEncodedSpace < 0||
-	   ctx->srcFileEncodedType  < 0){
-		fprintf(stderr, "Could not get dataspace or datatype!\n");
-		return cleanup(ctx, ILSVRC_EXIT_FAIL_HDF5);
-	}
-	
-	ctx->srcFileEncodedNDims = H5Sget_simple_extent_ndims(ctx->srcFileEncodedSpace);
-	if(ctx->srcFileEncodedNDims != 1){
-		fprintf(stderr, "Dataset in unexpected format!\n");
-		return cleanup(ctx, ILSVRC_EXIT_FAIL_HDF5);
-	}
-	if(H5Sget_simple_extent_dims(ctx->srcFileEncodedSpace,
-	                             ctx->srcFileEncodedDims,
-	                             NULL) != 1){
-		fprintf(stderr, "Could not get dataset dimensions!\n");
-		return cleanup(ctx, ILSVRC_EXIT_FAIL_HDF5);
-	}
-	
-	ctx->srcFileSplit      = H5Aopen(ctx->srcFile, "split", H5P_DEFAULT);
-	if(ctx->srcFileSplit < 0){
-		fprintf(stderr, "No splits attribute!\n");
-		return cleanup(ctx, ILSVRC_EXIT_FAIL_HDF5);
-	}
-	
-	ctx->srcFileSplitType  = H5Aget_type    (ctx->srcFileSplit);
-	ctx->srcFileSplitSpace = H5Aget_space   (ctx->srcFileSplit);
-	int numMembers         = H5Tget_nmembers(ctx->srcFileSplitType);
-	printf("Split datatype has %d members:\n", numMembers);
-	for(int i=0;i<numMembers;i++){
-		char*  name = H5Tget_member_name(ctx->srcFileSplitType, i);
-		hid_t  type = H5Tget_member_type(ctx->srcFileSplitType, i);
-		size_t size = H5Tget_size(type);
-		printf("\t%s (%zu bytes)\n", name, size);
-		H5free_memory(name);
-	}
-	
-	if(H5Aget_info(ctx->srcFileSplit, &ctx->srcFileSplitInfo) < 0){
-		fprintf(stderr, "Could not get splits attribute info!\n");
-		return cleanup(ctx, ILSVRC_EXIT_FAIL_HDF5);
-	}
-	
-	typedef struct SPLITATTRTYPE{
-		char     split[5];
-		char     source[14];
-		uint64_t start;
-		uint64_t stop;
-		void*    indices;
-		char     available;
-		char     comment;
-	} __attribute__((packed)) SPLITATTRTYPE;
-	printf("Attribute size: %zu\n", sizeof(SPLITATTRTYPE));
-	SPLITATTRTYPE* splits = (SPLITATTRTYPE*)malloc(ctx->srcFileSplitInfo.data_size);
-	H5Aread(ctx->srcFileSplit, ctx->srcFileSplitType, splits);
-	
-	ctx->nTrain = splits[0].stop-splits[0].start;
-	ctx->nVal   = splits[3].stop-splits[3].start;
-	ctx->nTest  = splits[6].stop-splits[6].start;
-	ctx->nTotal = ctx->nTrain + ctx->nVal + ctx->nTest;
-	
-	printf("Dataset splits:\n");
-	printf("\tTrain: %7llu\n", ctx->nTrain);
-	printf("\tVal:   %7llu\n", ctx->nVal);
-	printf("\tTest:  %7llu\n", ctx->nTest);
-	printf("\tTotal: %7llu\n", ctx->nTotal);
-	
-	return runConversion(ctx);
+static int    ilsvrcThrdRequestExit         (DSET_THRD_CTX* ctx, int ret){
+	omp_set_lock  (&ctx->dsetCtx->exitLock);
+	ctx->dsetCtx->exiting  = 1;
+	ctx->dsetCtx->exitCode = ret;
+	omp_unset_lock(&ctx->dsetCtx->exitLock);
+	return ret;
 }
 
 /**
- * Run dataset conversion (possibly in parallel)
+ * Has a thread requested exit?
  */
 
-static int   runConversion        (DSET_CTX* ctx){
-	ctx->numThrds = omp_get_max_threads();
-	if(ctx->numThrds <= 0){
-		fprintf(stderr, "Invalid number of OpenMP threads (%d)!\n", ctx->numThrds);
-		return cleanup(ctx, ILSVRC_EXIT_FAIL_OPENMP);
+static int    ilsvrcThrdHasRequestedExit    (DSET_THRD_CTX* ctx){
+	int isRequestingExit;
+	omp_set_lock  (&ctx->dsetCtx->exitLock);
+	isRequestingExit = !!ctx->dsetCtx->exiting;
+	omp_unset_lock(&ctx->dsetCtx->exitLock);
+	return isRequestingExit;
+}
+
+/**
+ * Get requested exit code.
+ */
+
+static int    ilsvrcThrdGetRequestedExitCode(DSET_THRD_CTX* ctx){
+	int requestedExitCode;
+	omp_set_lock  (&ctx->dsetCtx->exitLock);
+	requestedExitCode = ctx->dsetCtx->exitCode;
+	omp_unset_lock(&ctx->dsetCtx->exitLock);
+	return requestedExitCode;
+}
+
+/**
+ * Run thread body for iteration i.
+ */
+
+static int    ilsvrcThrdRunIterBody         (DSET_THRD_CTX* ctx, size_t i){
+	if(ilsvrcThrdHasRequestedExit(ctx)){
+		return 0;
 	}
-	printf("Using %d threads for conversion.\n", ctx->numThrds);
 	
-	ctx->thrds = (DSET_THRD_CTX*)calloc(ctx->numThrds, sizeof(*ctx->thrds));
-	if(ctx->thrds == NULL){
-		return cleanup(ctx, ILSVRC_EXIT_FAIL_OPENMP);
+	if(ctx->thrdNum == 0 && i<8){
+		printf("/encoded_images has rank %d, dims (%lld)\n",
+		       ctx->dsetCtx->srcFileEncodedNDims,
+		       ctx->dsetCtx->srcFileEncodedDims[0]);
+		
+		int getClass = H5Tget_class(ctx->dsetCtx->srcFileEncodedType);
+		printf("/encoded_images class %d.\n", getClass);
+		
+		hid_t baseType = H5Tget_super(ctx->dsetCtx->srcFileEncodedType);
+		printf("/encoded_images has base type %d.\n", H5Tequal(baseType, H5T_STD_U8LE));
+		
+		const hsize_t batchSize = 5;
+		hsize_t imgNum = 2, imgSize = 0, batchImgNum = 0;
+		hvl_t   imgData[batchSize] = {0};
+		herr_t  err = 0;
+		err = H5Sselect_none(ctx->dsetCtx->srcFileEncodedSpace);
+		err = H5Sselect_elements(ctx->dsetCtx->srcFileEncodedSpace,
+		                         H5S_SELECT_APPEND, 1, &imgNum);
+		err = H5Dvlen_get_buf_size(ctx->dsetCtx->srcFileEncoded,
+		                           ctx->dsetCtx->srcFileEncodedType,
+		                           ctx->dsetCtx->srcFileEncodedSpace,
+		                           &imgSize);
+		printf("Image #%lld of /encoded_images has size %lld.\n", imgNum, imgSize);
+		hid_t memSpace = H5Screate_simple(1, &batchSize, &batchSize);
+		err = H5Sselect_none(memSpace);
+		err = H5Sselect_elements(memSpace, H5S_SELECT_APPEND, 1, &batchImgNum);
+		err = H5Dread(ctx->dsetCtx->srcFileEncoded,
+		              ctx->dsetCtx->srcFileEncodedType,
+		              memSpace,
+		              ctx->dsetCtx->srcFileEncodedSpace,
+		              H5P_DEFAULT, imgData);
+		printf("H5Dread err = %d\n", err);
+		
+		for(hsize_t i=0;i<batchSize;i++){
+			fprintf(stdout, "%p[%zu] {", imgData[i].p, imgData[i].len);
+			for(hsize_t j=0;imgData[i].p && j<32;j++){
+				fprintf(stdout, "%02x", ((unsigned char*)imgData[i].p)[j]);
+			}
+			fprintf(stdout, "}\n");
+		}
+		
+		H5Dvlen_reclaim(ctx->dsetCtx->srcFileEncodedType,
+		                memSpace,
+		                H5P_DEFAULT,
+		                imgData);
 	}
 	
+	//printf("Thrd# %d printing unordered %llu\n", omp_get_thread_num(), i);
 	
 	/**
-	 * OpenMP-parallelizable section.
+	 * But write it to destination in order.
 	 */
 	
-	#pragma omp parallel num_threads(ctx->numThrds)
+	#pragma omp ordered
 	{
-		hsize_t i;
-		
-		/**
-		 * For each image,
-		 */
-		
-		#pragma omp for schedule(dynamic, 1) ordered
-		for(i=0;i<ctx->nTotal;i++){
-			/**
-			 * Process it in a possibly-unordered way
-			 */
-			
-			//printf("Thrd# %d printing unordered %llu\n", omp_get_thread_num(), i);
-			
-			/**
-			 * But write it to destination in order.
-			 */
-			
-			#pragma omp ordered
-			{
-				//printf("Thrd# %d printing %llu\n", omp_get_thread_num(), i);
-			}
-		}
+		//printf("Thrd# %d printing %llu\n", omp_get_thread_num(), i);
 	}
 	
-	return readSrc(ctx);
+	return 0;
 }
 
 /**
- * Read source HDF5 dataset.
+ * Tear down thread state.
  */
 
-static int   readSrc              (DSET_CTX* ctx){
-	printf("/encoded_images has rank %d, dims (%lld)\n",
-	       ctx->srcFileEncodedNDims, ctx->srcFileEncodedDims[0]);
-	
-	int getClass = H5Tget_class(ctx->srcFileEncodedType);
-	printf("/encoded_images class %d.\n", getClass);
-	
-	hid_t baseType = H5Tget_super(ctx->srcFileEncodedType);
-	printf("/encoded_images has base type %d.\n", H5Tequal(baseType, H5T_STD_U8LE));
-	
-	const hsize_t batchSize = 5;
-	hsize_t imgNum = 2, imgSize = 0, batchImgNum = 0;
-	hvl_t   imgData[batchSize] = {0};
-	herr_t  err = 0;
-	err = H5Sselect_none(ctx->srcFileEncodedSpace);
-	err = H5Sselect_elements(ctx->srcFileEncodedSpace, H5S_SELECT_APPEND, 1, &imgNum);
-	err = H5Dvlen_get_buf_size(ctx->srcFileEncoded,
-	                           ctx->srcFileEncodedType,
-	                           ctx->srcFileEncodedSpace,
-	                           &imgSize);
-	printf("Image #%lld of /encoded_images has size %lld.\n", imgNum, imgSize);
-	hid_t memSpace = H5Screate_simple(1, &batchSize, &batchSize);
-	err = H5Sselect_none(memSpace);
-	err = H5Sselect_elements(memSpace, H5S_SELECT_APPEND, 1, &batchImgNum);
-	err = H5Dread(ctx->srcFileEncoded,
-	              ctx->srcFileEncodedType,
-	              memSpace,
-	              ctx->srcFileEncodedSpace,
-	              H5P_DEFAULT, imgData);
-	printf("H5Dread err = %d\n", err);
-	
-	for(hsize_t i=0;i<batchSize;i++){
-		fprintf(stdout, "%p[%zu] {", imgData[i].p, imgData[i].len);
-		for(hsize_t j=0;imgData[i].p && j<32;j++){
-			fprintf(stdout, "%02x", ((unsigned char*)imgData[i].p)[j]);
-		}
-		fprintf(stdout, "}\n");
-	}
-	
-	H5Dvlen_reclaim(ctx->srcFileEncodedType,
-	                memSpace,
-	                H5P_DEFAULT,
-	                imgData);
-	
-	
-	return cleanup(ctx, ILSVRC_EXIT_SUCCESS);
-}
-
-/**
- * Cleanup.
- */
-
-static int   cleanup              (DSET_CTX* ctx, int ret){
-	H5Fclose(ctx->srcFile);
-	H5Dclose(ctx->srcFileEncoded);
-	H5Dclose(ctx->srcFileTargets);
-	
-	return ret;
+static int    ilsvrcThrdFini                (DSET_THRD_CTX* ctx){
+	return 0;
 }
 
 
@@ -545,6 +690,6 @@ static int   cleanup              (DSET_CTX* ctx, int ret){
 int   main(int argc, char* argv[]){
 	DSET_CTX STACKCTX, *ctx=&STACKCTX;
 	
-	return checkArgs(ctx, argc, argv);
+	return ilsvrcInit(ctx, argc, argv);
 }
 
