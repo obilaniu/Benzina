@@ -66,7 +66,7 @@ ilsvrcclient      = executable('ilsvrcclient', ilsvrcclient_srcs,
 
 #   Dataset Generator
 ilsvrcgen_srcs      = files('src/ilsvrcgen.cpp')
-ilsvrcgen_c_args    = ['-fopenmp']
+ilsvrcgen_c_args    = ['-fopenmp', '-ggdb3', '-Wextra']
 ilsvrcgen_cpp_args  = ilsvrcgen_c_args
 ilsvrcgen           = executable('ilsvrcgen',    ilsvrcgen_srcs,
                                  c_args              : ilsvrcgen_c_args,
