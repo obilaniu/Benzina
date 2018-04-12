@@ -1,35 +1,79 @@
-# Global ignore patters. They cause the files with the following names and
-# extensions to be ignored in general by Git.
-#
-# We ignore these files because they're usually binary and/or very large, which
-# greatly bloats the repository and its clone time. In this category are the
-# files .h5/.hdf5/.txt/.log and files named *log_file*. Some of these logs are
-# enormous.
-#
-# We also ignore files that can be easily reproduced one way or another by
-# compilers, like .pyc/.o/.so/.a/.lib.
-#
-# Lastly we ignore files and directories that signal their temporary character
-# with a name that contains "tmp".
-#
-# ****************************************************************************
-# ** DO NOT put ignore patterns here that are private to your clone of this **
-# ** repository. Those belong in your clone's .git/info/exclude file.       **
-# ****************************************************************************
-#
-**.h5
-**.hdf5
-**.txt
-**/*log_file*
-**.log
-**.out
-**.pyc
-**.o
-**.so
-**.a
-**.lib
+# Ignored whole directories
+build
+dist
+images
+install
+3rdparty
+
+# Ignored file extensions
+## Preprocessed files
+**.i
+
+## Executable Object Files
+**.[ao]
+**.bin
 **.dll
 **.exe
-**/*tmp*
-build/
-install/
+**.lib
+**.so
+**.dylib
+
+## Python
+**.pyc
+**.pyo
+**.egg-info
+**.egg
+**.whl
+**/__pycache__/
+
+## Binary Data Files
+**.hdf5
+**.h5
+**.npz
+**.pkl
+
+## Archive Files
+**.bz2
+**.gz
+**.lzma
+**.tar
+**.xz
+
+## Multimedia
+**.jpg
+**.jpeg
+**.JPG
+**.JPEG
+**.png
+**.gif
+**.bmp
+
+## Documents
+**.doc
+**.docx
+**.log
+**.od*
+**.pdf
+**.txt
+
+## TeX
+**.aux
+**.blg
+**.synctex.gz
+
+## Backup File
+**.bak
+**.swp
+**~
+
+## TensorBoard
+*tfevents*
+!zvit/tfevents.py
+
+
+# Must not ignore Meson build files.
+!**/meson.build
+
+
+# Project-specific ignores
+src/benzina/version.py

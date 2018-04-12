@@ -1,0 +1,5 @@
+Benzina is an image-loader package that greatly accelerates image loading
+onto GPUs using their built-in hardware video decoder.
+
+The name "Benzina" is a phonetic transliteration of the Ukrainian word
+"Бензина", meaning "gasoline" (or "petrol").

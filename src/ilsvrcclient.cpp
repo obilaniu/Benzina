@@ -10,6 +10,24 @@
 #include <stdlib.h>
 #include <string.h>
 #include <zmq.h>
+#include <opencv2/core.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/imgcodecs.hpp>
+
+#if 0
+using namespace cv;
+
+static double psnrhma(Mat inA, Mat inB){
+	Mat a, b;
+	inA.convertTo(a, CV_32F);
+	inb.convertTo(b, CV_32F);
+	
+	double sumA  = cv::sum(a);
+	double sumB  = cv::sum(b);
+	double delt  = (sumA-sumB)/a.total();
+	Mat bm       = b+delt;
+}
+#endif
 
 
 

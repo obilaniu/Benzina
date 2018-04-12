@@ -596,68 +596,6 @@ static int    ilsvrcThrdInitCUDA            (DSET_THRD_CTX* ctx){
 static int    ilsvrcThrdInitFFmpeg          (DSET_THRD_CTX* ctx){
 	int i;
 	
-	/**
-	 * H264 ENCODER SETTINGS
-	 * 
-	 * We must be extremely careful here. There's a lot of intricate detail. In
-	 * particular, refer to:
-	 * 
-	 * - Rec. ITU-R BT.470-6    (11/1998)
-	 * - Rec. ITU-R BT.601-7    (03/2011)
-	 * - Rec. ITU-T T.871       (05/2011)
-	 * - Rec. ITU-T H.264       (10/2016)
-	 * 
-	 * 
-	 * The situation is as follows.
-	 * 
-	 *   - We're loading data from JPEG images and transcoding to h264 IDR frames.
-	 * 
-	 *   - JFIF (the interchange format for JPEG) requires YCbCr coding of image
-	 *     data and references the color matrix of "625-line BT601-6", with
-	 *     modifications that make use of full-range (256) quantization levels.
-	 * 
-	 *   - The most popular chroma subsampling method is YUV 4:2:0, meaning that
-	 *     the U & V chroma samples are subsampled 2x in both horizontal and
-	 *     vertical directions. In ImageNet there are also YUV 4:4:4-coded images.
-	 * 
-	 *   - JFIF's chroma samples are, if subsampled, offset as follows w.r.t. the
-	 *     luma samples:
-	 *         Hoff = H_downsample_factor/2 - 0.5
-	 *         Voff = V_downsample_factor/2 - 0.5
-	 * 
-	 *   - Nvidia's NVDEC is only capable of decoding h264 High Profile 4.1
-	 *     YUV420P in NV12 format, with unknown support for full-scale YUV.
-	 * 
-	 *   - FFmpeg will produce I-frame-only video if ctx->gop_size == 0.
-	 * 
-	 *   - FFmpeg won't make an encoder context unless it's been told a timebase,
-	 *     width and height.
-	 * 
-	 *   - FFmpeg will force x264 to mark an I-frame as an IDR-frame
-	 *     (Instantaneous Decoder Refresh) if the option forced_idr == 1.
-	 * 
-	 *   - x264 won't shut up unless its log-level is set to none (log=-1)
-	 * 
-	 *   - In H264 the above can be coded if:
-	 *         video_full_range_flag               = 1 (pc/full range)
-	 *         colour_description_present_flag     = 1
-	 *         matrix_coefficients                 = 5 (Rec. ITU-R BT.601-6 625)
-	 *         chroma_format_idc                   = 1 (YUV 4:2:0)
-	 *         chroma_loc_info_present_flag        = 1
-	 *         chroma_sample_loc_type_top_field    = 1 (center sample)
-	 *         chroma_sample_loc_type_bottom_field = 1 (center sample)
-	 *     Given that the colorspace is that of Rec. ITU-R BT.601-6 625 (PAL), a
-	 *     reasonable guess is that the transfer characteristics and primaries are
-	 *     also of that standard, even though they are unspecified in ImageNet:
-	 *         colour_primaries                    = 5 (Rec. ITU-R BT.601-6 625)
-	 *         transfer_characteristics            = 1 (Rec. ITU-R BT.601-6 625 is
-	 *                                                  labelled "6", but "1", which
-	 *                                                  corresponds to BT.709-5, is
-	 *                                                  functionally equivalent and
-	 *                                                  explicitly preferred by the
-	 *                                                  H264 standard)
-	 */
-	
 	ctx->jpegDecCtx  = avcodec_alloc_context3(ctx->dsetCtx->jpegDecoder);
 	ctx->h264EncCtx  = avcodec_alloc_context3(ctx->dsetCtx->h264Encoder);
 	if(!ctx->jpegDecCtx)

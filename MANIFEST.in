@@ -1,0 +1,12 @@
+# Include README.md, LICENSE.md, setup.py, setup.cfg and other critical
+# top-level files:
+include setup.* *.md
+
+# Grab all of the source code and build scripts:
+graft include
+graft src
+graft scripts
+global-include meson.build
+
+# But exclude binaries and other junk:
+global-exclude __pycache__ *.py[cod] *.so *.exe .DS_Store
