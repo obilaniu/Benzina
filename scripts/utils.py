@@ -27,8 +27,6 @@ class build_ext(setuptools.command.build_ext.build_ext):
 		absSrcRoot     = git.getSrcRoot()
 		srcRoot        = os.path.relpath(absSrcRoot, mesonBuildRoot)
 		libRoot        = os.path.abspath(self.build_lib)
-		mesonBuildEnv  = os.environ.copy()
-		mesonBuildEnv["SETUPTOOLS_DRIVING_MESON"] = "1"
 		
 		try:    os.mkdir(os.path.dirname(mesonBuildRoot))
 		except: pass
@@ -38,18 +36,16 @@ class build_ext(setuptools.command.build_ext.build_ext):
 		if not os.path.isfile(os.path.join(mesonBuildRoot,
 		                                   "meson-private",
 		                                   "coredata.dat")):
-			subprocess.check_call(["meson", srcRoot, "--prefix", libRoot],
+			subprocess.check_call(["meson", srcRoot, "--prefix", libRoot,
+			                       "-Dsetuptools_driving_meson=true"],
 			                      stdin  = subprocess.DEVNULL,
-			                      cwd    = mesonBuildRoot,
-			                      env    = mesonBuildEnv)
+			                      cwd    = mesonBuildRoot)
 		subprocess.check_call(["ninja"],
 		                      stdin  = subprocess.DEVNULL,
-		                      cwd    = mesonBuildRoot,
-		                      env    = mesonBuildEnv)
+		                      cwd    = mesonBuildRoot)
 		subprocess.check_call(["ninja", "install"],
 		                      stdin  = subprocess.DEVNULL,
-		                      cwd    = mesonBuildRoot,
-		                      env    = mesonBuildEnv)
+		                      cwd    = mesonBuildRoot)
 		
 		super().run()
 	

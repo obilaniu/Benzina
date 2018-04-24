@@ -21,7 +21,6 @@ cudaIncs          = include_directories('/usr/local/cuda/include')
 threadsDep        = dependency('threads')
 libm              = cc.find_library('m',                 required: true)
 libdl             = cc.find_library('dl',                required: true)
-libzmq            = cc.find_library('zmq',               required: true)
 libcuda           = cc.find_library('cuda',              required: true, dirs: cudaLibDirs)
 
 

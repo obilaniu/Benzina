@@ -12,12 +12,19 @@ else
   libbenzinaCArgs += ['-fvisibility=hidden']
 endif
 
+# If building a Python package, we override the default install directory.
+if get_option('setuptools_driving_meson')
+  libbenzinaInstallDir = join_paths('benzina', 'libs')
+else
+  libbenzinaInstallDir = get_option('libdir')
+endif
+
 libbenzina      = shared_library('benzina',           libbenzinaSrcs,
                                  include_directories: libbenzinaIncs,
                                  dependencies       : libbenzinaDeps,
                                  c_args             : libbenzinaCArgs,
                                  install            : true,
-                                 install_dir        : join_paths('benzina', 'libs'),)
+                                 install_dir        : libbenzinaInstallDir,)
 
 #
 # Executables

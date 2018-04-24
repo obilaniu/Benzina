@@ -1,0 +1,1 @@
+option('setuptools_driving_meson', type: 'boolean', value: false, description: 'INTERNAL. Indicates to Meson that it is being driven by setuptools, causing it to adapt its behaviour for the purpose of correctly building a Python package.')
