@@ -91,8 +91,19 @@ setup(
     packages             = find_packages("src"),
     package_dir          = {'': 'src'},
     ext_modules          = [
-        Extension("zvit.pb.crc_native",
-                  [os.path.join("src", "benzina", "pb", "crc_native.c")],)
+        Extension("benzina.native",
+                  [os.path.join("src", "benzina", "native.c")],
+                  include_dirs=[os.path.join(git.getSrcRoot(), "include")],
+                  library_dirs=[os.path.join(git.getSrcRoot(),
+                                utils.get_build_platlib(),
+                                "benzina",
+                                "libs")],
+                  runtime_library_dirs=["$ORIGIN/libs"],
+                  libraries=["benzina"],)
     ],
+    cmdclass={
+        "build_ext": utils.build_ext,
+        "clean":     utils.clean,
+    },
     zip_safe             = False,
 )

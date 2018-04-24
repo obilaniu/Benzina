@@ -3,7 +3,7 @@
 #include <Python.h>        /* Because of "reasons", the Python header must be first. */
 #include "structmember.h"
 #include <stdint.h>
-#include "benzina.h"
+#include "benzina/benzina.h"
 
 
 typedef struct {

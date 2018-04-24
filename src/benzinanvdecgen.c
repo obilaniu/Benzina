@@ -1,5 +1,6 @@
 /* Includes */
 #define _GNU_SOURCE
+#define __HAVE_FLOAT128 0
 #include <cuda.h>
 #include <dlfcn.h>
 #include <dynlink_cuviddec.h>
@@ -138,7 +139,7 @@ static int   decodeCb  (UNIVERSE* u, CUVIDPICPARAMS* picParams){
 	picParams->pSliceDataOffsets = NULL;
 	
 	bytesToWrite = offsetof(CUVIDPICPARAMS, CodecSpecific.h264.fmo);
-	if(write(u->fileH264NvdecodePicparamsFd, picParams, bytesToWrite) != bytesToWrite){
+	if(write(u->fileH264NvdecodePicparamsFd, picParams, bytesToWrite) != (ssize_t)bytesToWrite){
 		printf("[%7ld] Error: Incomplete write!\n",
 		       u->numProcessedImages);
 		fflush(stdout);

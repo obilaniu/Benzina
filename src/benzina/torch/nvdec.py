@@ -43,7 +43,7 @@ BenzinaLoaderIter:
 """
 
 
-class BenzinaDataset(Dataset)
+class BenzinaDataset(Dataset):
 	def __init__(self, root):
 		self._core = BenzinaDatasetCore(root)
 	
@@ -143,17 +143,17 @@ class BenzinaLoaderIter(object):
 			try:
 				while self.batch_reqs < self.multibuffering:
 					self._enqueue_batch(next(self.sample_iter))
-			except StopIteration as self.batch_exc:
+			except StopIteration:
 				pass
 		else:
 			try:
 				self._enqueue_batch(next(self.sample_iter))
-			except StopIteration as self.batch_exc:
+			except StopIteration:
 				pass
 		
 		# BATCH RETURNS. OPERATES IN A MANNER DECOUPLED FROM BATCH REQUESTS SIDE.
 		if self.batch_rets >= self.batch_exps:
-			raise self.batch_exc
+			raise StopIteration
 		else:
 			return self._dequeue_batch()
 	
