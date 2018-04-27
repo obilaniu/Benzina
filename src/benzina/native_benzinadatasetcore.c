@@ -3,18 +3,10 @@
 #include <Python.h>        /* Because of "reasons", the Python header must be first. */
 #include <structmember.h>
 #include <stdint.h>
-#include "benzina/benzina.h"
+#include "native.h"
 
 
 /* Defines */
-
-
-
-/* Data Structure Definitions */
-typedef struct{
-    PyObject_HEAD
-    BENZINA_DATASET* dset;
-} BenzinaDatasetCore;
 
 
 
@@ -36,7 +28,7 @@ static void      BenzinaDatasetCore_dealloc  (BenzinaDatasetCore* self){
 static PyObject* BenzinaDatasetCore_new      (PyTypeObject* type,
                                               PyObject*     args,
                                               PyObject*     kwargs){
-	BenzinaDatasetCore *self = (BenzinaDatasetCore*)type->tp_alloc(type, 0);
+	BenzinaDatasetCore* self = (BenzinaDatasetCore*)type->tp_alloc(type, 0);
 	
 	self->dset = NULL;
 	
@@ -165,14 +157,16 @@ static Py_ssize_t        BenzinaDatasetCore___len__(BenzinaDatasetCore* self){
 /**
  * @brief Implementation of __getitem__.
  * 
- * @return A tuple (off, len) indicating the offset into data.bin, and the length
- *         of the slice into it.
+ * @return A tuple (i, off, len) indicating:
+ *           - The index this image was fetched at.
+ *           - The offset into data.bin
+ *           - The length of the slice into it.
  */
 
 static PyObject*         BenzinaDatasetCore___getitem__(BenzinaDatasetCore* self,
                                                         Py_ssize_t          i){
 	size_t    off, len;
-	PyObject* lenObj, *offObj, *tObj;
+	PyObject* lenObj, *iObj, *offObj, *tObj;
 	
 	if(benzinaDatasetGetElement(self->dset, i, &off, &len) != 0){
 		PyErr_SetString(PyExc_RuntimeError,
@@ -180,9 +174,11 @@ static PyObject*         BenzinaDatasetCore___getitem__(BenzinaDatasetCore* self
 		return NULL;
 	}
 	
+	iObj   = PyLong_FromSsize_t(i);
 	offObj = PyLong_FromSize_t(off);
 	lenObj = PyLong_FromSize_t(len);
-	if(!offObj || !lenObj){
+	if(!iObj || !offObj || !lenObj){
+		Py_XDECREF(iObj);
 		Py_XDECREF(offObj);
 		Py_XDECREF(lenObj);
 		PyErr_SetString(PyExc_RuntimeError,
@@ -190,8 +186,9 @@ static PyObject*         BenzinaDatasetCore___getitem__(BenzinaDatasetCore* self
 		return NULL;
 	}
 	
-	tObj = PyTuple_Pack(2, offObj, lenObj);
+	tObj = PyTuple_Pack(3, iObj, offObj, lenObj);
 	if(!tObj){
+		Py_DECREF(iObj);
 		Py_DECREF(offObj);
 		Py_DECREF(lenObj);
 		PyErr_SetString(PyExc_RuntimeError,

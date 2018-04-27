@@ -154,16 +154,16 @@ BENZINA_STATIC int   benzinaDatasetInitFromProtoBuf(BENZINA_DATASET*  ctx,
 
 
 /* Public Function Definitions */
-int          benzinaInit(void){
+int          benzinaInit                 (void){
 	int    ret = pthread_once(&benzinaInitOnceControl, benzinaInitOnce);
 	return ret < 0 ? ret : benzinaInitOnceStatus;
 }
 
-int          benzinaDatasetAlloc     (BENZINA_DATASET** ctx){
+int          benzinaDatasetAlloc         (BENZINA_DATASET** ctx){
 	return -!(*ctx = malloc(sizeof(**ctx)));
 }
 
-int          benzinaDatasetInit      (BENZINA_DATASET*  ctx, const char* root){
+int          benzinaDatasetInit          (BENZINA_DATASET*  ctx, const char* root){
 	struct stat databinstat, datalengthsstat, datanvdecodestat, dataprotobufstat,
 	            READMEmdstat, SHA256SUMSstat;
 	int     ret=0, dirfd=-1, datalengthsfd=-1, dataprotobuffd=-1;
@@ -282,12 +282,12 @@ int          benzinaDatasetInit      (BENZINA_DATASET*  ctx, const char* root){
 	goto exitprobe;
 }
 
-int          benzinaDatasetNew       (BENZINA_DATASET** ctx, const char* root){
+int          benzinaDatasetNew           (BENZINA_DATASET** ctx, const char* root){
 	int ret = benzinaDatasetAlloc(ctx);
 	return ret ? ret : benzinaDatasetInit(*ctx, root);
 }
 
-int          benzinaDatasetFini      (BENZINA_DATASET*  ctx){
+int          benzinaDatasetFini          (BENZINA_DATASET*  ctx){
 	free(ctx->root);
 	free(ctx->lengths);
 	free(ctx->offsets);
@@ -295,7 +295,7 @@ int          benzinaDatasetFini      (BENZINA_DATASET*  ctx){
 	return 0;
 }
 
-int          benzinaDatasetFree      (BENZINA_DATASET*  ctx){
+int          benzinaDatasetFree          (BENZINA_DATASET*  ctx){
 	if(ctx){
 		benzinaDatasetFini(ctx);
 		free(ctx);
@@ -303,21 +303,21 @@ int          benzinaDatasetFree      (BENZINA_DATASET*  ctx){
 	return 0;
 }
 
-int          benzinaDatasetGetLength (BENZINA_DATASET*  ctx, size_t* length){
+int          benzinaDatasetGetLength     (BENZINA_DATASET*  ctx, size_t* length){
 	*length = ctx->length;
 	return 0;
 }
 
-int          benzinaDatasetGetShape  (BENZINA_DATASET*  ctx, size_t* w, size_t* h){
+int          benzinaDatasetGetShape      (BENZINA_DATASET*  ctx, size_t* w, size_t* h){
 	*w = ctx->info.ulWidth;
 	*h = ctx->info.ulHeight;
 	return 0;
 }
 
-int          benzinaDatasetGetElement(BENZINA_DATASET*  ctx,
-                                      size_t            i,
-                                      size_t*           off,
-                                      size_t*           len){
+int          benzinaDatasetGetElement    (BENZINA_DATASET*  ctx,
+                                          size_t            i,
+                                          size_t*           off,
+                                          size_t*           len){
 	if(!ctx->offsets || !ctx->lengths || i>=ctx->length){
 		*off = -1;
 		*len = -1;
@@ -329,3 +329,42 @@ int          benzinaDatasetGetElement(BENZINA_DATASET*  ctx,
 	}
 }
 
+int          benzinaDataLoaderIterAlloc  (BENZINA_DATALOADER_ITER** ctx){
+	return 0;
+}
+
+int          benzinaDataLoaderIterInit   (BENZINA_DATALOADER_ITER*  ctx,
+                                          BENZINA_DATASET*          dataset,
+                                          int                       device,
+                                          size_t                    multibuffering,
+                                          size_t                    batchSize,
+                                          size_t                    h,
+                                          size_t                    w){
+	return 0;
+}
+
+int          benzinaDataLoaderIterNew    (BENZINA_DATALOADER_ITER** ctx,
+                                          BENZINA_DATASET*          dataset,
+                                          int                       device,
+                                          size_t                    multibuffering,
+                                          size_t                    batchSize,
+                                          size_t                    h,
+                                          size_t                    w){
+	return 0;
+}
+
+int          benzinaDataLoaderIterFini   (BENZINA_DATALOADER_ITER*  ctx){
+	return 0;
+}
+
+int          benzinaDataLoaderIterFree   (BENZINA_DATALOADER_ITER*  ctx){
+	return 0;
+}
+
+int          benzinaDataLoaderIterPush   (BENZINA_DATALOADER_ITER*  ctx){
+	return 0;
+}
+
+int          benzinaDataLoaderIterPull   (BENZINA_DATALOADER_ITER*  ctx){
+	return 0;
+}

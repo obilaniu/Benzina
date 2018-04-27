@@ -34,7 +34,7 @@ PyObject* noop(PyObject* self, PyObject* args){
  */
 
 #include "./native_benzinadatasetcore.c"
-//#include "./native_benzinaloaderitercore.c"
+#include "./native_benzinadataloaderitercore.c"
 
 
 
@@ -76,8 +76,8 @@ PyMODINIT_FUNC PyInit_native(void){
 	}
 	
 	/* Finish readying Python wrapper types. */
-	if(PyType_Ready(&BenzinaDatasetCoreType   ) < 0){return NULL;};
-	//if(PyType_Ready(&BenzinaLoaderIterCoreType) < 0){return NULL;};
+	if(PyType_Ready(&BenzinaDatasetCoreType       ) < 0){return NULL;};
+	if(PyType_Ready(&BenzinaDataLoaderIterCoreType) < 0){return NULL;};
 	
 	/* Create the module. */
 	m = PyModule_Create(&native_module_def);
@@ -85,9 +85,9 @@ PyMODINIT_FUNC PyInit_native(void){
 	
 	/* Register Python wrapper types. */
 	Py_INCREF(&BenzinaDatasetCoreType);
-	//Py_INCREF(&BenzinaLoaderIterCoreType);
-	PyModule_AddObject(m, "BenzinaDatasetCore",    (PyObject*)&BenzinaDatasetCoreType);
-	//PyModule_AddObject(m, "BenzinaLoaderIterCore", (PyObject*)&BenzinaLoaderIterCoreType);
+	Py_INCREF(&BenzinaDataLoaderIterCoreType);
+	PyModule_AddObject(m, "BenzinaDatasetCore",        (PyObject*)&BenzinaDatasetCoreType);
+	PyModule_AddObject(m, "BenzinaDataLoaderIterCore", (PyObject*)&BenzinaDataLoaderIterCoreType);
 	
 	/* Return module. */
 	return m;

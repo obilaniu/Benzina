@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import threading
 import torch
 import torchvision
 
@@ -48,19 +49,21 @@ class BenzinaDataset(Dataset):
 		self._core = BenzinaDatasetCore(root)
 	
 	def __len__(self):
-		return self._core.length
+		return len(self._core)
 	
 	def __getitem__(self, index):
 		#
-		# It's actually BenzinaLoaderIter's responsibility to translate indices
-		# into asynchronously-loaded images.
+		# This does not return images; Rather, it returns a tuple
+		# (index, byteOffset, byteLength). It's actually BenzinaLoaderIter's
+		# responsibility to translate indices into asynchronously-loaded
+		# images.
 		#
-		return (self, index)
+		return self._core[index]
 	
 	@property
 	def shape(self):
 		"""Shape of images in dataset, as (h,w) tuple."""
-		return (self._core.h, self._core.w)
+		return self._core.shape
 
 
 class BenzinaLoader(DataLoader):
@@ -71,9 +74,9 @@ class BenzinaLoader(DataLoader):
 	             batch_sampler  = None,
 	             drop_last      = False,
 	             timeout        = 0,
-	             multibuffering = 3,
+	             shape          = None,
 	             device_id      = None,
-	             shape          = None):
+	             multibuffering = 3):
 		super().__init__(dataset,
 		                 batch_size     = batch_size,
 		                 shuffle        = shuffle,
@@ -86,113 +89,179 @@ class BenzinaLoader(DataLoader):
 		                 timeout        = float(timeout),
 		                 worker_init_fn = None)
 		
-		if device_id is None:
-			device_id = torch.cuda.current_device()
-		
-		self.device_id      = device_id
-		self.shape          = shape or dataset.shape
+		self.device_id      = device_id or 0
+		self.shape          = shape     or dataset.shape
 		self.multibuffering = multibuffering
 	
 	def __iter__(self):
 		return BenzinaLoaderIter(self)
 
 
-class BenzinaLoaderIter(object):
-	def __init__(self, loader):
-		self.loader         = loader
-		self.dataset        = self.loader.dataset
-		self.multibuffering = self.loader.multibuffering
-		self.shape          = self.loader.shape
-		self.device_id      = self.loader.device_id
-		self.sample_iter    = iter(self.loader.batch_sampler)
-		
-		self.multibuffer    = None
-		self._core          = None
-		self.batch_size     = None # Will only become known during first __next__() call.
-		
-		self.batch_exps     = len(loader)
-		self.batch_reqs     = 0
-		self.batch_rets     = 0
-		self.batch_exc      = None
-	
-	def __del__(self):
-		if self._core:
-			self._core.shutdown()
-			self._core = None
-		self.multibuffer = None
-	
-	def __len__(self):
-		return len(self.loader)
+class SynchronousPipelineIter(object):
+	def __init__(self, stages=3):
+		self._stages      = stages
+		self._insnFetched = 0
+		self._insnRetired = 0
 	
 	def __iter__(self):
 		return self
 	
 	def __next__(self):
-		"""Get next batch."""
-		
-		# BATCH REQUESTS. OPERATES IN A MANNER DECOUPLED FROM BATCH RETURNS SIDE.
-		if self.batch_reqs == 0:
-			#
-			# First call is special. We detect the batch size, initialize core
-			# and fill the pipeline.
-			#
-			indices    = next(self.sample_iter)
-			batch_size = len(indices)
-			self._init(batch_size)
-			self._enqueue_batch(indices)
-			try:
-				while self.batch_reqs < self.multibuffering:
-					self._enqueue_batch(next(self.sample_iter))
-			except StopIteration:
-				pass
-		else:
-			try:
-				self._enqueue_batch(next(self.sample_iter))
-			except StopIteration:
-				pass
-		
-		# BATCH RETURNS. OPERATES IN A MANNER DECOUPLED FROM BATCH REQUESTS SIDE.
-		if self.batch_rets >= self.batch_exps:
+		try:                  self.pushFrontend(self.pullFrontEnd())
+		except StopIteration: self.doomFrontend()
+		return                self.pushBackEnd (self.pullBackEnd ())
+	
+	@property
+	def doomed(self):
+		return hasattr(self, "_insnDoomed")
+	
+	@property
+	def dead(self):
+		return self.doomed and self._insnRetired >= self._insnDoomed
+	
+	def pullFrontend(self):
+		pass
+	
+	def pushFrontend(self, *args, **kwargs):
+		#
+		# When subclassing, it's critical to do the super() call *AFTER* the
+		# actual work is done.
+		#
+		if self.doomed: return
+		self._insnFetched += 1
+		while self._insnFetched<self._stages:
+			self.pushFrontend(self.pullFrontEnd())
+	
+	def pullBackend (self):
+		if self.dead:
 			raise StopIteration
 		else:
-			return self._dequeue_batch()
+			self._insnRetired += 1
 	
-	def _init(self, batch_size):
+	def pushBackend (self, *args, **kwargs):
+		pass
+	
+	def doomFrontend(self):
+		if not self.doomed:
+			self._insnDoomed = self._insnFetched
+
+
+class BenzinaLoaderIter(SynchronousPipelineIter):
+	def __init__(self, loader):
+		self.dataset        = loader.dataset
+		self.multibuffering = loader.multibuffering
+		self.shape          = loader.shape
+		self.deviceId       = loader.device_id
+		if self.deviceId is None:
+			self.deviceId = torch.cuda.current_device()
+		self.sampleIter     = enumerate(loader.batch_sampler)
+		self.length         = len(loader)
+		self.multibuffer    = None
+		self._core          = None
+		# Will only become known after first next(self.samplerIter) call.
+		self.batchSize      = None
+		
+		super().__init__(self.multibuffering)
+	
+	def __len__(self):
+		return self.length
+	
+	def pullFrontend(self):
+		if self.doomed: raise  StopIteration
+		else:           return next(self.sample_iter)
+	
+	def pushFrontend(self, i_indices):
+		if self.doomed: return
+		if not self._core:
+			self._init(i_indices[1])
+		self._core.push(**self.getJob(i_indices))
+		super().pushFrontend()
+	
+	def pullBackend (self):
+		if self.dead: raise StopIteration
+		batch = self._core.pull()
+		super().pullBackend()
+		return batch
+	
+	def pushBackend (self, batch):
+		return batch
+	
+	def doomFrontend(self):
+		if self.doomed: return
+		super().doomFrontend()
+		self.sampleIter = None
+	
+	def getJob      (self, i_indices):
+		i, indices = i_indices
+		
+		batchSize  = len(indices)
+		buffer     = self.multibuffer[i % self.multibuffering][:batchSize]
+		
+		intIndices = []
+		offsets    = []
+		lengths    = []
+		cudaPtrs   = []
+		for idx in indices:
+			offset, length = self.dataset[idx]
+			cudaPtr        = buffer[idx].data_ptr()
+			intIndices.append(int(idx))
+			offsets   .append(offset)
+			lengths   .append(length)
+			cudaPtrs  .append(cudaPtr)
+		
+		return {
+			"batchSize":  batchSize,
+			"indices":    np.array(intIndices, dtype=np.uint64).tobytes(),
+			"offsets":    np.array(offsets,    dtype=np.uint64).tobytes(),
+			"lengths":    np.array(lengths,    dtype=np.uint64).tobytes(),
+			"cudaPtrs":   np.array(cudaPtrs,   dtype=np.uint64).tobytes(),
+			"H":          np.eye(3, dtype=np.float32)                    \
+			                [np.newaxis, ...]                            \
+			                .repeat(batchSize, axis=0)                   \
+			                .copy("C")                                   \
+			                .tobytes(),
+			"C":          np.eye(3, dtype=np.float32)                    \
+			                [np.newaxis, ...]                            \
+			                .repeat(batchSize, axis=0)                   \
+			                .copy("C")                                   \
+			                .tobytes(),
+			"B":          np.zeros((batchSize, 3), dtype=np.float32)     \
+			                .copy("C")                                   \
+			                .tobytes(),
+			"aux":        (buffer,),
+		}
+	
+	def shutdown    (self):
+		if not self.doomed:
+			self.doomFrontend()
+		
+		if self._core:
+			self._core.shutdown()
+			self._core = None
+			self.multibuffer = None
+	
+	def _init       (self, indices):
 		"""Initialize C Core."""
-		self.batch_size  = batch_size
+		self.batchSize   = len(indices)
 		self.multibuffer = torch.ones([self.multibuffering,
-		                               self.batch_size,
+		                               self.batchSize,
 		                               3,
 		                               self.shape[0],
 		                               self.shape[1]],
 		                              dtype  = torch.float32,
-		                              device = torch.device(self.device_id))
-		self._core = BenzinaLoaderIterCore(self)
-	
-	def _enqueue_batch(self, indices):
-		"""Enqueue a batch's worth of indices to work on."""
-		self._core.begin_batch()
-		for i in indices:
-			self._core.enqueue_sample(self.dataset._core,
-			                          #
-			                          # Homography Perspective Distortion Matrix
-			                          1.000000, 0.000000, 0.000000,
-			                          0.000000, 1.000000, 0.000000,
-			                          0.000000, 0.000000, 1.000000,
-			                          #
-			                          # YUV->RGB Colorspace Conversion Matrix
-			                          1.000000, 0.000000, 0.000000,
-			                          0.000000, 1.000000, 0.000000,
-			                          0.000000, 0.000000, 1.000000)
-		self._core.end_batch()
-		self.batch_reqs += 1
-	
-	def _dequeue_batch(self):
-		"""Block until next batch becomes ready."""
-		subbuffer = self.batch_rets % self.multibuffering
-		self._core.wait()
-		batch = ()
-		self.batch_rets += 1
-		return batch
-
-
+		                              device = torch.device(self.deviceId))
+		
+		#
+		# The core needs to know:
+		#   - BenzinaDatasetCore
+		#   - Device
+		#   - Multibuffering depth
+		#   - Maximum batch size
+		#   - Target image shape
+		#
+		self._core = BenzinaLoaderIterCore(self.dataset._core,
+		                                   self.deviceId,
+		                                   self.multibuffering,
+		                                   self.batchSize,
+		                                   self.shape[0],
+		                                   self.shape[1])
