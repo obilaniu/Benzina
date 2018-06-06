@@ -95,10 +95,10 @@ setup(
                   [os.path.join("src", "benzina", "native.c")],
                   include_dirs=[os.path.join(git.getSrcRoot(), "include")],
                   library_dirs=[os.path.join(git.getSrcRoot(),
-                                utils.get_build_platlib(),
-                                "benzina",
-                                "libs")],
-                  runtime_library_dirs=["$ORIGIN/libs"],
+                                             utils.get_build_platlib(),
+                                             "benzina",
+                                             "libs")],
+                  runtime_library_dirs=[os.path.join("$ORIGIN", "libs")],
                   libraries=["benzina"],)
     ],
     cmdclass={

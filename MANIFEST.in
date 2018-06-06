@@ -8,5 +8,7 @@ graft src
 graft scripts
 global-include meson.build
 
-# But exclude binaries and other junk:
+# But exclude binaries, installed headers and other junk:
+prune src/benzina/include
+prune src/benzina/libs
 global-exclude __pycache__ *.py[cod] *.so *.exe .DS_Store

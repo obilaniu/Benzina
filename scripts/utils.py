@@ -2,9 +2,11 @@
 from . import git
 import setuptools.command.build_ext
 import distutils.command.clean
-from   distutils.util     import get_platform
-from   distutils.dir_util import copy_tree
+from   distutils.util      import get_platform
+from   distutils.file_util import copy_file
+from   distutils.dir_util  import copy_tree
 import glob
+import ast
 import os, sys
 import subprocess
 
@@ -18,12 +20,15 @@ def get_build_platlib():
 	build_platlib = os.path.join("build", "lib"+build_platlib)
 	return build_platlib
 
+def get_meson_build_root(build_temp):
+	mesonBuildRoot = os.path.basename(build_temp)
+	mesonBuildRoot = os.path.join(os.path.dirname(build_temp),
+	                              "meson"+mesonBuildRoot[4:])
+	return mesonBuildRoot
 
 class build_ext(setuptools.command.build_ext.build_ext):
 	def run(self):
-		mesonBuildRoot = os.path.basename(self.build_temp)
-		mesonBuildRoot = os.path.join(os.path.dirname(self.build_temp),
-		                              "meson"+mesonBuildRoot[4:])
+		mesonBuildRoot = get_meson_build_root(self.build_temp)
 		absSrcRoot     = git.getSrcRoot()
 		srcRoot        = os.path.relpath(absSrcRoot, mesonBuildRoot)
 		libRoot        = os.path.abspath(self.build_lib)
@@ -58,20 +63,43 @@ class build_ext(setuptools.command.build_ext.build_ext):
 		#
 		
 		build_py    = self.get_finalized_command('build_py')
-		package_dir = build_py.get_package_dir("benzina")
-		copy_tree(os.path.join(self.build_lib, "benzina", "libs"),
-		          os.path.join(package_dir,               "libs"),
-		          preserve_symlinks = True,
-		          verbose           = self.verbose,
-		          dry_run           = self.dry_run)
+		package_dir = build_py.get_package_dir("")
+		
+		mesonBuildRoot = get_meson_build_root(self.build_temp)
+		outs = subprocess.check_output(["meson", "introspect", "--installed"],
+		                               universal_newlines = True,
+		                               stdin  = subprocess.DEVNULL,
+		                               cwd    = mesonBuildRoot)
+		outs = ast.literal_eval(outs)
+		
+		for tmpFile, stagedFile in outs.items():
+			stagedFile = os.path.relpath(os.path.abspath(stagedFile),
+			                             os.path.abspath(self.build_lib))
+			srcPath    = os.path.join(self.build_lib, stagedFile)
+			dstPath    = os.path.join(package_dir,    stagedFile)
+			
+			os.makedirs(os.path.dirname(dstPath), exist_ok=True)
+			
+			copy_file(srcPath, dstPath,
+			          verbose = self.verbose,
+			          dry_run = self.dry_run)
 	
 	def get_outputs(self):
-		mesonLibs = glob.glob(os.path.join(self.build_lib,
-		                                   "benzina",
-		                                   "libs",
-		                                   "**",
-		                                   "*"),
-		                      recursive=True)
+		build_py       = self.get_finalized_command('build_py')
+		package_dir    = build_py.get_package_dir("")
+		mesonBuildRoot = get_meson_build_root(self.build_temp)
+		outs = subprocess.check_output(["meson", "introspect", "--installed"],
+		                               universal_newlines = True,
+		                               stdin  = subprocess.DEVNULL,
+		                               cwd    = mesonBuildRoot)
+		outs = ast.literal_eval(outs)
+		
+		mesonLibs = []
+		for tmpFile, stagedFile in outs.items():
+			stagedFile = os.path.relpath(os.path.abspath(stagedFile),
+			                             os.path.abspath(self.build_lib))
+			stagedFile = os.path.abspath(os.path.join(package_dir, stagedFile))
+			mesonLibs.append(stagedFile)
 		
 		return super().get_outputs() + mesonLibs
 
@@ -82,10 +110,7 @@ class clean(distutils.command.clean.clean):
 		# We invoke Meson before running the rest.
 		#
 		
-		mesonBuildRoot = os.path.basename(self.build_temp)
-		mesonBuildRoot = os.path.join(os.path.dirname(self.build_temp),
-		                              "meson"+mesonBuildRoot[4:])
-		
+		mesonBuildRoot = get_meson_build_root(self.build_temp)
 		if os.path.exists(mesonBuildRoot):
 			distutils.dir_util.remove_tree(mesonBuildRoot, dry_run=self.dry_run)
 		

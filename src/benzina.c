@@ -5,6 +5,7 @@
 #include <dynlink_nvcuvid.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <semaphore.h>
 #include <sys/stat.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,7 +26,7 @@
 /**
  * @brief Benzina Dataset.
  * 
- * A 
+ * A description of the dataset and its decoding parameters.
  */
 
 struct BENZINA_DATASET{
@@ -34,6 +35,57 @@ struct BENZINA_DATASET{
 	uint64_t*             lengths;
 	uint64_t*             offsets;
 	CUVIDDECODECREATEINFO info;
+};
+
+/**
+ * @brief Benzina Data Loader Iterator.
+ * 
+ * The state of an iterator.
+ */
+
+struct BENZINA_DATALOADER_ITER{
+	const BENZINA_DATASET* dataset;
+	int                    device;
+	size_t                 multibuffering;
+	size_t                 batchSize;
+	size_t                 h, w;
+	
+	CUvideodecoder         decoder;
+};
+
+/**
+ * @brief Benzina Process Control Block.
+ * 
+ * The shared-memory process control block for communication between the parent
+ * and worker process.
+ */
+
+struct BENZINA_PCB{
+	struct{
+		uint64_t               version;
+		uint64_t               size;
+		uint64_t               status;
+		uint32_t               parentPID;
+		uint32_t               workerPID;
+		uint8_t                uuid[16];
+		struct timespec        creationTime;
+		sem_t                  sem;
+	} header;
+	
+	union{
+		struct{
+			void*                  ptr;
+			int64_t                offset;
+			int64_t                size;
+		} cpu;
+		struct{
+			CUipcMemHandle         handle;
+			void*                  ptr;
+			int64_t                offset;
+			int64_t                size;
+			char                   pciBusId[16];
+		} gpu;
+	} data;
 };
 
 
@@ -330,11 +382,11 @@ int          benzinaDatasetGetElement    (BENZINA_DATASET*  ctx,
 }
 
 int          benzinaDataLoaderIterAlloc  (BENZINA_DATALOADER_ITER** ctx){
-	return 0;
+	return -!(*ctx = malloc(sizeof(**ctx)));
 }
 
 int          benzinaDataLoaderIterInit   (BENZINA_DATALOADER_ITER*  ctx,
-                                          BENZINA_DATASET*          dataset,
+                                          const BENZINA_DATASET*    dataset,
                                           int                       device,
                                           size_t                    multibuffering,
                                           size_t                    batchSize,
@@ -344,13 +396,19 @@ int          benzinaDataLoaderIterInit   (BENZINA_DATALOADER_ITER*  ctx,
 }
 
 int          benzinaDataLoaderIterNew    (BENZINA_DATALOADER_ITER** ctx,
-                                          BENZINA_DATASET*          dataset,
+                                          const BENZINA_DATASET*    dataset,
                                           int                       device,
                                           size_t                    multibuffering,
                                           size_t                    batchSize,
                                           size_t                    h,
                                           size_t                    w){
-	return 0;
+	int ret = benzinaDataLoaderIterAlloc(ctx);
+	return ret ? ret : benzinaDataLoaderIterInit(*ctx,
+	                                             dataset,
+	                                             device,
+	                                             multibuffering,
+	                                             batchSize,
+	                                             h, w);
 }
 
 int          benzinaDataLoaderIterFini   (BENZINA_DATALOADER_ITER*  ctx){
@@ -358,6 +416,10 @@ int          benzinaDataLoaderIterFini   (BENZINA_DATALOADER_ITER*  ctx){
 }
 
 int          benzinaDataLoaderIterFree   (BENZINA_DATALOADER_ITER*  ctx){
+	if(ctx){
+		benzinaDataLoaderIterFini(ctx);
+		free(ctx);
+	}
 	return 0;
 }
 

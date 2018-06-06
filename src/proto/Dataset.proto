@@ -1,5 +1,5 @@
 /**
- * A ProtoBuf-based Benzina dataset serialization format.
+ * A ProtoBuf-based Benzina dataset description format.
  * 
  * In a dataset folder ROOT/, the following files must exist at a minimum:
  * 
@@ -51,7 +51,7 @@ message BenzinaDataset{
 		ADAPTIVE = 2;
 	};
 	
-	/* Dataset Serialization Format Version */
+	/* Dataset Description Format Version */
 	uint64                     version           =         1;
 	
 	/**

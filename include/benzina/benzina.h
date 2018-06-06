@@ -37,7 +37,7 @@ typedef struct BENZINA_DATALOADER_ITER BENZINA_DATALOADER_ITER;
  * @return Zero if successful; Non-zero if not successful.
  */
 
-BENZINA_PUBLIC int          benzinaInit(void);
+BENZINA_PUBLIC int          benzinaInit                 (void);
 
 /**
  * @brief BENZINA_DATASET operations.
@@ -61,14 +61,14 @@ BENZINA_PUBLIC int          benzinaDatasetGetElement    (BENZINA_DATASET*       
 
 BENZINA_PUBLIC int          benzinaDataLoaderIterAlloc  (BENZINA_DATALOADER_ITER** ctx);
 BENZINA_PUBLIC int          benzinaDataLoaderIterInit   (BENZINA_DATALOADER_ITER*  ctx,
-                                                         BENZINA_DATASET*          dataset,
+                                                         const BENZINA_DATASET*    dataset,
                                                          int                       device,
                                                          size_t                    multibuffering,
                                                          size_t                    batchSize,
                                                          size_t                    h,
                                                          size_t                    w);
 BENZINA_PUBLIC int          benzinaDataLoaderIterNew    (BENZINA_DATALOADER_ITER** ctx,
-                                                         BENZINA_DATASET*          dataset,
+                                                         const BENZINA_DATASET*    dataset,
                                                          int                       device,
                                                          size_t                    multibuffering,
                                                          size_t                    batchSize,
