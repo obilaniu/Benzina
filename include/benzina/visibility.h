@@ -27,20 +27,58 @@
  *                   'https://gcc.gnu.org/wiki/Visibility'
  */
 
-#if    defined(BENZINA_SHAREDOBJECT) &&  defined(_WIN32) &&  defined(BENZINA_BUILDING_DLL)
-# define BENZINA_PUBLIC __declspec(dllexport)
-# define BENZINA_HIDDEN
-#elif  defined(BENZINA_SHAREDOBJECT) &&  defined(_WIN32) && !defined(BENZINA_BUILDING_DLL)
-# define BENZINA_PUBLIC __declspec(dllimport)
-# define BENZINA_HIDDEN
-#elif  defined(BENZINA_SHAREDOBJECT) &&  __GNUC__ >= 4
-# define BENZINA_PUBLIC __attribute__((visibility("default")))
-# define BENZINA_HIDDEN __attribute__((visibility("hidden")))
+#if   defined(_WIN32) || defined(__CYGWIN__)
+# define BENZINA_ATTRIBUTE_EXPORT __declspec(dllexport)
+# define BENZINA_ATTRIBUTE_IMPORT __declspec(dllimport)
+# define BENZINA_ATTRIBUTE_HIDDEN
+#elif __GNUC__ >= 4
+# define BENZINA_ATTRIBUTE_EXPORT __attribute__((visibility("default")))
+# define BENZINA_ATTRIBUTE_IMPORT __attribute__((visibility("default")))
+# define BENZINA_ATTRIBUTE_HIDDEN __attribute__((visibility("hidden")))
 #else
-# define BENZINA_PUBLIC
-# define BENZINA_HIDDEN
+# define BENZINA_ATTRIBUTE_EXPORT
+# define BENZINA_ATTRIBUTE_IMPORT
+# define BENZINA_ATTRIBUTE_HIDDEN
 #endif
-# define BENZINA_STATIC static
+
+
+/**
+ * Benzina library attributes (libbenzina.so)
+ */
+
+#if BENZINA_IS_SHARED
+# if BENZINA_IS_BUILDING
+#  define BENZINA_PUBLIC BENZINA_ATTRIBUTE_EXPORT
+# else
+#  define BENZINA_PUBLIC BENZINA_ATTRIBUTE_IMPORT
+# endif
+# define  BENZINA_HIDDEN BENZINA_ATTRIBUTE_HIDDEN
+#else
+# define  BENZINA_PUBLIC
+# define  BENZINA_HIDDEN
+#endif
+#define   BENZINA_STATIC static
+
+
+/**
+ * Benzina plugin attributes (libbenzina_plugin_*.so)
+ * 
+ * As a matter of fact, plugins are always dynamically-built and -loaded, so
+ * BENZINA_PLUGIN_IS_SHARED should always be #define'd.
+ */
+
+#if BENZINA_PLUGIN_IS_SHARED
+# if BENZINA_PLUGIN_IS_BUILDING
+#  define BENZINA_PLUGIN_PUBLIC BENZINA_ATTRIBUTE_EXPORT
+# else
+#  define BENZINA_PLUGIN_PUBLIC BENZINA_ATTRIBUTE_IMPORT
+# endif
+# define  BENZINA_PLUGIN_HIDDEN BENZINA_ATTRIBUTE_HIDDEN
+#else
+# define  BENZINA_PLUGIN_PUBLIC
+# define  BENZINA_PLUGIN_HIDDEN
+#endif
+#define   BENZINA_PLUGIN_STATIC static
 
 
 /* End Include Guards */

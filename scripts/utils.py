@@ -41,8 +41,12 @@ class build_ext(setuptools.command.build_ext.build_ext):
 		if not os.path.isfile(os.path.join(mesonBuildRoot,
 		                                   "meson-private",
 		                                   "coredata.dat")):
-			subprocess.check_call(["meson", srcRoot, "--prefix", libRoot,
-			                       "-Dsetuptools_driving_meson=true"],
+			subprocess.check_call(["meson", srcRoot,
+			                       "--prefix", libRoot,
+			                       "--buildtype", "release",
+			                       "-Dsetuptools_driving_meson=true",
+			                       "-Dcuda_runtime=static",
+			                       "-Dcuda_home="+os.environ.get("CUDA_HOME", "/usr/local/cuda")],
 			                      stdin  = subprocess.DEVNULL,
 			                      cwd    = mesonBuildRoot)
 		subprocess.check_call(["ninja"],

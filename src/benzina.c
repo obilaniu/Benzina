@@ -53,42 +53,6 @@ struct BENZINA_DATALOADER_ITER{
 	CUvideodecoder         decoder;
 };
 
-/**
- * @brief Benzina Process Control Block.
- * 
- * The shared-memory process control block for communication between the parent
- * and worker process.
- */
-
-struct BENZINA_PCB{
-	struct{
-		uint64_t               version;
-		uint64_t               size;
-		uint64_t               status;
-		uint32_t               parentPID;
-		uint32_t               workerPID;
-		uint8_t                uuid[16];
-		struct timespec        creationTime;
-		sem_t                  sem;
-	} header;
-	
-	union{
-		struct{
-			void*                  ptr;
-			int64_t                offset;
-			int64_t                size;
-		} cpu;
-		struct{
-			CUipcMemHandle         handle;
-			void*                  ptr;
-			int64_t                offset;
-			int64_t                size;
-			char                   pciBusId[16];
-		} gpu;
-	} data;
-};
-
-
 
 /* Static Function Declarations */
 BENZINA_STATIC void  benzinaInitOnce(void);

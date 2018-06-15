@@ -28,14 +28,3 @@
 __device__ void transform(float* x){
 	
 }
-
-
-
-
-/* Main */
-int main(int argc, char* argv[]){
-	(void)argc;
-	(void)argv;
-	
-	return 0;
-}
