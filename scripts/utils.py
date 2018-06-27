@@ -44,7 +44,7 @@ class build_ext(setuptools.command.build_ext.build_ext):
 			subprocess.check_call(["meson", srcRoot,
 			                       "--prefix", libRoot,
 			                       "--buildtype", "release",
-			                       "-Dsetuptools_driving_meson=true",
+			                       "-Dbuilding_py_pkg=true",
 			                       "-Dcuda_runtime=static",
 			                       "-Dcuda_home="+os.environ.get("CUDA_HOME", "/usr/local/cuda")],
 			                      stdin  = subprocess.DEVNULL,

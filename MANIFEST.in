@@ -6,7 +6,7 @@ include setup.* *.md
 graft include
 graft src
 graft scripts
-global-include meson.build
+global-include meson.build meson_options.txt
 
 # But exclude binaries, installed headers and other junk:
 prune src/benzina/include

@@ -4,7 +4,7 @@ project('Benzina', 'c', 'cpp',
         license:                 'MIT',
         default_options:         [
             'c_std=gnu99',
-            'warning_level=2',
+            'warning_level=3',
         ],
 )
 
@@ -17,7 +17,7 @@ project('Benzina', 'c', 'cpp',
 #
 cc          = meson.get_compiler('c')
 threadsDep  = dependency('threads')
-libm        = cc.find_library('m',    required: true)
+libm        = cc.find_library('m',    required: false)
 libdl       = cc.find_library('dl',   required: true)
 librt       = cc.find_library('rt',   required: true)
 
@@ -35,8 +35,8 @@ cudaLibDirs  = join_paths(CUDA_HOME, 'lib64')
 cudaIncDirs  = join_paths(CUDA_HOME, 'include')
 cudaIncs     = include_directories(cudaIncDirs)
 libcuda      = cc.find_library('cuda',          required: true, dirs: cudaLibDirs)
-libcudadevrt = cc.find_library('cudadevrt',     required: true, dirs: cudaLibDirs)
 libcudart    = cc.find_library(CUDA_RUNTIME,    required: true, dirs: cudaLibDirs)
+libcudadevrt = cc.find_library('cudadevrt',     required: true, dirs: cudaLibDirs)
 libnvcuvid   = cc.find_library('nvcuvid',       required: true, dirs: cudaLibDirs)
 nvcc         = find_program(join_paths(CUDA_HOME, 'bin', 'nvcc'), required: true)
 
@@ -45,7 +45,7 @@ nvcc         = find_program(join_paths(CUDA_HOME, 'bin', 'nvcc'), required: true
 # If building a Python package, we override the default install directories
 # bindir, libdir and includedir.
 #
-BUILDINGPYPKG = get_option('setuptools_driving_meson')
+BUILDINGPYPKG = get_option('building_py_pkg')
 if BUILDINGPYPKG
   message('Entering special Python-package build mode. Overriding bindir, libdir & includedir.')
   bindir     = join_paths('benzina', 'libs')

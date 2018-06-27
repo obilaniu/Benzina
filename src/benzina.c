@@ -319,21 +319,21 @@ int          benzinaDatasetFree          (BENZINA_DATASET*  ctx){
 	return 0;
 }
 
-int          benzinaDatasetGetLength     (BENZINA_DATASET*  ctx, size_t* length){
+int          benzinaDatasetGetLength     (const BENZINA_DATASET*  ctx, size_t* length){
 	*length = ctx->length;
 	return 0;
 }
 
-int          benzinaDatasetGetShape      (BENZINA_DATASET*  ctx, size_t* w, size_t* h){
+int          benzinaDatasetGetShape      (const BENZINA_DATASET*  ctx, size_t* w, size_t* h){
 	*w = ctx->info.ulWidth;
 	*h = ctx->info.ulHeight;
 	return 0;
 }
 
-int          benzinaDatasetGetElement    (BENZINA_DATASET*  ctx,
-                                          size_t            i,
-                                          size_t*           off,
-                                          size_t*           len){
+int          benzinaDatasetGetElement    (const BENZINA_DATASET*  ctx,
+                                          size_t                  i,
+                                          size_t*                 off,
+                                          size_t*                 len){
 	if(!ctx->offsets || !ctx->lengths || i>=ctx->length){
 		*off = -1;
 		*len = -1;

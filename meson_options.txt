@@ -1,3 +1,3 @@
-option('cuda_home',                yield: true,  type: 'string',  value: '/usr/local/cuda',                       description: 'Path to preferred CUDA Toolkit.')
-option('cuda_runtime',             yield: true,  type: 'combo',   value: 'static', choices: ['static', 'shared'], description: 'Preferred CUDA Runtime (libcudart) linkage.')
-option('setuptools_driving_meson', yield: true,  type: 'boolean', value: false,                                   description: 'INTERNAL. Indicates to Meson that it is being driven by setuptools, causing it to adapt its behaviour for the purpose of correctly building a Python package.')
+option('cuda_home',       yield: true,  type: 'string',  value: '/usr/local/cuda',                       description: 'Path to preferred CUDA Toolkit.')
+option('cuda_runtime',    yield: true,  type: 'combo',   value: 'static', choices: ['static', 'shared'], description: 'Preferred CUDA Runtime (libcudart) linkage.')
+option('building_py_pkg', yield: true,  type: 'boolean', value: false,                                   description: 'INTERNAL. Indicates to Meson that setuptools is building a Python package.')
