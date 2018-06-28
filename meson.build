@@ -10,7 +10,7 @@ project('Benzina', 'c', 'cpp',
 
 
 #
-# Dependencies & Libraries
+# Compiler, Dependencies & Libraries
 #
 # Library and Include Search Paths
 # More configurable defaults could surely be provided.
@@ -20,6 +20,14 @@ threadsDep  = dependency('threads')
 libm        = cc.find_library('m',    required: false)
 libdl       = cc.find_library('dl',   required: true)
 librt       = cc.find_library('rt',   required: true)
+
+#
+# Relax a bit the warning flags on GCC & Clang. -Wpedantic is very noisy.
+#
+if cc.get_id() == 'gcc' or cc.get_id() == 'clang'
+  add_project_arguments('-Wno-pedantic', language: 'c')
+  add_project_arguments('-Wno-pedantic', language: 'cpp')
+endif
 
 
 #
