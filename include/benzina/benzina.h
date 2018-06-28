@@ -56,30 +56,6 @@ BENZINA_PUBLIC int          benzinaDatasetGetElement    (const BENZINA_DATASET* 
                                                          size_t*                   off,
                                                          size_t*                   len);
 
-/**
- * @brief BENZINA_DATALOADER_ITER operations.
- */
-
-BENZINA_PUBLIC int          benzinaDataLoaderIterAlloc  (BENZINA_DATALOADER_ITER** ctx);
-BENZINA_PUBLIC int          benzinaDataLoaderIterInit   (BENZINA_DATALOADER_ITER*  ctx,
-                                                         const BENZINA_DATASET*    dataset,
-                                                         int                       device,
-                                                         size_t                    multibuffering,
-                                                         size_t                    batchSize,
-                                                         size_t                    h,
-                                                         size_t                    w);
-BENZINA_PUBLIC int          benzinaDataLoaderIterNew    (BENZINA_DATALOADER_ITER** ctx,
-                                                         const BENZINA_DATASET*    dataset,
-                                                         int                       device,
-                                                         size_t                    multibuffering,
-                                                         size_t                    batchSize,
-                                                         size_t                    h,
-                                                         size_t                    w);
-BENZINA_PUBLIC int          benzinaDataLoaderIterFini   (BENZINA_DATALOADER_ITER*  ctx);
-BENZINA_PUBLIC int          benzinaDataLoaderIterFree   (BENZINA_DATALOADER_ITER*  ctx);
-BENZINA_PUBLIC int          benzinaDataLoaderIterPush   (BENZINA_DATALOADER_ITER*  ctx);
-BENZINA_PUBLIC int          benzinaDataLoaderIterPull   (BENZINA_DATALOADER_ITER*  ctx);
-
 
 /* End Extern "C" and Include Guard */
 #ifdef __cplusplus

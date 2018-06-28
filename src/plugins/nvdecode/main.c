@@ -138,18 +138,18 @@ struct NVDECODE_CTX{
 	} defaults;
 	
 	/* NVDECODE state */
-	void*                  cuvidHandle;
-	tcuvidGetDecoderCaps*  cuvidGetDecoderCaps;
-	tcuvidCreateDecoder*   cuvidCreateDecoder;
-	tcuvidDecodePicture*   cuvidDecodePicture;
-	tcuvidMapVideoFrame*   cuvidMapVideoFrame;
-	tcuvidUnmapVideoFrame* cuvidUnmapVideoFrame;
-	tcuvidDestroyDecoder*  cuvidDestroyDecoder;
-	CUVIDDECODECAPS        decoderCaps;
-	CUVIDDECODECREATEINFO  decoderInfo;
-	CUvideodecoder         decoder;
-	CUVIDPICPARAMS*        picParams;
-	uint64_t               picParamTruncLen;
+	void*                    cuvidHandle;
+	tcuvidGetDecoderCaps*    cuvidGetDecoderCaps;
+	tcuvidCreateDecoder*     cuvidCreateDecoder;
+	tcuvidDecodePicture*     cuvidDecodePicture;
+	tcuvidMapVideoFrame64*   cuvidMapVideoFrame64;
+	tcuvidUnmapVideoFrame64* cuvidUnmapVideoFrame64;
+	tcuvidDestroyDecoder*    cuvidDestroyDecoder;
+	CUVIDDECODECAPS          decoderCaps;
+	CUVIDDECODECREATEINFO    decoderInfo;
+	CUvideodecoder           decoder;
+	CUVIDPICPARAMS*          picParams;
+	uint64_t                 picParamTruncLen;
 };
 
 
@@ -488,18 +488,26 @@ BENZINA_PLUGIN_STATIC void* nvdecodeWorkerThrdMain    (NVDECODE_CTX* ctx){
 	unsigned           pitch;
 	uint64_t           picIdx = 0;
 	
+	memset(&vpp, 0, sizeof(vpp));
+	
 	pthread_mutex_lock(&ctx->lock);
 	if(nvdecodeWorkerThrdInit(ctx)){
 		while(nvdecodeWorkerThrdContinue(ctx)){
+			vpp.progressive_frame = 1;
+			vpp.second_field      = 0;
+			vpp.top_field_first   = 0;
+			vpp.unpaired_field    = 0;
+			vpp.output_stream     = ctx->cudaStream;
+			
 			pthread_mutex_unlock(&ctx->lock);
 			vpp.output_stream = ctx->cudaStream;
-			ctx->cuvidMapVideoFrame(ctx->decoder, picIdx, &devPtr, &pitch, &vpp);
+			ctx->cuvidMapVideoFrame64(ctx->decoder, picIdx, &devPtr, &pitch, &vpp);
 			nvdecodePostprocKernelInvoker(/* ctx->cudaStream */);
 			cudaStreamAddCallback(ctx->cudaStream,
 			                      (cudaStreamCallback_t)nvdecodeWorkerThrdCallback,
 			                      ctx,
 			                      0);
-			ctx->cuvidUnmapVideoFrame(ctx->decoder, devPtr);
+			ctx->cuvidUnmapVideoFrame64(ctx->decoder, devPtr);
 			pthread_mutex_lock(&ctx->lock);
 		}
 	}
@@ -652,14 +660,58 @@ BENZINA_PLUGIN_STATIC int   nvdecodeSetDevice         (NVDECODE_CTX* ctx, const 
 BENZINA_PLUGIN_HIDDEN NVDECODE_CTX* nvdecodeAlloc(const BENZINA_DATASET* dataset){
 	NVDECODE_CTX* ctx = NULL;
 	
+	/**
+	 * The dataset object cannot be NULL.
+	 */
+	
 	if(!dataset){
 		return NULL;
 	}
+	
+	
+	/**
+	 * Allocate memory for context.
+	 */
 	
 	ctx = calloc(1, sizeof(*ctx));
 	if(!ctx){
 		return NULL;
 	}
+	ctx->dataset   =  dataset;
+	ctx->refCnt    =  1;
+	ctx->deviceOrd = -1;
+	
+	
+	/**
+	 * Dynamically attempt to open libnvcuvid.so, the basis for this
+	 * plugin's functionality.
+	 * 
+	 * Also retrieve pointers to several library functions.
+	 */
+	
+	ctx->cuvidHandle = dlopen("libnvcuvid.so", RTLD_LAZY);
+	if(!ctx->cuvidHandle){
+		goto fail_dlopen;
+	}
+	#define READ_SYMBOL(fn)  do{                        \
+	       void* symPtr = dlsym(ctx->cuvidHandle, #fn); \
+	       if(!symPtr){goto fail_dlsym;}                \
+	       ctx->fn = *(t ## fn*)symPtr;                 \
+	       if(!ctx->fn){goto fail_dlsym;}               \
+	    }while(1)
+	READ_SYMBOL(cuvidGetDecoderCaps);
+	READ_SYMBOL(cuvidCreateDecoder);
+	READ_SYMBOL(cuvidDecodePicture);
+	READ_SYMBOL(cuvidMapVideoFrame64);
+	READ_SYMBOL(cuvidUnmapVideoFrame64);
+	READ_SYMBOL(cuvidDestroyDecoder);
+	#undef READ_SYMBOL
+	
+	
+	/**
+	 * Initialize threading resources, including the Big Lock and
+	 * condition variables.
+	 */
 	
 	if(pthread_mutex_init(&ctx->lock, NULL)      ){goto fail_lock;}
 	if(pthread_cond_init (&ctx->condSubmitted, 0)){goto fail_submitted;}
@@ -668,11 +720,22 @@ BENZINA_PLUGIN_HIDDEN NVDECODE_CTX* nvdecodeAlloc(const BENZINA_DATASET* dataset
 	if(pthread_cond_init (&ctx->condCompleted, 0)){goto fail_completed;}
 	if(pthread_cond_init (&ctx->condBatch,     0)){goto fail_batch;}
 	
-	ctx->dataset   =  dataset;
-	ctx->refCnt    =  1;
-	ctx->deviceOrd = -1;
 	
+	/**
+	 * Read dataset directory.
+	 */
+	
+	
+	
+	/* SUCCESS. Return context. */
 	return ctx;
+	
+	
+	/**
+	 * FAILURE HANDLING
+	 * 
+	 * Work done above is unwound (in reverse order).
+	 */
 	
 	                pthread_cond_destroy (&ctx->condBatch);
 	fail_batch:     pthread_cond_destroy (&ctx->condCompleted);
@@ -680,7 +743,10 @@ BENZINA_PLUGIN_HIDDEN NVDECODE_CTX* nvdecodeAlloc(const BENZINA_DATASET* dataset
 	fail_fed:       pthread_cond_destroy (&ctx->condRead);
 	fail_read:      pthread_cond_destroy (&ctx->condSubmitted);
 	fail_submitted: pthread_mutex_destroy(&ctx->lock);
-	fail_lock:      free(ctx);
+	fail_lock:
+	fail_dlsym:     dlclose(ctx->cuvidHandle);
+	fail_dlopen:    memset(ctx, 0, sizeof(*ctx));
+	free(ctx);
 	return NULL;
 }
 
@@ -986,3 +1052,65 @@ BENZINA_PLUGIN_PUBLIC BENZINA_PLUGIN_NVDECODE_VTABLE VTABLE = {
 	.setOOBColor              = (void*)nvdecodeSetOOBColor,
 	.selectColorMatrix        = (void*)nvdecodeSelectColorMatrix,
 };
+
+
+
+
+#if 0
+	printf("\n");
+	printf("****************\n");
+	printf("PicWidthInMbs:            %d\n", picParams->PicWidthInMbs);
+	printf("FrameHeightInMbs:         %d\n", picParams->FrameHeightInMbs);
+	printf("CurrPicIdx:               %d\n", picParams->CurrPicIdx);
+	printf("field_pic_flag:           %d\n", picParams->field_pic_flag);
+	printf("bottom_field_flag:        %d\n", picParams->bottom_field_flag);
+	printf("second_field:             %d\n", picParams->second_field);
+	printf("nBitstreamDataLen:        %d\n", picParams->nBitstreamDataLen);
+	printf("nNumSlices:               %d\n", picParams->nNumSlices);
+	printf("ref_pic_flag:             %d\n", picParams->ref_pic_flag);
+	printf("intra_pic_flag:           %d\n", picParams->intra_pic_flag);
+	printf("num_ref_frames:           %d\n", picParams->CodecSpecific.h264.num_ref_frames);
+	printf("entropy_coding_mode_flag: %d\n", picParams->CodecSpecific.h264.entropy_coding_mode_flag);
+	printf("ref_pic_flag:             %d\n", picParams->CodecSpecific.h264.ref_pic_flag);
+	printf("frame_num:                %d\n", picParams->CodecSpecific.h264.frame_num);
+	printf("CurrFieldOrderCnt:        %d %d\n", picParams->CodecSpecific.h264.CurrFieldOrderCnt[0], picParams->CodecSpecific.h264.CurrFieldOrderCnt[1]);
+	printf("DPB.PicIdx:               %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n", picParams->CodecSpecific.h264.dpb[0].PicIdx, picParams->CodecSpecific.h264.dpb[1].PicIdx, picParams->CodecSpecific.h264.dpb[2].PicIdx, picParams->CodecSpecific.h264.dpb[3].PicIdx, picParams->CodecSpecific.h264.dpb[4].PicIdx, picParams->CodecSpecific.h264.dpb[5].PicIdx, picParams->CodecSpecific.h264.dpb[6].PicIdx, picParams->CodecSpecific.h264.dpb[7].PicIdx, picParams->CodecSpecific.h264.dpb[8].PicIdx, picParams->CodecSpecific.h264.dpb[9].PicIdx, picParams->CodecSpecific.h264.dpb[10].PicIdx, picParams->CodecSpecific.h264.dpb[11].PicIdx, picParams->CodecSpecific.h264.dpb[12].PicIdx, picParams->CodecSpecific.h264.dpb[13].PicIdx, picParams->CodecSpecific.h264.dpb[14].PicIdx, picParams->CodecSpecific.h264.dpb[15].PicIdx);
+	printf("DPB.FrameIdx:             %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n", picParams->CodecSpecific.h264.dpb[0].FrameIdx, picParams->CodecSpecific.h264.dpb[1].FrameIdx, picParams->CodecSpecific.h264.dpb[2].FrameIdx, picParams->CodecSpecific.h264.dpb[3].FrameIdx, picParams->CodecSpecific.h264.dpb[4].FrameIdx, picParams->CodecSpecific.h264.dpb[5].FrameIdx, picParams->CodecSpecific.h264.dpb[6].FrameIdx, picParams->CodecSpecific.h264.dpb[7].FrameIdx, picParams->CodecSpecific.h264.dpb[8].FrameIdx, picParams->CodecSpecific.h264.dpb[9].FrameIdx, picParams->CodecSpecific.h264.dpb[10].FrameIdx, picParams->CodecSpecific.h264.dpb[11].FrameIdx, picParams->CodecSpecific.h264.dpb[12].FrameIdx, picParams->CodecSpecific.h264.dpb[13].FrameIdx, picParams->CodecSpecific.h264.dpb[14].FrameIdx, picParams->CodecSpecific.h264.dpb[15].FrameIdx);
+	printf("DPB.is_long_term:         %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n", picParams->CodecSpecific.h264.dpb[0].is_long_term, picParams->CodecSpecific.h264.dpb[1].is_long_term, picParams->CodecSpecific.h264.dpb[2].is_long_term, picParams->CodecSpecific.h264.dpb[3].is_long_term, picParams->CodecSpecific.h264.dpb[4].is_long_term, picParams->CodecSpecific.h264.dpb[5].is_long_term, picParams->CodecSpecific.h264.dpb[6].is_long_term, picParams->CodecSpecific.h264.dpb[7].is_long_term, picParams->CodecSpecific.h264.dpb[8].is_long_term, picParams->CodecSpecific.h264.dpb[9].is_long_term, picParams->CodecSpecific.h264.dpb[10].is_long_term, picParams->CodecSpecific.h264.dpb[11].is_long_term, picParams->CodecSpecific.h264.dpb[12].is_long_term, picParams->CodecSpecific.h264.dpb[13].is_long_term, picParams->CodecSpecific.h264.dpb[14].is_long_term, picParams->CodecSpecific.h264.dpb[15].is_long_term);
+	printf("DPB.not_existing:         %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n", picParams->CodecSpecific.h264.dpb[0].not_existing, picParams->CodecSpecific.h264.dpb[1].not_existing, picParams->CodecSpecific.h264.dpb[2].not_existing, picParams->CodecSpecific.h264.dpb[3].not_existing, picParams->CodecSpecific.h264.dpb[4].not_existing, picParams->CodecSpecific.h264.dpb[5].not_existing, picParams->CodecSpecific.h264.dpb[6].not_existing, picParams->CodecSpecific.h264.dpb[7].not_existing, picParams->CodecSpecific.h264.dpb[8].not_existing, picParams->CodecSpecific.h264.dpb[9].not_existing, picParams->CodecSpecific.h264.dpb[10].not_existing, picParams->CodecSpecific.h264.dpb[11].not_existing, picParams->CodecSpecific.h264.dpb[12].not_existing, picParams->CodecSpecific.h264.dpb[13].not_existing, picParams->CodecSpecific.h264.dpb[14].not_existing, picParams->CodecSpecific.h264.dpb[15].not_existing);
+	printf("DPB.used_for_reference:   %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n", picParams->CodecSpecific.h264.dpb[0].used_for_reference, picParams->CodecSpecific.h264.dpb[1].used_for_reference, picParams->CodecSpecific.h264.dpb[2].used_for_reference, picParams->CodecSpecific.h264.dpb[3].used_for_reference, picParams->CodecSpecific.h264.dpb[4].used_for_reference, picParams->CodecSpecific.h264.dpb[5].used_for_reference, picParams->CodecSpecific.h264.dpb[6].used_for_reference, picParams->CodecSpecific.h264.dpb[7].used_for_reference, picParams->CodecSpecific.h264.dpb[8].used_for_reference, picParams->CodecSpecific.h264.dpb[9].used_for_reference, picParams->CodecSpecific.h264.dpb[10].used_for_reference, picParams->CodecSpecific.h264.dpb[11].used_for_reference, picParams->CodecSpecific.h264.dpb[12].used_for_reference, picParams->CodecSpecific.h264.dpb[13].used_for_reference, picParams->CodecSpecific.h264.dpb[14].used_for_reference, picParams->CodecSpecific.h264.dpb[15].used_for_reference);
+	printf("DPB.FieldOrderCnt[0]:     %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n", picParams->CodecSpecific.h264.dpb[0].FieldOrderCnt[0], picParams->CodecSpecific.h264.dpb[1].FieldOrderCnt[0], picParams->CodecSpecific.h264.dpb[2].FieldOrderCnt[0], picParams->CodecSpecific.h264.dpb[3].FieldOrderCnt[0], picParams->CodecSpecific.h264.dpb[4].FieldOrderCnt[0], picParams->CodecSpecific.h264.dpb[5].FieldOrderCnt[0], picParams->CodecSpecific.h264.dpb[6].FieldOrderCnt[0], picParams->CodecSpecific.h264.dpb[7].FieldOrderCnt[0], picParams->CodecSpecific.h264.dpb[8].FieldOrderCnt[0], picParams->CodecSpecific.h264.dpb[9].FieldOrderCnt[0], picParams->CodecSpecific.h264.dpb[10].FieldOrderCnt[0], picParams->CodecSpecific.h264.dpb[11].FieldOrderCnt[0], picParams->CodecSpecific.h264.dpb[12].FieldOrderCnt[0], picParams->CodecSpecific.h264.dpb[13].FieldOrderCnt[0], picParams->CodecSpecific.h264.dpb[14].FieldOrderCnt[0], picParams->CodecSpecific.h264.dpb[15].FieldOrderCnt[0]);
+	printf("DPB.FieldOrderCnt[1]:     %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n", picParams->CodecSpecific.h264.dpb[0].FieldOrderCnt[1], picParams->CodecSpecific.h264.dpb[1].FieldOrderCnt[1], picParams->CodecSpecific.h264.dpb[2].FieldOrderCnt[1], picParams->CodecSpecific.h264.dpb[3].FieldOrderCnt[1], picParams->CodecSpecific.h264.dpb[4].FieldOrderCnt[1], picParams->CodecSpecific.h264.dpb[5].FieldOrderCnt[1], picParams->CodecSpecific.h264.dpb[6].FieldOrderCnt[1], picParams->CodecSpecific.h264.dpb[7].FieldOrderCnt[1], picParams->CodecSpecific.h264.dpb[8].FieldOrderCnt[1], picParams->CodecSpecific.h264.dpb[9].FieldOrderCnt[1], picParams->CodecSpecific.h264.dpb[10].FieldOrderCnt[1], picParams->CodecSpecific.h264.dpb[11].FieldOrderCnt[1], picParams->CodecSpecific.h264.dpb[12].FieldOrderCnt[1], picParams->CodecSpecific.h264.dpb[13].FieldOrderCnt[1], picParams->CodecSpecific.h264.dpb[14].FieldOrderCnt[1], picParams->CodecSpecific.h264.dpb[15].FieldOrderCnt[1]);
+	printf("fmo_aso_enable:           %d\n", picParams->CodecSpecific.h264.fmo_aso_enable);
+	printf("num_slice_groups_minus1:  %d\n", picParams->CodecSpecific.h264.num_slice_groups_minus1);
+	printf("fmo.pMb2SliceGroupMap:    %p\n", picParams->CodecSpecific.h264.fmo.pMb2SliceGroupMap);
+	printf("****************\n");
+	
+	CUresult             result = CUDA_SUCCESS;
+	CUVIDPROCPARAMS      procParams;
+	memset(&procParams, 0, sizeof(procParams));
+	procParams.progressive_frame = dispInfo->progressive_frame;
+	procParams.second_field      = 0;
+	procParams.top_field_first   = dispInfo->top_field_first;
+	procParams.unpaired_field    = 0;
+	
+	unsigned long long devPtr = 0;
+	unsigned int       pitch  = 0;
+	result = u->cuvidMapVideoFrame64(u->decoder,
+	                                 dispInfo->picture_index,
+	                                 &devPtr,
+	                                 &pitch,
+	                                 &procParams);
+	if(result != CUDA_SUCCESS){
+		printf("Could not map picture successfully (%d)!\n", (int)result);
+	}else{
+		/* printf("Mapped picture successfully!\n"); */
+	}
+	
+	result = u->cuvidUnmapVideoFrame64(u->decoder, devPtr);
+	if(result != CUDA_SUCCESS){
+		printf("Could not unmap picture successfully (%d)!\n", (int)result);
+	}else{
+		/* printf("Unmapped picture successfully!\n"); */
+	}
+#endif

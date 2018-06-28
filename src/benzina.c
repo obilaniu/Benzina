@@ -62,16 +62,6 @@ BENZINA_STATIC void  benzinaInitOnce(void);
 /* Global Variables & Constants. */
 static pthread_once_t benzinaInitOnceControl = PTHREAD_ONCE_INIT;
 static int            benzinaInitOnceStatus  = -1;
-static void*          cuvidHandle            = NULL;
-DEFINE_CUVID_SYMBOL  (cuvidCreateVideoParser);
-DEFINE_CUVID_SYMBOL  (cuvidParseVideoData);
-DEFINE_CUVID_SYMBOL  (cuvidDestroyVideoParser);
-DEFINE_CUVID_SYMBOL  (cuvidGetDecoderCaps);
-DEFINE_CUVID_SYMBOL  (cuvidCreateDecoder);
-DEFINE_CUVID_SYMBOL  (cuvidDestroyDecoder);
-DEFINE_CUVID_SYMBOL  (cuvidDecodePicture);
-DEFINE_CUVID_SYMBOL  (cuvidMapVideoFrame64);
-DEFINE_CUVID_SYMBOL  (cuvidUnmapVideoFrame64);
 
 
 /* Static Function Definitions */
@@ -81,24 +71,6 @@ DEFINE_CUVID_SYMBOL  (cuvidUnmapVideoFrame64);
  */
 
 BENZINA_STATIC void  benzinaInitOnce(void){
-	/* libnvcuvid loading. */
-	cuvidHandle = dlopen(CUVID_LIBRARY_NAME, RTLD_LAZY);
-	if(!cuvidHandle){
-		benzinaInitOnceStatus = -2; return;
-	}
-	#define INIT_CUVID_SYMBOL(fn)  fn = *(t##fn*)dlsym(cuvidHandle, #fn)
-	INIT_CUVID_SYMBOL(cuvidCreateVideoParser);
-	INIT_CUVID_SYMBOL(cuvidParseVideoData);
-	INIT_CUVID_SYMBOL(cuvidDestroyVideoParser);
-	INIT_CUVID_SYMBOL(cuvidGetDecoderCaps);
-	INIT_CUVID_SYMBOL(cuvidCreateDecoder);
-	INIT_CUVID_SYMBOL(cuvidDestroyDecoder);
-	INIT_CUVID_SYMBOL(cuvidDecodePicture);
-	INIT_CUVID_SYMBOL(cuvidMapVideoFrame64);
-	INIT_CUVID_SYMBOL(cuvidUnmapVideoFrame64);
-	#undef INIT_CUVID_SYMBOL
-	
-	/* Return with 0 indicating initialization success. */
 	benzinaInitOnceStatus = 0;
 }
 
@@ -345,52 +317,3 @@ int          benzinaDatasetGetElement    (const BENZINA_DATASET*  ctx,
 	}
 }
 
-int          benzinaDataLoaderIterAlloc  (BENZINA_DATALOADER_ITER** ctx){
-	return -!(*ctx = malloc(sizeof(**ctx)));
-}
-
-int          benzinaDataLoaderIterInit   (BENZINA_DATALOADER_ITER*  ctx,
-                                          const BENZINA_DATASET*    dataset,
-                                          int                       device,
-                                          size_t                    multibuffering,
-                                          size_t                    batchSize,
-                                          size_t                    h,
-                                          size_t                    w){
-	return 0;
-}
-
-int          benzinaDataLoaderIterNew    (BENZINA_DATALOADER_ITER** ctx,
-                                          const BENZINA_DATASET*    dataset,
-                                          int                       device,
-                                          size_t                    multibuffering,
-                                          size_t                    batchSize,
-                                          size_t                    h,
-                                          size_t                    w){
-	int ret = benzinaDataLoaderIterAlloc(ctx);
-	return ret ? ret : benzinaDataLoaderIterInit(*ctx,
-	                                             dataset,
-	                                             device,
-	                                             multibuffering,
-	                                             batchSize,
-	                                             h, w);
-}
-
-int          benzinaDataLoaderIterFini   (BENZINA_DATALOADER_ITER*  ctx){
-	return 0;
-}
-
-int          benzinaDataLoaderIterFree   (BENZINA_DATALOADER_ITER*  ctx){
-	if(ctx){
-		benzinaDataLoaderIterFini(ctx);
-		free(ctx);
-	}
-	return 0;
-}
-
-int          benzinaDataLoaderIterPush   (BENZINA_DATALOADER_ITER*  ctx){
-	return 0;
-}
-
-int          benzinaDataLoaderIterPull   (BENZINA_DATALOADER_ITER*  ctx){
-	return 0;
-}
