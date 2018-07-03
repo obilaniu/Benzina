@@ -45,7 +45,6 @@ cudaIncs     = include_directories(cudaIncDirs)
 libcuda      = cc.find_library('cuda',          required: true, dirs: cudaLibDirs)
 libcudart    = cc.find_library(CUDA_RUNTIME,    required: true, dirs: cudaLibDirs)
 libcudadevrt = cc.find_library('cudadevrt',     required: true, dirs: cudaLibDirs)
-libnvcuvid   = cc.find_library('nvcuvid',       required: true, dirs: cudaLibDirs)
 nvcc         = find_program(join_paths(CUDA_HOME, 'bin', 'nvcc'), required: true)
 
 

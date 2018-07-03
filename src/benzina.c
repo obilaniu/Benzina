@@ -1,11 +1,7 @@
 /* Includes */
-#include <cuda.h>
 #include <dlfcn.h>
-#include <dynlink_cuviddec.h>
-#include <dynlink_nvcuvid.h>
 #include <fcntl.h>
 #include <pthread.h>
-#include <semaphore.h>
 #include <sys/stat.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,8 +12,6 @@
 
 
 /* Defines */
-#define CUVID_LIBRARY_NAME       "libnvcuvid.so"
-#define DEFINE_CUVID_SYMBOL(fn)  t##fn* fn = (t##fn*)NULL
 
 
 
@@ -34,24 +28,10 @@ struct BENZINA_DATASET{
 	size_t                length;
 	uint64_t*             lengths;
 	uint64_t*             offsets;
-	CUVIDDECODECREATEINFO info;
+	uint64_t              codedWidth;
+	uint64_t              codedHeight;
 };
 
-/**
- * @brief Benzina Data Loader Iterator.
- * 
- * The state of an iterator.
- */
-
-struct BENZINA_DATALOADER_ITER{
-	const BENZINA_DATASET* dataset;
-	int                    device;
-	size_t                 multibuffering;
-	size_t                 batchSize;
-	size_t                 h, w;
-	
-	CUvideodecoder         decoder;
-};
 
 
 /* Static Function Declarations */
@@ -64,6 +44,7 @@ static pthread_once_t benzinaInitOnceControl = PTHREAD_ONCE_INIT;
 static int            benzinaInitOnceStatus  = -1;
 
 
+
 /* Static Function Definitions */
 
 /**
@@ -72,72 +53,6 @@ static int            benzinaInitOnceStatus  = -1;
 
 BENZINA_STATIC void  benzinaInitOnce(void){
 	benzinaInitOnceStatus = 0;
-}
-
-/**
- * @brief Read ProtoBuf varint.
- * 
- * @param [in]  fp   Stream to read from.
- * @param [out] val  Encoded value read.
- * @return Zero if successful; Non-zero otherwise (e.g. due to EOF).
- */
-
-BENZINA_STATIC int   readVarInt(int fd, uint64_t* val){
-	ssize_t       r;
-	unsigned char c;
-	int           i=0;
-	
-	*val = 0;
-	do{
-		r = read(fd, &c, 1);
-		if(r <= 0){
-			return -1;
-		}
-		*val |= (uint64_t)(c&0x7F) << 7*i++;
-	}while((c&0x80) && (i<10));
-	
-	return 0;
-}
-
-BENZINA_STATIC int   benzinaDatasetInitFromProtoBuf(BENZINA_DATASET*  ctx,
-                                                    int               dataprotobuffd){
-	uint64_t tagw, tag, val;
-	
-	while(readVarInt(dataprotobuffd, &tagw) == 0){
-		tag = tagw >> 3;
-		switch(tag){
-			#define TAGCASE(tagid, target)             \
-			    case tagid:                            \
-			        readVarInt(dataprotobuffd, &val);  \
-			        target = val;                      \
-			    break;
-			
-			TAGCASE(33554432, ctx->info.ulWidth);
-			TAGCASE(33554433, ctx->info.ulHeight);
-			TAGCASE(33554434, ctx->info.ulNumDecodeSurfaces);
-			TAGCASE(33554435, ctx->info.CodecType);
-			TAGCASE(33554436, ctx->info.ChromaFormat);
-			TAGCASE(33554438, ctx->info.bitDepthMinus8);
-			TAGCASE(33554439, ctx->info.ulIntraDecodeOnly);
-			TAGCASE(33554443, ctx->info.display_area.left);
-			TAGCASE(33554444, ctx->info.display_area.top);
-			TAGCASE(33554445, ctx->info.display_area.right);
-			TAGCASE(33554446, ctx->info.display_area.bottom);
-			TAGCASE(33554447, ctx->info.OutputFormat);
-			TAGCASE(33554448, ctx->info.DeinterlaceMode);
-			TAGCASE(33554449, ctx->info.ulTargetWidth);
-			TAGCASE(33554450, ctx->info.ulTargetHeight);
-			TAGCASE(33554451, ctx->info.ulNumOutputSurfaces);
-			TAGCASE(33554453, ctx->info.target_rect.left);
-			TAGCASE(33554454, ctx->info.target_rect.top);
-			TAGCASE(33554455, ctx->info.target_rect.right);
-			TAGCASE(33554456, ctx->info.target_rect.bottom);
-			
-			#undef TAGCASE
-		}
-	}
-	
-	return 0;
 }
 
 
@@ -152,17 +67,21 @@ int          benzinaDatasetAlloc         (BENZINA_DATASET** ctx){
 }
 
 int          benzinaDatasetInit          (BENZINA_DATASET*  ctx, const char* root){
-	struct stat databinstat, datalengthsstat, datanvdecodestat, dataprotobufstat,
-	            READMEmdstat, SHA256SUMSstat;
-	int     ret=0, dirfd=-1, datalengthsfd=-1, dataprotobuffd=-1;
-	size_t  bytesRead=0, bytesLeft=0, i;
-	ssize_t bytesChunk=0;
+	BENZINA_BUF bbuf = {0};
+	struct stat s0, s1, s2, s3, s4;
+	int         ret=0, dirfd=-1, fd1=-1, fd2=-1;
+	size_t      bytesRead=0, bytesLeft=0, i;
+	ssize_t     bytesChunk=0;
+	uint32_t    tag, wire;
 	
 	
 	/* Wipe previous contents. */
 	memset(ctx, 0, sizeof(*ctx));
 	
 	/* Duplicate path to root. */
+	if(!root){
+		return -1;
+	}
 	ctx->root = strdup(root);
 	if(!ctx->root){
 		return -1;
@@ -170,13 +89,12 @@ int          benzinaDatasetInit          (BENZINA_DATASET*  ctx, const char* roo
 	
 	/* Test the existence of the expected files in the dataset root. */
 	dirfd = open(ctx->root, O_RDONLY|O_CLOEXEC|O_DIRECTORY);
-	if(dirfd                                                 < 0 ||
-	   fstatat(dirfd, "data.bin",      &databinstat,      0) < 0 ||
-	   fstatat(dirfd, "data.lengths",  &datalengthsstat,  0) < 0 ||
-	   fstatat(dirfd, "data.nvdecode", &datanvdecodestat, 0) < 0 ||
-	   fstatat(dirfd, "data.protobuf", &dataprotobufstat, 0) < 0 ||
-	   fstatat(dirfd, "README.md",     &READMEmdstat,     0) < 0 ||
-	   fstatat(dirfd, "SHA256SUMS",    &SHA256SUMSstat,   0) < 0){
+	if(dirfd                                   < 0 ||
+	   fstatat(dirfd, "data.bin",      &s0, 0) < 0 ||
+	   fstatat(dirfd, "data.lengths",  &s1, 0) < 0 ||
+	   fstatat(dirfd, "data.protobuf", &s2, 0) < 0 ||
+	   fstatat(dirfd, "README.md",     &s3, 0) < 0 ||
+	   fstatat(dirfd, "SHA256SUMS",    &s4, 0) < 0){
 		ret = -1;
 		goto abortprobe;
 	}
@@ -188,25 +106,22 @@ int          benzinaDatasetInit          (BENZINA_DATASET*  ctx, const char* roo
 	 * length of the dataset.
 	 */
 	
-	ctx->length  = datalengthsstat.st_size/8;
-	ctx->lengths = malloc(datalengthsstat.st_size);
-	ctx->offsets = malloc(datalengthsstat.st_size);
+	ctx->length  = s1.st_size/8;
+	ctx->lengths = malloc(s1.st_size);
+	ctx->offsets = malloc(s1.st_size);
 	if(!ctx->lengths || !ctx->offsets){
 		ret = -2;
 		goto abortprobe;
 	}
 	
 	/* Read fully data.lengths into our private buffer. */
-	datalengthsfd = openat(dirfd, "data.lengths", O_RDONLY|O_CLOEXEC);
-	if(datalengthsfd < 0){
+	fd1 = openat(dirfd, "data.lengths", O_RDONLY|O_CLOEXEC);
+	if(fd1 < 0){
 		ret = -1;
 		goto abortprobe;
 	}
-	for(bytesLeft=datalengthsstat.st_size, bytesRead=0; bytesLeft>0;){
-		bytesChunk = pread(datalengthsfd,
-		                   (char*)ctx->lengths+bytesRead,
-		                   bytesLeft,
-		                   bytesRead);
+	for(bytesLeft=s1.st_size, bytesRead=0; bytesLeft>0;){
+		bytesChunk = pread(fd1, (char*)ctx->lengths+bytesRead, bytesLeft, bytesRead);
 		if (bytesChunk <= 0){
 			/* We should not end up at EOF with bytesLeft > 0. */
 			ret = -3;
@@ -234,28 +149,32 @@ int          benzinaDatasetInit          (BENZINA_DATASET*  ctx, const char* roo
 	}
 	
 	/* Read ProtoBuf dataset description. */
-	dataprotobuffd = openat(dirfd, "data.protobuf", O_RDONLY|O_CLOEXEC);
-	if(dataprotobuffd                                       < 0 ||
-	   benzinaDatasetInitFromProtoBuf(ctx, dataprotobuffd) != 0){
+	if(benzinaBufInit  (&bbuf)             < 0 ||
+	   benzinaBufEnsure(&bbuf, s2.st_size) < 0){
 		ret = -1;
 		goto abortprobe;
 	}
-	
-	/* Some decisions are hardcoded. */
-	ctx->info.ChromaFormat        = cudaVideoChromaFormat_420;
-	ctx->info.ulCreationFlags     = cudaVideoCreate_PreferCUVID;
-	ctx->info.bitDepthMinus8      = 0;
-	ctx->info.ulIntraDecodeOnly   = 1;
-	ctx->info.OutputFormat        = cudaVideoSurfaceFormat_NV12;
-	ctx->info.DeinterlaceMode     = cudaVideoDeinterlaceMode_Weave;
-	ctx->info.vidLock             = NULL;
+	fd2 = openat(dirfd, "data.protobuf", O_RDONLY|O_CLOEXEC);
+	if(fd2 < 0 || benzinaBufWriteFromFd(&bbuf, fd2, s2.st_size) < 0){
+		ret = -1;
+		goto abortprobe;
+	}
+	bbuf.off = 0;
+	while(benzinaBufReadTagW(&bbuf, &tag, &wire) >= 0){
+		switch(tag){
+			case 33554432: benzinaBufReadvu64(&bbuf, &ctx->codedWidth);  break;
+			case 33554433: benzinaBufReadvu64(&bbuf, &ctx->codedHeight); break;
+			default:       benzinaBufReadSkip(&bbuf, wire);              break;
+		}
+	}
 	
 	
 	/* Return. */
 	exitprobe:
+	benzinaBufFini(&bbuf);
 	close(dirfd);
-	close(datalengthsfd);
-	close(dataprotobuffd);
+	close(fd1);
+	close(fd2);
 	return ret;
 	
 	
@@ -291,14 +210,19 @@ int          benzinaDatasetFree          (BENZINA_DATASET*  ctx){
 	return 0;
 }
 
+int          benzinaDatasetGetRoot       (const BENZINA_DATASET*  ctx, const char** path){
+	*path = ctx->root;
+	return !*path;
+}
+
 int          benzinaDatasetGetLength     (const BENZINA_DATASET*  ctx, size_t* length){
 	*length = ctx->length;
 	return 0;
 }
 
 int          benzinaDatasetGetShape      (const BENZINA_DATASET*  ctx, size_t* w, size_t* h){
-	*w = ctx->info.ulWidth;
-	*h = ctx->info.ulHeight;
+	*w = ctx->codedWidth;
+	*h = ctx->codedHeight;
 	return 0;
 }
 

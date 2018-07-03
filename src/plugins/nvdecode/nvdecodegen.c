@@ -196,9 +196,9 @@ static int   initCUDA(UNIVERSE* u){
 		goto exit_cuCtxSetCurrent;
 	}
 	
-	u->libnvcuvid = dlopen("libnvcuvid.so", RTLD_LAZY);
+	u->libnvcuvid = dlopen("libnvcuvid.so.1", RTLD_LAZY);
 	if(!u->libnvcuvid){
-		printf("Failed to dynamically load libnvcuvid.so!\n");
+		printf("Failed to dynamically load libnvcuvid.so.1!\n");
 		goto exit_dlopennvcuvid;
 	}
 	#define READ_SYMBOL(fn)  u->fn = *(t ## fn*)dlsym(u->libnvcuvid, #fn)

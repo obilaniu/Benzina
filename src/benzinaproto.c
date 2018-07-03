@@ -1,29 +1,31 @@
 /* Includes */
 #include <stdlib.h>
 #include <string.h>
-#include "benzinaproto.h"
+#include <unistd.h>
+#include "benzina/benzina.h"
 
 
 
 
 
 /* Function Definitions */
-BENZINA_HIDDEN int          benzinaBufInit     (BENZINA_BUF*  bbuf){
+BENZINA_PUBLIC int          benzinaBufInit       (BENZINA_BUF*  bbuf){
 	bbuf->buf    = NULL;
 	bbuf->off    = 0;
 	bbuf->len    = 0;
 	bbuf->maxLen = 0;
 	return 0;
 }
-BENZINA_HIDDEN int          benzinaBufFini     (BENZINA_BUF*  bbuf){
+BENZINA_PUBLIC int          benzinaBufFini       (BENZINA_BUF*  bbuf){
 	if(bbuf){
 		free(bbuf->buf);
+		bbuf->buf = NULL;
 		memset(bbuf, 0, sizeof(*bbuf));
 	}
 	return 0;
 }
 
-BENZINA_HIDDEN int          benzinaBufEnsure   (BENZINA_BUF*  bbuf, size_t freeSpace){
+BENZINA_PUBLIC int          benzinaBufEnsure     (BENZINA_BUF*  bbuf, size_t freeSpace){
 	size_t newMaxLen = bbuf->off+freeSpace;
 	void*  newBuf    = bbuf->buf;
 	
@@ -39,10 +41,42 @@ BENZINA_HIDDEN int          benzinaBufEnsure   (BENZINA_BUF*  bbuf, size_t freeS
 	return !newBuf;
 }
 
-/* Raw Read/Write calls. */
-BENZINA_HIDDEN int          benzinaBufRead     (BENZINA_BUF*  bbuf,
-                                                char*         data,
-                                                size_t        len){
+/* Raw Seek/Read/Write calls. */
+BENZINA_PUBLIC int          benzinaBufSeek       (BENZINA_BUF*  bbuf,
+                                                  ssize_t       off,
+                                                  int           whence){
+	switch(whence){
+		case SEEK_SET:
+			if(off < 0 || (size_t)off > bbuf->len){
+				return -1;
+			}else{
+				bbuf->off = off;
+				return 0;
+			}
+		case SEEK_CUR:
+			if(((off < 0) && ((size_t)-off > bbuf->off            )) ||
+			   ((off > 0) && ((size_t)+off > (bbuf->len-bbuf->off)))){
+				return -1;
+			}else{
+				bbuf->off += off;
+				return 0;
+			}
+		break;
+		case SEEK_END:
+			if(off > 0 || (size_t)-off > bbuf->len){
+				return -1;
+			}else{
+				bbuf->off = bbuf->len+off;
+				return 0;
+			}
+		break;
+		default:
+			return -1;
+	}
+}
+BENZINA_PUBLIC int          benzinaBufRead       (BENZINA_BUF*  bbuf,
+                                                  char*         data,
+                                                  size_t        len){
 	if(len > bbuf->len-bbuf->off){
 		return 1;
 	}else{
@@ -51,9 +85,9 @@ BENZINA_HIDDEN int          benzinaBufRead     (BENZINA_BUF*  bbuf,
 		return 0;
 	}
 }
-BENZINA_HIDDEN int          benzinaBufWrite    (BENZINA_BUF*  bbuf,
-                                                const char*   data,
-                                                size_t        len){
+BENZINA_PUBLIC int          benzinaBufWrite      (BENZINA_BUF*  bbuf,
+                                                  const char*   data,
+                                                  size_t        len){
 	int ret;
 	
 	ret = benzinaBufEnsure(bbuf, len);
@@ -68,12 +102,35 @@ BENZINA_HIDDEN int          benzinaBufWrite    (BENZINA_BUF*  bbuf,
 		return 0;
 	}
 }
+BENZINA_PUBLIC int          benzinaBufWriteFromFd(BENZINA_BUF*  bbuf,
+                                                  int           fd,
+                                                  size_t        len){
+	ssize_t bytesChunk;
+	size_t  bytesLeft = len, bytesRead = 0;
+	
+	if(benzinaBufEnsure(bbuf, bytesLeft) < 0){
+		return -1;
+	}
+	do{
+		bytesChunk = read(fd, bbuf->buf+bbuf->off, bytesLeft);
+		if(bytesChunk  < 0){
+			return -1;
+		}
+		bytesRead += bytesChunk;
+		bbuf->off += bytesChunk;
+		bbuf->len  = bbuf->off > bbuf->len ? bbuf->off : bbuf->len;
+		bytesLeft -= bytesChunk;
+	}while(bytesChunk != 0);
+	
+	return 0;
+}
+
 
 /* Protobuf */
 /* Protobuf Read */
-BENZINA_HIDDEN int          benzinaBufReadLDL  (BENZINA_BUF*  bbuf,
-                                                const char**  data,
-                                                size_t*       len){
+BENZINA_PUBLIC int          benzinaBufReadDelim  (BENZINA_BUF*  bbuf,
+                                                  const char**  data,
+                                                  size_t*       len){
 	uint64_t v;
 	int      ret;
 	ret = benzinaBufReadvu64(bbuf, &v);
@@ -82,13 +139,13 @@ BENZINA_HIDDEN int          benzinaBufReadLDL  (BENZINA_BUF*  bbuf,
 	bbuf->buf += v;
 	return ret;
 }
-BENZINA_HIDDEN int          benzinaBufReadStr  (BENZINA_BUF*  bbuf,
-                                                char**        str,
-                                                size_t*       len){
+BENZINA_PUBLIC int          benzinaBufReadStr    (BENZINA_BUF*  bbuf,
+                                                  char**        str,
+                                                  size_t*       len){
 	int   ret;
 	char* nulterm;
 	
-	ret     = benzinaBufReadLDL(bbuf, (const char**)str, len);
+	ret     = benzinaBufReadDelim(bbuf, (const char**)str, len);
 	if(ret){
 		return ret;
 	}
@@ -103,8 +160,8 @@ BENZINA_HIDDEN int          benzinaBufReadStr  (BENZINA_BUF*  bbuf,
 		return 1;
 	}
 }
-BENZINA_HIDDEN int          benzinaBufReadMsg  (BENZINA_BUF*  bbuf,
-                                                BENZINA_BUF*  msg){
+BENZINA_PUBLIC int          benzinaBufReadMsg    (BENZINA_BUF*  bbuf,
+                                                  BENZINA_BUF*  msg){
 	int ret;
 	
 	ret = benzinaBufEnsure(msg, bbuf->len);
@@ -117,7 +174,7 @@ BENZINA_HIDDEN int          benzinaBufReadMsg  (BENZINA_BUF*  bbuf,
 	return 0;
 }
 
-BENZINA_HIDDEN int          benzinaBufReadvu64 (BENZINA_BUF*  bbuf, uint64_t* v){
+BENZINA_PUBLIC int          benzinaBufReadvu64   (BENZINA_BUF*  bbuf, uint64_t* v){
 	char c;
 	int  i=0, ret;
 	
@@ -132,63 +189,63 @@ BENZINA_HIDDEN int          benzinaBufReadvu64 (BENZINA_BUF*  bbuf, uint64_t* v)
 	
 	return 0;
 }
-BENZINA_HIDDEN int          benzinaBufReadvs64 (BENZINA_BUF*  bbuf, int64_t*  v){
+BENZINA_PUBLIC int          benzinaBufReadvs64   (BENZINA_BUF*  bbuf, int64_t*  v){
 	uint64_t w;
 	int ret = benzinaBufReadvu64(bbuf, &w);
 	*v = (w >> 1)^-(w&1);
 	return ret;
 }
-BENZINA_HIDDEN int          benzinaBufReadvi64 (BENZINA_BUF*  bbuf, int64_t*  v){
+BENZINA_PUBLIC int          benzinaBufReadvi64   (BENZINA_BUF*  bbuf, int64_t*  v){
 	return benzinaBufReadvu64(bbuf, (uint64_t*)v);
 }
-BENZINA_HIDDEN int          benzinaBufReadvu32 (BENZINA_BUF*  bbuf, uint32_t* v){
+BENZINA_PUBLIC int          benzinaBufReadvu32   (BENZINA_BUF*  bbuf, uint32_t* v){
 	uint64_t w;
 	int ret = benzinaBufReadvu64(bbuf, &w);
 	*v = w;
 	return ret;
 }
-BENZINA_HIDDEN int          benzinaBufReadvs32 (BENZINA_BUF*  bbuf, int32_t*  v){
+BENZINA_PUBLIC int          benzinaBufReadvs32   (BENZINA_BUF*  bbuf, int32_t*  v){
 	uint32_t w;
 	int ret = benzinaBufReadvu32(bbuf, &w);
 	*v = (w >> 1)^-(w&1);
 	return ret;
 }
-BENZINA_HIDDEN int          benzinaBufReadvi32 (BENZINA_BUF*  bbuf, int32_t*  v){
+BENZINA_PUBLIC int          benzinaBufReadvi32   (BENZINA_BUF*  bbuf, int32_t*  v){
 	return benzinaBufReadvu32(bbuf, (uint32_t*)v);
 }
 
-BENZINA_HIDDEN int          benzinaBufReadfu64 (BENZINA_BUF*  bbuf, uint64_t* u){
+BENZINA_PUBLIC int          benzinaBufReadfu64   (BENZINA_BUF*  bbuf, uint64_t* u){
 	return benzinaBufRead(bbuf, (char*)u, sizeof(*u));
 }
-BENZINA_HIDDEN int          benzinaBufReadfs64 (BENZINA_BUF*  bbuf, int64_t*  s){
+BENZINA_PUBLIC int          benzinaBufReadfs64   (BENZINA_BUF*  bbuf, int64_t*  s){
 	return benzinaBufRead(bbuf, (char*)s, sizeof(*s));
 }
-BENZINA_HIDDEN int          benzinaBufReadff64 (BENZINA_BUF*  bbuf, double*   f){
+BENZINA_PUBLIC int          benzinaBufReadff64   (BENZINA_BUF*  bbuf, double*   f){
 	return benzinaBufRead(bbuf, (char*)f, sizeof(*f));
 }
-BENZINA_HIDDEN int          benzinaBufReadfu32 (BENZINA_BUF*  bbuf, uint32_t* u){
+BENZINA_PUBLIC int          benzinaBufReadfu32   (BENZINA_BUF*  bbuf, uint32_t* u){
 	return benzinaBufRead(bbuf, (char*)u, sizeof(*u));
 }
-BENZINA_HIDDEN int          benzinaBufReadfs32 (BENZINA_BUF*  bbuf, int32_t*  s){
+BENZINA_PUBLIC int          benzinaBufReadfs32   (BENZINA_BUF*  bbuf, int32_t*  s){
 	return benzinaBufRead(bbuf, (char*)s, sizeof(*s));
 }
-BENZINA_HIDDEN int          benzinaBufReadff32 (BENZINA_BUF*  bbuf, float*    f){
+BENZINA_PUBLIC int          benzinaBufReadff32   (BENZINA_BUF*  bbuf, float*    f){
 	return benzinaBufRead(bbuf, (char*)f, sizeof(*f));
 }
 
-BENZINA_HIDDEN int          benzinaBufReadEnum (BENZINA_BUF*  bbuf, int32_t*  e){
+BENZINA_PUBLIC int          benzinaBufReadEnum   (BENZINA_BUF*  bbuf, int32_t*  e){
 	return benzinaBufReadvi32(bbuf, e);
 }
-BENZINA_HIDDEN int          benzinaBufReadBool (BENZINA_BUF*  bbuf, int*      b){
+BENZINA_PUBLIC int          benzinaBufReadBool   (BENZINA_BUF*  bbuf, int*      b){
 	uint32_t v;
 	int ret = benzinaBufReadvu32(bbuf, &v);
 	*b = !!v;
 	return ret;
 }
 
-BENZINA_HIDDEN int          benzinaBufReadTagW (BENZINA_BUF*  bbuf,
-                                                uint32_t*     tag,
-                                                uint32_t*     wire){
+BENZINA_PUBLIC int          benzinaBufReadTagW   (BENZINA_BUF*  bbuf,
+                                                  uint32_t*     tag,
+                                                  uint32_t*     wire){
 	uint32_t v;
 	int ret = benzinaBufReadvu32(bbuf, &v);
 	*tag  = v >> 3;
@@ -196,79 +253,27 @@ BENZINA_HIDDEN int          benzinaBufReadTagW (BENZINA_BUF*  bbuf,
 	return ret;
 }
 
-/* Protobuf Write */
-BENZINA_HIDDEN int          benzinaBufWriteLDL (BENZINA_BUF*  bbuf,
-                                                const char*   data,
-                                                size_t        len){
-	return benzinaBufWritevi64(bbuf, len) ||
-	       benzinaBufWrite    (bbuf, data, len);
-}
-BENZINA_HIDDEN int          benzinaBufWriteStr (BENZINA_BUF*  bbuf, const char*        str){
-	return benzinaBufWriteLDL(bbuf, str, strlen(str));
-}
-BENZINA_HIDDEN int          benzinaBufWriteMsg (BENZINA_BUF*  bbuf,
-                                                const BENZINA_BUF* msg,
-                                                size_t        len){
-	return benzinaBufWriteLDL(bbuf, msg->buf+msg->off, len);
-}
-
-BENZINA_HIDDEN int          benzinaBufWritevu64(BENZINA_BUF*  bbuf, uint64_t  v){
-	char p[10], *q = p;
+BENZINA_PUBLIC int          benzinaBufReadSkip   (BENZINA_BUF*  bbuf,
+                                                  uint32_t      wire){
+	uint32_t u32;
+	uint64_t u64;
 	
-	*q  = v & 0x7F;
-	v >>= 7;
-	while(v){
-		*q++ |= 0x80;
-		*q    = v & 0x7F;
-		v   >>= 7;
+	switch(wire){
+		case 0: return benzinaBufReadvu64(bbuf, &u64);
+		case 1: return benzinaBufReadfu64(bbuf, &u64);
+		case 5: return benzinaBufReadfu32(bbuf, &u32);
+		case 2:
+			if(benzinaBufReadvu64(bbuf, &u64) < 0){
+				return -1;
+			}
+			if(bbuf->off+u64 > bbuf->len){
+				return -1;
+			}else{
+				bbuf->off += u64;
+				return 0;
+			}
+		break;
+		default:
+			return -1;
 	}
-	
-	return benzinaBufWrite(bbuf, p, q-p+1);
-}
-BENZINA_HIDDEN int          benzinaBufWritevs64(BENZINA_BUF*  bbuf, int64_t   v){
-	return benzinaBufWritevu64(bbuf, (v<<1) ^ (v>>63));
-}
-BENZINA_HIDDEN int          benzinaBufWritevi64(BENZINA_BUF*  bbuf, int64_t   v){
-	return benzinaBufWritevu64(bbuf, v);
-}
-BENZINA_HIDDEN int          benzinaBufWritevu32(BENZINA_BUF*  bbuf, uint32_t  v){
-	return benzinaBufWritevu64(bbuf, v & (uint32_t)~0);
-}
-BENZINA_HIDDEN int          benzinaBufWritevs32(BENZINA_BUF*  bbuf, int32_t   v){
-	return benzinaBufWritevu32(bbuf, (v<<1) ^ (v>>31));
-}
-BENZINA_HIDDEN int          benzinaBufWritevi32(BENZINA_BUF*  bbuf, int32_t   v){
-	return benzinaBufWritevu32(bbuf, v);
-}
-
-BENZINA_HIDDEN int          benzinaBufWritefu64(BENZINA_BUF*  bbuf, uint64_t  u){
-	return benzinaBufWrite(bbuf, (char*)&u, sizeof(u));
-}
-BENZINA_HIDDEN int          benzinaBufWritefs64(BENZINA_BUF*  bbuf, int64_t   s){
-	return benzinaBufWrite(bbuf, (char*)&s, sizeof(s));
-}
-BENZINA_HIDDEN int          benzinaBufWriteff64(BENZINA_BUF*  bbuf, double    f){
-	return benzinaBufWrite(bbuf, (char*)&f, sizeof(f));
-}
-BENZINA_HIDDEN int          benzinaBufWritefu32(BENZINA_BUF*  bbuf, uint32_t  u){
-	return benzinaBufWrite(bbuf, (char*)&u, sizeof(u));
-}
-BENZINA_HIDDEN int          benzinaBufWritefs32(BENZINA_BUF*  bbuf, int32_t   s){
-	return benzinaBufWrite(bbuf, (char*)&s, sizeof(s));
-}
-BENZINA_HIDDEN int          benzinaBufWriteff32(BENZINA_BUF*  bbuf, float     f){
-	return benzinaBufWrite(bbuf, (char*)&f, sizeof(f));
-}
-
-BENZINA_HIDDEN int          benzinaBufWriteEnum(BENZINA_BUF*  bbuf, int32_t   e){
-	return benzinaBufWritevi32(bbuf, e);
-}
-BENZINA_HIDDEN int          benzinaBufWriteBool(BENZINA_BUF*  bbuf, uint64_t  b){
-	return benzinaBufWritevi32(bbuf, !!b);
-}
-
-BENZINA_HIDDEN int          benzinaBufWriteTagW(BENZINA_BUF*  bbuf,
-                                                uint32_t      tag,
-                                                uint32_t      wire){
-	return benzinaBufWritevi32(bbuf, (tag << 3) | (wire & 0x7));
 }

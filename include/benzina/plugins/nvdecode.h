@@ -38,35 +38,35 @@ typedef struct BENZINA_PLUGIN_NVDECODE_VTABLE BENZINA_PLUGIN_NVDECODE_VTABLE;
 
 /* Plugin Function Table */
 struct BENZINA_PLUGIN_NVDECODE_VTABLE{
-	void* (*alloc)       (const BENZINA_DATASET* dataset);
-	int   (*init)        (void* ctx);
-	int   (*retain)      (void* ctx);
-	int   (*release)     (void* ctx);
-	int   (*pushBatch)   (void* ctx, const void*  tokenIn);
-	int   (*pullBatch)   (void* ctx, const void** tokenOut, double timeout);
-	int   (*stop)        (void* ctx);
-	int   (*hasError)    (void* ctx);
+	int (*alloc)       (void** ctx, const BENZINA_DATASET* dataset);
+	int (*init)        (void*  ctx);
+	int (*retain)      (void*  ctx);
+	int (*release)     (void*  ctx);
+	int (*pushBatch)   (void*  ctx, const void*  tokenIn);
+	int (*pullBatch)   (void*  ctx, const void** tokenOut, double timeout);
+	int (*stop)        (void*  ctx);
+	int (*hasError)    (void*  ctx);
 	
-	int   (*defineJob)   (void* ctx, uint64_t datasetIndex);
-	int   (*submitJob)   (void* ctx);
+	int (*defineJob)   (void*  ctx, uint64_t datasetIndex);
+	int (*submitJob)   (void*  ctx);
 	
-	int   (*setBuffer)   (void* ctx, const char* deviceId,
-	                                 void*       devicePtr,
-	                                 uint32_t    multibuffering,
-	                                 uint32_t    batchSize,
-	                                 uint32_t    outputHeight,
-	                                 uint32_t    outputWidth);
+	int (*setBuffer)   (void*  ctx, const char* deviceId,
+	                                void*       devicePtr,
+	                                uint32_t    multibuffering,
+	                                uint32_t    batchSize,
+	                                uint32_t    outputHeight,
+	                                uint32_t    outputWidth);
 	
-	int   (*setDefaultBias)          (void* ctx, float*   B);
-	int   (*setDefaultScale)         (void* ctx, float*   S);
-	int   (*setDefaultOOBColor)      (void* ctx, float*   OOB);
-	int   (*selectDefaultColorMatrix)(void* ctx, uint32_t matrix);
+	int (*setDefaultBias)          (void*  ctx, float*   B);
+	int (*setDefaultScale)         (void*  ctx, float*   S);
+	int (*setDefaultOOBColor)      (void*  ctx, float*   OOB);
+	int (*selectDefaultColorMatrix)(void*  ctx, uint32_t matrix);
 	
-	int   (*setHomography)    (void* ctx, float*   H);
-	int   (*setBias)          (void* ctx, float*   B);
-	int   (*setScale)         (void* ctx, float*   S);
-	int   (*setOOBColor)      (void* ctx, float*   OOB);
-	int   (*selectColorMatrix)(void* ctx, uint32_t matrix);
+	int (*setHomography)    (void*  ctx, float*   H);
+	int (*setBias)          (void*  ctx, float*   B);
+	int (*setScale)         (void*  ctx, float*   S);
+	int (*setOOBColor)      (void*  ctx, float*   OOB);
+	int (*selectColorMatrix)(void*  ctx, uint32_t matrix);
 };
 
 
