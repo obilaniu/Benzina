@@ -47,7 +47,7 @@ struct BENZINA_PLUGIN_NVDECODE_VTABLE{
 	int (*stop)        (void*  ctx);
 	int (*hasError)    (void*  ctx);
 	
-	int (*defineJob)   (void*  ctx, uint64_t datasetIndex);
+	int (*defineJob)   (void*  ctx, uint64_t datasetIndex, void* dstPtr);
 	int (*submitJob)   (void*  ctx);
 	
 	int (*setBuffer)   (void*  ctx, const char* deviceId,
@@ -57,16 +57,16 @@ struct BENZINA_PLUGIN_NVDECODE_VTABLE{
 	                                uint32_t    outputHeight,
 	                                uint32_t    outputWidth);
 	
-	int (*setDefaultBias)          (void*  ctx, float*   B);
-	int (*setDefaultScale)         (void*  ctx, float*   S);
-	int (*setDefaultOOBColor)      (void*  ctx, float*   OOB);
-	int (*selectDefaultColorMatrix)(void*  ctx, uint32_t matrix);
+	int (*setDefaultBias)          (void*  ctx, const float* B);
+	int (*setDefaultScale)         (void*  ctx, const float* S);
+	int (*setDefaultOOBColor)      (void*  ctx, const float* OOB);
+	int (*selectDefaultColorMatrix)(void*  ctx, uint32_t     matrix);
 	
-	int (*setHomography)    (void*  ctx, float*   H);
-	int (*setBias)          (void*  ctx, float*   B);
-	int (*setScale)         (void*  ctx, float*   S);
-	int (*setOOBColor)      (void*  ctx, float*   OOB);
-	int (*selectColorMatrix)(void*  ctx, uint32_t matrix);
+	int (*setHomography)    (void*  ctx, const float* H);
+	int (*setBias)          (void*  ctx, const float* B);
+	int (*setScale)         (void*  ctx, const float* S);
+	int (*setOOBColor)      (void*  ctx, const float* OOB);
+	int (*selectColorMatrix)(void*  ctx, uint32_t     matrix);
 };
 
 
