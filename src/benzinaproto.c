@@ -120,7 +120,7 @@ BENZINA_PUBLIC int          benzinaBufWriteFromFd(BENZINA_BUF*  bbuf,
 		bbuf->off += bytesChunk;
 		bbuf->len  = bbuf->off > bbuf->len ? bbuf->off : bbuf->len;
 		bytesLeft -= bytesChunk;
-	}while(bytesChunk != 0);
+	}while(bytesChunk != 0 && bytesLeft > 0);
 	
 	return 0;
 }

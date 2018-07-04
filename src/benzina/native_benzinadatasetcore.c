@@ -17,7 +17,7 @@
  */
 
 static void      BenzinaDatasetCore_dealloc  (BenzinaDatasetCore* self){
-	benzinaDatasetFree(self->dset);
+	benzinaDatasetFree(self->dataset);
 	Py_TYPE(self)->tp_free(self);
 }
 
@@ -30,7 +30,7 @@ static PyObject* BenzinaDatasetCore_new      (PyTypeObject* type,
                                               PyObject*     kwargs){
 	BenzinaDatasetCore* self = (BenzinaDatasetCore*)type->tp_alloc(type, 0);
 	
-	self->dset = NULL;
+	self->dataset = NULL;
 	
 	return (PyObject*)self;
 }
@@ -59,7 +59,7 @@ static int       BenzinaDatasetCore_init     (BenzinaDatasetCore* self,
 		return -1;
 	}
 	
-	if(benzinaDatasetNew(&self->dset, PyBytes_AsString(root)) != 0){
+	if(benzinaDatasetNew(&self->dataset, PyBytes_AsString(root)) != 0){
 		PyErr_SetString(PyExc_RuntimeError,
 		                "Error during creation of underlying BENZINA_DATASET* "
 		                "object. Check that the path is correct and has all of "
@@ -79,7 +79,7 @@ static PyObject* BenzinaDatasetCore_getlength(BenzinaDatasetCore* self,
                                               void*               closure){
 	size_t length;
 	
-	if(benzinaDatasetGetLength(self->dset, &length) != 0){
+	if(benzinaDatasetGetLength(self->dataset, &length) != 0){
 		PyErr_SetString(PyExc_RuntimeError,
 		                "Could not obtain length of dataset for unknown reasons.");
 		return NULL;
@@ -98,7 +98,7 @@ static PyObject* BenzinaDatasetCore_getshape (BenzinaDatasetCore* self,
 	size_t    h,w;
 	PyObject* hObj, *wObj, *tObj;
 	
-	if(benzinaDatasetGetShape(self->dset, &w, &h) != 0){
+	if(benzinaDatasetGetShape(self->dataset, &w, &h) != 0){
 		PyErr_SetString(PyExc_RuntimeError,
 		                "Could not obtain shape of dataset for unknown reasons.");
 		return NULL;
@@ -133,8 +133,8 @@ static PyObject* BenzinaDatasetCore_getshape (BenzinaDatasetCore* self,
  */
 
 static PyGetSetDef       BenzinaDatasetCore_getsetters[] = {
-    {"length", (getter)BenzinaDatasetCore_getlength, 0, "Length of Dataset",       NULL},
-    {"shape",  (getter)BenzinaDatasetCore_getshape,  0, "Shape of dataset images", NULL},
+    {"length", (getter)BenzinaDatasetCore_getlength, 0, "Length of Dataset",             NULL},
+    {"shape",  (getter)BenzinaDatasetCore_getshape,  0, "Coded shape of dataset images", NULL},
     {NULL}  /* Sentinel */
 };
 
@@ -145,7 +145,7 @@ static PyGetSetDef       BenzinaDatasetCore_getsetters[] = {
 static Py_ssize_t        BenzinaDatasetCore___len__(BenzinaDatasetCore* self){
 	size_t length;
 	
-	if(benzinaDatasetGetLength(self->dset, &length) != 0){
+	if(benzinaDatasetGetLength(self->dataset, &length) != 0){
 		PyErr_SetString(PyExc_RuntimeError,
 		                "Could not obtain length of dataset for unknown reasons.");
 		return -1;
@@ -168,7 +168,7 @@ static PyObject*         BenzinaDatasetCore___getitem__(BenzinaDatasetCore* self
 	size_t    off, len;
 	PyObject* lenObj, *iObj, *offObj, *tObj;
 	
-	if(benzinaDatasetGetElement(self->dset, i, &off, &len) != 0){
+	if(benzinaDatasetGetElement(self->dataset, i, &off, &len) != 0){
 		PyErr_SetString(PyExc_RuntimeError,
 		                "Could not read element of dataset for unknown reasons.");
 		return NULL;

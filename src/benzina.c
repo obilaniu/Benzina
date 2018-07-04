@@ -155,12 +155,12 @@ int          benzinaDatasetInit          (BENZINA_DATASET*  ctx, const char* roo
 		goto abortprobe;
 	}
 	fd2 = openat(dirfd, "data.protobuf", O_RDONLY|O_CLOEXEC);
-	if(fd2 < 0 || benzinaBufWriteFromFd(&bbuf, fd2, s2.st_size) < 0){
+	if(fd2 < 0 || benzinaBufWriteFromFd(&bbuf, fd2, s2.st_size) != 0){
 		ret = -1;
 		goto abortprobe;
 	}
 	bbuf.off = 0;
-	while(benzinaBufReadTagW(&bbuf, &tag, &wire) >= 0){
+	while(benzinaBufReadTagW(&bbuf, &tag, &wire) == 0){
 		switch(tag){
 			case 33554432: benzinaBufReadvu64(&bbuf, &ctx->codedWidth);  break;
 			case 33554433: benzinaBufReadvu64(&bbuf, &ctx->codedHeight); break;

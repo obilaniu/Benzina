@@ -742,11 +742,17 @@ BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdInit    (NVDECODE_CTX* ctx){
 	 */
 	
 	memset(&ctx->decoderCaps, 0, sizeof(ctx->decoderCaps));
-	ctx->decoderCaps.nBitDepthMinus8 = ctx->decoderInfo.bitDepthMinus8;
-	ctx->decoderCaps.eChromaFormat   = ctx->decoderInfo.ChromaFormat;
 	ctx->decoderCaps.eCodecType      = ctx->decoderInfo.CodecType;
+	ctx->decoderCaps.eChromaFormat   = ctx->decoderInfo.ChromaFormat;
+	ctx->decoderCaps.nBitDepthMinus8 = ctx->decoderInfo.bitDepthMinus8;
 	if(ctx->cuvidGetDecoderCaps(&ctx->decoderCaps)               != CUDA_SUCCESS ||
 	   !ctx->decoderCaps.bIsSupported                                            ||
+	   ctx->decoderInfo.ulWidth  < ctx->decoderCaps.nMinWidth                    ||
+	   ctx->decoderInfo.ulWidth  > ctx->decoderCaps.nMaxWidth                    ||
+	   ctx->decoderInfo.ulHeight < ctx->decoderCaps.nMinHeight                   ||
+	   ctx->decoderInfo.ulHeight > ctx->decoderCaps.nMaxHeight                   ||
+	   ((ctx->decoderInfo.ulWidth*ctx->decoderInfo.ulHeight/256) >
+	     ctx->decoderCaps.nMaxMBCount)                                           ||
 	   ctx->cuvidCreateDecoder(&ctx->decoder, &ctx->decoderInfo) != CUDA_SUCCESS){
 		nvdecodeFeederThrdSetStatus(ctx, THRD_NOT_RUNNING);
 		return 0;
@@ -1063,7 +1069,7 @@ BENZINA_PLUGIN_STATIC int   nvdecodeSetDevice         (NVDECODE_CTX* ctx, const 
 		if(deviceId[strlen("cuda:")] == '\0'){
 			return BENZINA_DATALOADER_ITER_INVALIDARGS;
 		}
-		i = strtoull(deviceId, &s, 10);
+		i = strtoull(deviceId+strlen("cuda:"), &s, 10);
 		if(*s != '\0')      {return BENZINA_DATALOADER_ITER_INVALIDARGS;}
 		if(i >= deviceCount){return BENZINA_DATALOADER_ITER_INVALIDARGS;}
 	}else if(strncmp(deviceId, "pci:",  strlen("pci:"))  == 0){
@@ -1138,7 +1144,7 @@ BENZINA_PLUGIN_HIDDEN int   nvdecodeAlloc(void** ctxOut, const BENZINA_DATASET* 
 	 * Also, initialize certain critical elements.
 	 */
 	
-	*ctxOut = calloc(1, sizeof(*ctxOut));
+	*ctxOut = calloc(1, sizeof(*ctx));
 	if(!*ctxOut){
 		return -1;
 	}else{
@@ -1154,6 +1160,9 @@ BENZINA_PLUGIN_HIDDEN int   nvdecodeAlloc(void** ctxOut, const BENZINA_DATASET* 
 	ctx->deviceOrd         = -1;
 	ctx->defaults.S[0]     = ctx->defaults.S[1] = ctx->defaults.S[2] = 1.0;
 	ctx->picParams         = NULL;
+	ctx->request           = NULL;
+	ctx->batch             = NULL;
+	ctx->cuvidHandle       = NULL;
 	
 	
 	/**
@@ -1178,7 +1187,6 @@ BENZINA_PLUGIN_STATIC int   nvdecodeAllocDataOpen(NVDECODE_CTX* ctx){
 	ctx->datasetBinFd      = openat(dirfd, "data.bin",      O_RDONLY|O_CLOEXEC);
 	ctx->datasetProtobufFd = openat(dirfd, "data.protobuf", O_RDONLY|O_CLOEXEC);
 	ctx->datasetNvdecodeFd = openat(dirfd, "data.nvdecode", O_RDONLY|O_CLOEXEC);
-	close(dirfd);
 	if(ctx->datasetBinFd                                          < 0 ||
 	   ctx->datasetProtobufFd                                     < 0 ||
 	   ctx->datasetNvdecodeFd                                     < 0 ||
@@ -1189,8 +1197,10 @@ BENZINA_PLUGIN_STATIC int   nvdecodeAllocDataOpen(NVDECODE_CTX* ctx){
 	   fstatat(dirfd, "README.md",     &s3, 0)                    < 0 ||
 	   fstatat(dirfd, "SHA256SUMS",    &s4, 0)                    < 0 ||
 	   s2.st_size % ctx->datasetLen                              != 0){
+		close(dirfd);
 		return nvdecodeAllocCleanup(ctx, -1);
 	}
+	close(dirfd);
 	ctx->picParamTruncLen = s2.st_size / ctx->datasetLen;
 	
 	return nvdecodeAllocPBParse(ctx);
@@ -1210,24 +1220,24 @@ BENZINA_PLUGIN_STATIC int   nvdecodeAllocPBParse(NVDECODE_CTX* ctx){
 	uint64_t    dummy   = 0;
 	uint32_t    tag, wire;
 	
-	if(benzinaBufInit       (&bbuf)                < 0 ||
-	   benzinaBufEnsure     (&bbuf, bufSize)       < 0 ||
-	   benzinaBufWriteFromFd(&bbuf, pbFd, bufSize) < 0){
+	if(benzinaBufInit       (&bbuf)                != 0 ||
+	   benzinaBufEnsure     (&bbuf, bufSize)       != 0 ||
+	   benzinaBufWriteFromFd(&bbuf, pbFd, bufSize) != 0){
 		benzinaBufFini(&bbuf);
 		return nvdecodeAllocCleanup(ctx, -1);
 	}
 	close(ctx->datasetProtobufFd);
 	ctx->datasetProtobufFd = -1;
 	benzinaBufSeek(&bbuf, 0, SEEK_SET);
-	while(benzinaBufReadTagW(&bbuf, &tag, &wire) >= 0){
+	while(benzinaBufReadTagW(&bbuf, &tag, &wire) == 0){
 		switch(tag){
-			#define TAGCASE(tag, target)                       \
-			    case tag:                                      \
-			        if(benzinaBufReadvu64(&bbuf, &dummy) < 0){ \
-			            benzinaBufFini(&bbuf);                 \
-			            return nvdecodeAllocCleanup(ctx, -2);  \
-			        }                                          \
-			        target = dummy;                            \
+			#define TAGCASE(tag, target)                        \
+			    case tag:                                       \
+			        if(benzinaBufReadvu64(&bbuf, &dummy) != 0){ \
+			            benzinaBufFini(&bbuf);                  \
+			            return nvdecodeAllocCleanup(ctx, -2);   \
+			        }                                           \
+			        target = dummy;                             \
 			    break;
 			TAGCASE(33554432, ctx->decoderInfo.ulWidth);
 			TAGCASE(33554433, ctx->decoderInfo.ulHeight);
@@ -1251,7 +1261,7 @@ BENZINA_PLUGIN_STATIC int   nvdecodeAllocPBParse(NVDECODE_CTX* ctx){
 			TAGCASE(33554456, ctx->decoderInfo.target_rect.bottom);
 			#undef TAGCASE
 			default:
-				if(benzinaBufReadSkip(&bbuf, wire) < 0){
+				if(benzinaBufReadSkip(&bbuf, wire) != 0){
 					benzinaBufFini(&bbuf);
 					return nvdecodeAllocCleanup(ctx, -2);
 				}
@@ -1286,7 +1296,7 @@ BENZINA_PLUGIN_STATIC int   nvdecodeAllocNvcuvid(NVDECODE_CTX* ctx){
 	       if(!ctx->fn){                                        \
 	           return nvdecodeAllocCleanup(ctx, -1);            \
 	       }                                                    \
-	    }while(1)
+	    }while(0)
 	READ_SYMBOL(cuvidGetDecoderCaps);
 	READ_SYMBOL(cuvidCreateDecoder);
 	READ_SYMBOL(cuvidDecodePicture);
@@ -1294,20 +1304,6 @@ BENZINA_PLUGIN_STATIC int   nvdecodeAllocNvcuvid(NVDECODE_CTX* ctx){
 	READ_SYMBOL(cuvidUnmapVideoFrame64);
 	READ_SYMBOL(cuvidDestroyDecoder);
 	#undef READ_SYMBOL
-	
-	ctx->decoderCaps.eCodecType      = ctx->decoderInfo.CodecType;
-	ctx->decoderCaps.eChromaFormat   = ctx->decoderInfo.ChromaFormat;
-	ctx->decoderCaps.nBitDepthMinus8 = ctx->decoderInfo.bitDepthMinus8;
-	if(ctx->cuvidGetDecoderCaps(&ctx->decoderCaps) != CUDA_SUCCESS ||
-	   !ctx->decoderCaps.bIsSupported                              ||
-	   ctx->decoderInfo.ulWidth  < ctx->decoderCaps.nMinWidth      ||
-	   ctx->decoderInfo.ulWidth  > ctx->decoderCaps.nMaxWidth      ||
-	   ctx->decoderInfo.ulHeight < ctx->decoderCaps.nMinHeight     ||
-	   ctx->decoderInfo.ulHeight > ctx->decoderCaps.nMaxHeight     ||
-	   ctx->decoderInfo.ulWidth*ctx->decoderInfo.ulHeight/256 >
-	   ctx->decoderCaps.nMaxMBCount){
-		return nvdecodeAllocCleanup(ctx, -3);
-	}
 	
 	return nvdecodeAllocThreading(ctx);
 }

@@ -10,6 +10,7 @@
 #define  PY_SSIZE_T_CLEAN     /* So we get Py_ssize_t args. */
 #include <Python.h>           /* Because of "reasons", the Python header must be first. */
 #include "benzina/benzina.h"
+#include "benzina/plugins/nvdecode.h"
 
 
 
@@ -33,17 +34,20 @@ extern "C" {
 
 typedef struct{
     PyObject_HEAD
-    BENZINA_DATASET* dset;
+    BENZINA_DATASET* dataset;
 } BenzinaDatasetCore;
 
 /**
- * @brief Python BenzinaDataLoaderIterCore object.
+ * @brief Python BenzinaPluginNvdecodeCore object.
  */
 
 typedef struct {
 	PyObject_HEAD
-	BENZINA_DATALOADER_ITER* iter;
-} BenzinaDataLoaderIterCore;
+	void* pluginHandle;
+	BENZINA_PLUGIN_NVDECODE_VTABLE* v;
+	BenzinaDatasetCore* datasetCore;
+	void* ctx;
+} BenzinaPluginNvdecodeCore;
 
 
 
