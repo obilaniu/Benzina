@@ -88,7 +88,7 @@ static int       BenzinaPluginNvdecodeCore_init                    (BenzinaPlugi
 	                             "outputWidth",
 	                             NULL};
 	
-	if(!PyArg_ParseTupleAndKeywords(args, kwargs, "OsK|KKKKK", kwargsList,
+	if(!PyArg_ParseTupleAndKeywords(args, kwargs, "OsK|KKKK", kwargsList,
 	                                &datasetCore,  &deviceId,    &devicePtr,
 	                                &batchSize,    &multibuffering,
 	                                &outputHeight, &outputWidth)){

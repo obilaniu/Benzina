@@ -67,7 +67,8 @@ class BenzinaDataset(Dataset):
 
 
 class BenzinaLoader(DataLoader):
-	def __init__(dataset,
+	def __init__(self,
+	             dataset,
 	             batch_size     = 1,
 	             shuffle        = False,
 	             sampler        = None,
@@ -102,6 +103,7 @@ class BenzinaLoaderIter(object):
 		self.multibuffering = loader.multibuffering
 		self.shape          = loader.shape
 		self.device_id      = loader.device_id
+		self.timeout        = loader.timeout
 		if self.device_id is None:
 			self.device_id = torch.cuda.current_device()
 		self.batch_iter     = iter(loader.batch_sampler)
@@ -145,9 +147,9 @@ class BenzinaLoaderIter(object):
 		                                self.shape[0],
 		                                self.shape[1]],
 		                               dtype  = torch.float32,
-		                               device = torch.device(self.deviceId))
+		                               device = torch.device(device_id))
 		self.core        = BenzinaPluginNvdecodeCore(
-		                       self.dataset,
+		                       self.dataset._core,
 		                       device_id,
 		                       self.multibuffer.data_ptr(),
 		                       self.batch_size,
@@ -163,8 +165,8 @@ class BenzinaLoaderIter(object):
 		for i in range(self.multibuffering-1):
 			try:
 				self.push(next(self.batch_iter))
-			except StopIteration as self._si:
-				pass
+			except StopIteration as si:
+				self._si = si
 	
 	def push(self, batch):
 		assert(len(batch) <= self.batch_size)
@@ -181,18 +183,20 @@ class BenzinaLoaderIter(object):
 			self.core.setOOBColor      (0.0, 0.0, 0.0)
 			self.core.selectColorMatrix(0)
 			self.core.submitSample()
-		self.core.submitBatch(buffer)
+		token = buffer[:len(batch)]
+		self.core.submitBatch(token)
 		self.pushed += 1
 	
 	def pull(self):
 		if self.pulled >= self.pushed:
 			raise self._si
 		self.pulled += 1
-		return self.core.pull(True, timeout=self.timeout)
+		token = self.core.waitBatch(True, timeout=self.timeout)
+		return token
 	
 	def fill_one_batch(self):
 		try:
 			self.push(next(self.batch_iter))
-		except StopIteration as self._si:
-			pass
+		except StopIteration as si:
+			self._si = si
 	

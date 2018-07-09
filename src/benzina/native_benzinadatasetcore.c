@@ -70,6 +70,7 @@ static int       BenzinaDatasetCore_init     (BenzinaDatasetCore* self,
 		return -1;
 	}
 	
+	Py_DECREF(root);
 	return 0;
 }
 
