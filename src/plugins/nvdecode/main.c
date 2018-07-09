@@ -39,7 +39,8 @@ typedef struct NVDECODE_CTX    NVDECODE_CTX;
 typedef enum NVDECODE_THRD_STATUS{
 	THRD_NOT_RUNNING = 0, /* Thread hasn't been spawned. */
 	THRD_SPAWNED,         /* Thread has been spawned with pthread_create(). */
-	THRD_RUNNING,         /* Thread initialized successfully. */
+	THRD_INITED,          /* Thread initialized successfully, waiting for others to do so as well. */
+	THRD_RUNNING,         /* Thread running. */
 	THRD_EXITING,         /* Thread was spawned/running but has now been asked to exit. */
 } NVDECODE_THRD_STATUS;
 
@@ -49,6 +50,7 @@ typedef enum NVDECODE_THRD_STATUS{
  */
 
 struct NVDECODE_RQ{
+	NVDECODE_BATCH* batch;       /* Batch to which this request belongs. */
 	uint64_t        datasetIndex;/* Dataset index. */
 	float*          devPtr;      /* Target destination on device. */
 	float           H[3][3];     /* Homography */
@@ -65,9 +67,9 @@ struct NVDECODE_RQ{
  */
 
 struct NVDECODE_BATCH{
-	uint64_t size;
-	uint64_t completed;
-	uint64_t startIndex;
+	uint64_t    startIndex;
+	uint64_t    stopIndex;
+	const void* token;
 };
 
 /**
@@ -176,24 +178,33 @@ struct NVDECODE_CTX{
 
 /* Static Function Prototypes */
 BENZINA_PLUGIN_STATIC int   nvdecodeAbstime            (struct timespec* ts, double dt);
-BENZINA_PLUGIN_STATIC int   nvdecodeStartHelpers       (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeStopHelpers        (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeNoHelpersSpawned   (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeAllHelpersRunning  (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeFailedSpawn        (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int   nvdecodeMasterThrdGetSubmRq(NVDECODE_CTX* ctx, NVDECODE_RQ**    rqOut);
+BENZINA_PLUGIN_STATIC int   nvdecodeMasterThrdGetSubmBt(NVDECODE_CTX* ctx, NVDECODE_BATCH** batchOut);
+BENZINA_PLUGIN_STATIC int   nvdecodeMasterThrdGetRetrBt(NVDECODE_CTX* ctx, NVDECODE_BATCH** batchOut);
+BENZINA_PLUGIN_STATIC int   nvdecodeHelpersStart       (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int   nvdecodeHelpersStop        (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int   nvdecodeHelpersAllStatusIs (NVDECODE_CTX* ctx, NVDECODE_THRD_STATUS status);
+BENZINA_PLUGIN_STATIC int   nvdecodeHelpersAnyStatusIs (NVDECODE_CTX* ctx, NVDECODE_THRD_STATUS status);
+BENZINA_PLUGIN_STATIC int   nvdecodeHelpersFailing     (NVDECODE_CTX* ctx);
 BENZINA_PLUGIN_STATIC int   nvdecodeHelpersShouldExit  (NVDECODE_CTX* ctx);
 BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdInit     (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdAwaitAll (NVDECODE_CTX* ctx);
 BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdContinue (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdCore     (NVDECODE_CTX* ctx);
 BENZINA_PLUGIN_STATIC void* nvdecodeReaderThrdMain     (NVDECODE_CTX* ctx);
 BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdSetStatus(NVDECODE_CTX* ctx, NVDECODE_THRD_STATUS status);
 BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdGetCurrRq(NVDECODE_CTX* ctx, NVDECODE_RQ** rqOut);
 BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdInit     (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdAwaitAll (NVDECODE_CTX* ctx);
 BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdContinue (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdCore     (NVDECODE_CTX* ctx);
 BENZINA_PLUGIN_STATIC void* nvdecodeFeederThrdMain     (NVDECODE_CTX* ctx);
 BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdSetStatus(NVDECODE_CTX* ctx, NVDECODE_THRD_STATUS status);
 BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdGetCurrRq(NVDECODE_CTX* ctx, NVDECODE_RQ** rqOut);
 BENZINA_PLUGIN_STATIC int   nvdecodeWorkerThrdInit     (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int   nvdecodeWorkerThrdAwaitAll (NVDECODE_CTX* ctx);
 BENZINA_PLUGIN_STATIC int   nvdecodeWorkerThrdContinue (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int   nvdecodeWorkerThrdCore     (NVDECODE_CTX* ctx);
 BENZINA_PLUGIN_STATIC void* nvdecodeWorkerThrdMain     (NVDECODE_CTX* ctx);
 BENZINA_PLUGIN_STATIC void  nvdecodeWorkerThrdCallback (cudaStream_t  stream,
                                                         cudaError_t   status,
@@ -234,6 +245,51 @@ BENZINA_PLUGIN_STATIC int   nvdecodeAbstime            (struct timespec* ts, dou
 }
 
 /**
+ * @brief 
+ * 
+ * Called with the lock held.
+ * 
+ * @param [in]  ctx
+ * @param [in]  batchOut
+ * @return 
+ */
+
+BENZINA_PLUGIN_STATIC int   nvdecodeMasterThrdGetSubmBt(NVDECODE_CTX* ctx, NVDECODE_BATCH** batchOut){
+	*batchOut = &ctx->batch[ctx->master.cntBatchSub % ctx->multibuffering];
+	return 0;
+}
+
+/**
+ * @brief 
+ * 
+ * Called with the lock held.
+ * 
+ * @param [in]  ctx
+ * @param [in]  batchOut
+ * @return 
+ */
+
+BENZINA_PLUGIN_STATIC int   nvdecodeMasterThrdGetRetrBt(NVDECODE_CTX* ctx, NVDECODE_BATCH** batchOut){
+	*batchOut = &ctx->batch[ctx->master.cntBatchAck % ctx->multibuffering];
+	return 0;
+}
+
+/**
+ * @brief 
+ * 
+ * Called with the lock held.
+ * 
+ * @param [in]  ctx
+ * @param [in]  rqOut
+ * @return 
+ */
+
+BENZINA_PLUGIN_STATIC int   nvdecodeMasterThrdGetSubmRq(NVDECODE_CTX* ctx, NVDECODE_RQ**    rqOut){
+	*rqOut = &ctx->request[ctx->master.cntSubmitted % ctx->totalSlots];
+	return 0;
+}
+
+/**
  * @brief Launch helper threads.
  * 
  * Called with the lock held.
@@ -243,15 +299,16 @@ BENZINA_PLUGIN_STATIC int   nvdecodeAbstime            (struct timespec* ts, dou
  *         !0 if threads not already running and could not be started.
  */
 
-BENZINA_PLUGIN_STATIC int   nvdecodeStartHelpers      (NVDECODE_CTX* ctx){
+BENZINA_PLUGIN_STATIC int   nvdecodeHelpersStart       (NVDECODE_CTX* ctx){
 	uint64_t       cntLifecycles;
 	pthread_attr_t attr;
 	
 	/**
-	 * We spawn the helper threads only if they have not already spawned.
+	 * If the helper threads are not spawned, we spawn all of them.
+	 * Otherwise, we wait for this event.
 	 */
 	
-	if(nvdecodeNoHelpersSpawned(ctx)){
+	if(nvdecodeHelpersAllStatusIs(ctx, THRD_NOT_RUNNING)){
 		ctx->master.cntSubmitted = 0;
 		ctx->master.cntCompleted = 0;
 		ctx->master.cntBatchSub  = 0;
@@ -262,6 +319,8 @@ BENZINA_PLUGIN_STATIC int   nvdecodeStartHelpers      (NVDECODE_CTX* ctx){
 		ctx->decoderInited       = 0;
 		ctx->decoderRefCnt       = 0;
 		ctx->mallocRefCnt        = 0;
+		memset(ctx->batch,   0, sizeof(*ctx->batch)   * ctx->multibuffering);
+		memset(ctx->request, 0, sizeof(*ctx->request) * ctx->totalSlots);
 		
 		if(pthread_attr_init        (&attr)          != 0 ||
 		   pthread_attr_setstacksize(&attr, 64*1024) != 0){
@@ -275,68 +334,42 @@ BENZINA_PLUGIN_STATIC int   nvdecodeStartHelpers      (NVDECODE_CTX* ctx){
 		pthread_detach(ctx->worker.thrd);
 		pthread_attr_destroy(&attr);
 		
-		if(nvdecodeNoHelpersSpawned(ctx)){
-			return -1;
-		}
-		
 		ctx->master.cntLifecycles++;
 	}
 	
 	/**
-	 * If at least some threads were successfully spawned, we wait for them.
+	 * We wait for all threads to stabilize either to the all-RUNNING or
+	 * all-NOT_RUNNING state.
 	 * 
-	 * If at least one thread failed to spawn, all threads that did spawn will
-	 * self-destruct on startup (THRD_SPAWNED -> THRD_NOT_RUNNING) and signal
-	 * us. If all threads spawn but some fail to initialize, then others may
-	 * end up blocked on their respective conditions; We will wake them up.
+	 * If at least one thread
 	 * 
-	 * If, while the mutex is dropped, the lifecycle number changes under our
-	 * feet, we abandon entirely.
+	 *   1) Failed to spawn
+	 *   2) Failed to initialize
+	 *   3) Failed at runtime
+	 *   4) Timed out
+	 * 
+	 * , all threads that did spawn and/or init and/or run will self-destruct
+	 * promptly (THRD_* -> THRD_NOT_RUNNING) and signal us. The transition of
+	 * the last helper thread in this lifecycle to NOT_RUNNING indicates the
+	 * end of the lifecycle.
+	 * 
+	 * If, while we have released the mutex, the lifecycle number changes under
+	 * our feet, we abandon entirely. We've slept so long that the next
+	 * lifecycle has been entered. We
+	 * exit straight out, since we had been waiting on a previous lifecycle
+	 * and therefore these helpers may be of no use to us.
+	 * 
+	 * We do no cleanup in this situation since whichever events have
+	 * transpired since have already arranged to clean up the resources for us.
 	 */
 	
 	cntLifecycles = ctx->master.cntLifecycles;
 	do{
-		/**
-		 * We've slept so long that the next lifecycle has been entered. We
-		 * exit straight out, since we had been waiting on a previous lifecycle
-		 * and therefore these helpers may be of no use to us.
-		 * 
-		 * We do no cleanup since whichever events have transpired since have
-		 * already arranged to clean up the resources for us.
-		 */
-		
-		if(cntLifecycles == ctx->master.cntLifecycles){return -2;}
-		
-		/**
-		 * No threads running anymore. Can happen due to self-destruct on
-		 * startup (because not all threads spawned properly), or because
-		 * all threads spawned but some didn't initialize properly, and
-		 * after being woken, all other threads have finally exited.
-		 */
-		
-		if(nvdecodeNoHelpersSpawned(ctx)){return -1;}
-		
-		/**
-		 * All threads running. We return success.
-		 */
-		
-		if(nvdecodeAllHelpersRunning(ctx)){return 0;}
-		
-		/**
-		 * If we reach here, the threads are still spawning and initializing,
-		 * and have not settled to all-running or all-non-running. They will be
-		 * in a mixed state of SPAWNED, RUNNING and NOT_RUNNING. In order to
-		 * ensure that RUNNING threads "see" state changes, we broadcast on
-		 * each helper's condition variable unconditionally. This is harmless
-		 * so long as the threads check their invariants carefully, as they
-		 * must do anyways due to "spurious wakeup" problems.
-		 */
-		
-		pthread_cond_broadcast(&ctx->reader.cond);
-		pthread_cond_broadcast(&ctx->feeder.cond);
-		pthread_cond_broadcast(&ctx->worker.cond);
+		if(cntLifecycles != ctx->master.cntLifecycles       ){return -2;}
+		if(nvdecodeHelpersAllStatusIs(ctx, THRD_NOT_RUNNING)){return -1;}
+		if(nvdecodeHelpersAllStatusIs(ctx, THRD_RUNNING    )){return  0;}
 	}while(pthread_cond_wait(&ctx->master.cond, &ctx->lock) == 0);
-	return -1;
+	return -3;
 }
 
 /**
@@ -348,88 +381,60 @@ BENZINA_PLUGIN_STATIC int   nvdecodeStartHelpers      (NVDECODE_CTX* ctx){
  * @return 0 if threads not running or successfully stopped.
  */
 
-BENZINA_PLUGIN_STATIC int   nvdecodeStopHelpers       (NVDECODE_CTX* ctx){
+BENZINA_PLUGIN_STATIC int   nvdecodeHelpersStop        (NVDECODE_CTX* ctx){
 	uint64_t cntLifecycles = ctx->master.cntLifecycles;
 	do{
-		/**
-		 * We've slept so long that the next lifecycle has been entered. We
-		 * exit straight out, since someone else cleaned up for us.
-		 */
-		
-		if(cntLifecycles == ctx->master.cntLifecycles){return -2;}
-		
-		/**
-		 * No threads running anymore. We break out.
-		 */
-		
-		if(nvdecodeNoHelpersSpawned(ctx)){break;}
-		
-		/**
-		 * We must induce all threads to exit. For each thread that has not yet
-		 * exited nor been asked to exit, we ask it to do so.
-		 */
-		
+		if(cntLifecycles != ctx->master.cntLifecycles       ){return -2;}
+		if(nvdecodeHelpersAllStatusIs(ctx, THRD_NOT_RUNNING)){
+			pthread_cond_broadcast(&ctx->master.cond);
+			return 0;
+		}
 		if(ctx->reader.status != THRD_NOT_RUNNING){nvdecodeReaderThrdSetStatus(ctx, THRD_EXITING);}
 		if(ctx->feeder.status != THRD_NOT_RUNNING){nvdecodeFeederThrdSetStatus(ctx, THRD_EXITING);}
 		if(ctx->worker.status != THRD_NOT_RUNNING){nvdecodeWorkerThrdSetStatus(ctx, THRD_EXITING);}
 	}while(pthread_cond_wait(&ctx->master.cond, &ctx->lock) == 0);
-	
-	/**
-	 * At this point, all helper threads have exited, but other threads may be
-	 * blocked on our condition variables. We wake them.
-	 */
-	
-	pthread_cond_broadcast(&ctx->master.cond);
-	pthread_cond_broadcast(&ctx->reader.cond);
-	pthread_cond_broadcast(&ctx->feeder.cond);
-	pthread_cond_broadcast(&ctx->worker.cond);
-	
-	return 0;
+	return -3;
 }
 
 /**
- * @brief Are none of the helper threads spawned/running/exiting?
+ * @brief Whether all helpers have the given status.
  * 
- * Called with the lock held.
- * 
- * @param [in]  ctx  The context whose helper threads are in question.
- * @return 1 if all threads are in state NOT_RUNNING, 0 otherwise.
+ * @param [in]  ctx
+ * @param [in]  status
+ * @return Whether (!0) or not (0) all helper threads have the given status.
  */
 
-BENZINA_PLUGIN_STATIC int   nvdecodeNoHelpersSpawned   (NVDECODE_CTX* ctx){
-	return ctx->reader.status == THRD_NOT_RUNNING &&
-	       ctx->feeder.status == THRD_NOT_RUNNING &&
-	       ctx->worker.status == THRD_NOT_RUNNING;
+BENZINA_PLUGIN_STATIC int   nvdecodeHelpersAllStatusIs (NVDECODE_CTX* ctx, NVDECODE_THRD_STATUS status){
+	return ctx->reader.status == status &&
+	       ctx->feeder.status == status &&
+	       ctx->worker.status == status;
 }
 
 /**
- * @brief Are all helper threads in RUNNING state?
+ * @brief Whether any helpers have the given status.
  * 
- * Called with the lock held.
- * 
- * @param [in]  ctx  The context whose helper threads are in question.
- * @return 1 if all threads are in state RUNNING, 0 otherwise.
+ * @param [in]  ctx
+ * @param [in]  status
+ * @return Whether (!0) or not (0) any helper threads have the given status.
  */
 
-BENZINA_PLUGIN_STATIC int   nvdecodeAllHelpersRunning  (NVDECODE_CTX* ctx){
-	return ctx->reader.status == THRD_RUNNING &&
-	       ctx->feeder.status == THRD_RUNNING &&
-	       ctx->worker.status == THRD_RUNNING;
+BENZINA_PLUGIN_STATIC int   nvdecodeHelpersAnyStatusIs (NVDECODE_CTX* ctx, NVDECODE_THRD_STATUS status){
+	return ctx->reader.status == status ||
+	       ctx->feeder.status == status ||
+	       ctx->worker.status == status;
 }
 
 /**
- * @brief Did at least one helper thread fail to spawn?
+ * @brief Whether the spawning of helpers is currently failing or not.
  * 
- * Called with the lock held.
- * 
- * @param [in]  ctx  The context whose helper threads are in question.
- * @return 0 if all threads spawned successfully, !0 otherwise.
+ * @param [in]  ctx
+ * @param [in]  status
+ * @return Whether (!0) or not (0) any helper threads are currently failing or failed.
  */
 
-BENZINA_PLUGIN_STATIC int   nvdecodeFailedSpawn        (NVDECODE_CTX* ctx){
-	return ctx->reader.status == THRD_NOT_RUNNING ||
-	       ctx->feeder.status == THRD_NOT_RUNNING ||
-	       ctx->worker.status == THRD_NOT_RUNNING;
+BENZINA_PLUGIN_STATIC int   nvdecodeHelpersFailing     (NVDECODE_CTX* ctx){
+	return nvdecodeHelpersAnyStatusIs(ctx, THRD_NOT_RUNNING) ||
+	       nvdecodeHelpersAnyStatusIs(ctx, THRD_EXITING);
 }
 
 /**
@@ -500,67 +505,11 @@ BENZINA_PLUGIN_STATIC int   nvdecodeMaybeReapDecoder   (NVDECODE_CTX* ctx){
  * @return NULL.
  */
 
-BENZINA_PLUGIN_STATIC void* nvdecodeReaderThrdMain    (NVDECODE_CTX* ctx){
-	NVDECODE_RQ* rq;
-	uint64_t     di;
-	int          readsDone;
-	struct{
-		int fd; size_t off; size_t len; void* ptr; ssize_t lenRead;
-	} rd0 = {0}, rd1 = {0};
-	
-	/**
-	 * Initialization.
-	 * 
-	 * The reader thread sets for itself the selected device.
-	 */
-	
+BENZINA_PLUGIN_STATIC void* nvdecodeReaderThrdMain     (NVDECODE_CTX* ctx){
 	pthread_mutex_lock(&ctx->lock);
 	if(nvdecodeReaderThrdInit(ctx)){
 		while(nvdecodeReaderThrdContinue(ctx)){
-			nvdecodeReaderThrdGetCurrRq(ctx, &rq);
-			rq->data = NULL;
-			di       = rq->datasetIndex;
-			rd0.fd   = ctx->datasetBinFd;
-			if(benzinaDatasetGetElement(ctx->dataset, di, &rd0.off, &rd0.len) != 0){
-				nvdecodeReaderThrdSetStatus(ctx, THRD_EXITING); continue;
-			}
-			rq->data = malloc(rd0.len);
-			if(!rq->data){
-				nvdecodeReaderThrdSetStatus(ctx, THRD_EXITING); continue;
-			}
-			rd0.ptr  = rq->data;
-			rd1.fd   = ctx->datasetNvdecodeFd;
-			rd1.len  = ctx->picParamTruncLen;
-			rd1.off  = ctx->picParamTruncLen*di;
-			rd1.ptr  = rq->picParams;
-			
-			
-			/**
-			 * Drop lock for blocking reads, then reacquire the lock.
-			 * Allows other work to proceed in parallel.
-			 */
-			
-			pthread_mutex_unlock(&ctx->lock);
-			rd0.lenRead = pread(rd0.fd, rd0.ptr, rd0.len, rd0.off);
-			rd1.lenRead = pread(rd1.fd, rd1.ptr, rd1.len, rd1.off);
-			pthread_mutex_lock(&ctx->lock);
-			
-			
-			/**
-			 * If the reads were successful, increment counter. Otherwise, indicate
-			 * error. Either way, signal everyone.
-			 */
-			
-			readsDone = (rd0.lenRead==(ssize_t)rd0.len) &&
-			            (rd1.lenRead==(ssize_t)rd1.len);
-			if(readsDone){
-				ctx->reader.cnt++;
-			}else{
-				free(rq->data);
-				rq->data = NULL;
-				nvdecodeReaderThrdSetStatus(ctx, THRD_EXITING); continue;
-			}
-			pthread_cond_broadcast(&ctx->feeder.cond);
+			nvdecodeReaderThrdCore(ctx);
 		}
 	}
 	pthread_mutex_unlock(&ctx->lock);
@@ -576,15 +525,41 @@ BENZINA_PLUGIN_STATIC void* nvdecodeReaderThrdMain    (NVDECODE_CTX* ctx){
  * @return Whether (!0) or not (0) initialization was successful.
  */
 
-BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdInit    (NVDECODE_CTX* ctx){
-	if(nvdecodeFailedSpawn(ctx)){
+BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdInit     (NVDECODE_CTX* ctx){
+	if(nvdecodeHelpersFailing(ctx)){
 		nvdecodeReaderThrdSetStatus(ctx, THRD_NOT_RUNNING);
 		return 0;
 	}
 	
 	ctx->mallocRefCnt++;
-	nvdecodeReaderThrdSetStatus(ctx, THRD_RUNNING);
-	return 1;
+	
+	nvdecodeReaderThrdSetStatus(ctx, THRD_INITED);
+	if(nvdecodeReaderThrdAwaitAll(ctx)){
+		nvdecodeReaderThrdSetStatus(ctx, THRD_RUNNING);
+		return 1;
+	}else{
+		nvdecodeReaderThrdSetStatus(ctx, THRD_EXITING);
+		nvdecodeMaybeReapMallocs(ctx);
+		nvdecodeReaderThrdSetStatus(ctx, THRD_NOT_RUNNING);
+		return 0;
+	}
+}
+
+/**
+ * @brief Wait for full initialization of all threads.
+ * 
+ * Called with the lock held.
+ * 
+ * @param [in]  ctx
+ * @return Whether (!0) or not (0) all threads reached INITED or RUNNING state.
+ */
+
+BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdAwaitAll (NVDECODE_CTX* ctx){
+	do{
+		if(nvdecodeHelpersFailing(ctx)){return 0;}
+		if(!nvdecodeHelpersAnyStatusIs(ctx, THRD_SPAWNED)){return 1;}
+	}while(pthread_cond_wait(&ctx->reader.cond, &ctx->lock) == 0);
+	return 0;
 }
 
 /**
@@ -596,7 +571,7 @@ BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdInit    (NVDECODE_CTX* ctx){
  * @return Whether (!0) or not (0) there is work to do.
  */
 
-BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdContinue(NVDECODE_CTX* ctx){
+BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdContinue (NVDECODE_CTX* ctx){
 	do{
 		if(ctx->reader.cnt == ctx->master.cntSubmitted){
 			if(nvdecodeHelpersShouldExit(ctx)){
@@ -610,6 +585,72 @@ BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdContinue(NVDECODE_CTX* ctx){
 	
 	nvdecodeMaybeReapMallocs   (ctx);
 	nvdecodeReaderThrdSetStatus(ctx, THRD_NOT_RUNNING);
+	return 0;
+}
+
+/**
+ * @brief Perform the core operation of the reader thread.
+ * 
+ * Called with the lock held.
+ * 
+ * @param [in]  ctx  The context 
+ * @return 0
+ */
+
+BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdCore     (NVDECODE_CTX* ctx){
+	NVDECODE_RQ* rq;
+	uint64_t     di;
+	int          readsDone;
+	struct{
+		int fd; size_t off; size_t len; void* ptr; ssize_t lenRead;
+	} rd0 = {0}, rd1 = {0};
+	
+	
+	nvdecodeReaderThrdGetCurrRq(ctx, &rq);
+	rq->data = NULL;
+	di       = rq->datasetIndex;
+	rd0.fd   = ctx->datasetBinFd;
+	if(benzinaDatasetGetElement(ctx->dataset, di, &rd0.off, &rd0.len) != 0){
+		nvdecodeReaderThrdSetStatus(ctx, THRD_EXITING); return 0;
+	}
+	rq->data = malloc(rd0.len);
+	if(!rq->data){
+		nvdecodeReaderThrdSetStatus(ctx, THRD_EXITING); return 0;
+	}
+	rd0.ptr  = rq->data;
+	rd1.fd   = ctx->datasetNvdecodeFd;
+	rd1.len  = ctx->picParamTruncLen;
+	rd1.off  = ctx->picParamTruncLen*di;
+	rd1.ptr  = rq->picParams;
+	
+	
+	/**
+	 * Drop lock for blocking reads, then reacquire the lock.
+	 * Allows other work to proceed in parallel.
+	 */
+	
+	pthread_mutex_unlock(&ctx->lock);
+	rd0.lenRead = pread(rd0.fd, rd0.ptr, rd0.len, rd0.off);
+	rd1.lenRead = pread(rd1.fd, rd1.ptr, rd1.len, rd1.off);
+	pthread_mutex_lock(&ctx->lock);
+	
+	
+	/**
+	 * If the reads were successful, increment counter. Otherwise, indicate
+	 * error. Either way, signal everyone.
+	 */
+	
+	readsDone = (rd0.lenRead==(ssize_t)rd0.len) &&
+	            (rd1.lenRead==(ssize_t)rd1.len);
+	if(readsDone){
+		ctx->reader.cnt++;
+	}else{
+		free(rq->data);
+		rq->data = NULL;
+		nvdecodeReaderThrdSetStatus(ctx, THRD_EXITING); return 0;
+	}
+	pthread_cond_broadcast(&ctx->feeder.cond);
+	
 	return 0;
 }
 
@@ -652,55 +693,11 @@ BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdGetCurrRq(NVDECODE_CTX* ctx, NVDEC
  * @return NULL.
  */
 
-BENZINA_PLUGIN_STATIC void* nvdecodeFeederThrdMain    (NVDECODE_CTX* ctx){
-	NVDECODE_RQ*    rq;
-	CUVIDPICPARAMS* pP;
-	CUresult        ret;
-	unsigned int    ZERO = 0;
-	
+BENZINA_PLUGIN_STATIC void* nvdecodeFeederThrdMain     (NVDECODE_CTX* ctx){
 	pthread_mutex_lock(&ctx->lock);
 	if(nvdecodeFeederThrdInit(ctx)){
 		while(nvdecodeFeederThrdContinue(ctx)){
-			nvdecodeFeederThrdGetCurrRq(ctx, &rq);
-			pP = rq->picParams;
-			
-			/**
-			 * When we generated this dataset, we encoded the byte offset from
-			 * the beginning of the H264 frame in the pointer field. We also
-			 * must supply one slice offset of 0, since there is just one
-			 * slice.
-			 * 
-			 * Patch up these pointers to valid values before supplying it to
-			 * cuvidDecodePicture().
-			 * 
-			 * Also, set a CurrPicIdx value. Allegedly, it is always in the
-			 * range [0, MAX_DECODE_SURFACES).
-			 */
-			
-			pP->pBitstreamData    = rq->data+(uint64_t)pP->pBitstreamData;
-			pP->pSliceDataOffsets = &ZERO;
-			pP->CurrPicIdx        = ctx->feeder.cnt % ctx->decoderInfo.ulNumDecodeSurfaces;
-			
-			/**
-			 * Drop mutex and possibly block attempting to decode image, then
-			 * reacquire mutex.
-			 */
-			
-			pthread_mutex_unlock(&ctx->lock);
-			ret = ctx->cuvidDecodePicture(ctx->decoder, pP);
-			pthread_mutex_lock(&ctx->lock);
-			
-			/* Release data. */
-			free(rq->data);
-			rq->data = NULL;
-			if(ret != CUDA_SUCCESS){
-				nvdecodeFeederThrdSetStatus(ctx, THRD_EXITING);
-				continue;
-			}
-			
-			/* Bump counters and broadcast signal. */
-			ctx->feeder.cnt++;
-			pthread_cond_broadcast(&ctx->worker.cond);
+			nvdecodeFeederThrdCore(ctx);
 		}
 	}
 	pthread_mutex_unlock(&ctx->lock);
@@ -716,54 +713,70 @@ BENZINA_PLUGIN_STATIC void* nvdecodeFeederThrdMain    (NVDECODE_CTX* ctx){
  * @return Whether (!0) or not (0) initialization was successful.
  */
 
-BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdInit    (NVDECODE_CTX* ctx){
-	/**
-	 * If spawning was partially-unsucessful, early-exit.
-	 */
-	
-	if(nvdecodeFailedSpawn(ctx)){
+BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdInit     (NVDECODE_CTX* ctx){
+	if(nvdecodeHelpersFailing(ctx)){
 		nvdecodeFeederThrdSetStatus(ctx, THRD_NOT_RUNNING);
 		return 0;
 	}
-	
-	/**
-	 * Set CUDA device. If this fails, set status to NOT_RUNNING and exit. This
-	 * sets off a chain of events that leads to all other helper threads
-	 * exiting.
-	 */
 	
 	if(cudaSetDevice(ctx->deviceOrd) != cudaSuccess){
 		nvdecodeFeederThrdSetStatus(ctx, THRD_NOT_RUNNING);
 		return 0;
 	}
 	
-	/**
-	 * Query NVDECODE hardware codec capabilities, then create decoder.
-	 */
-	
-	memset(&ctx->decoderCaps, 0, sizeof(ctx->decoderCaps));
-	ctx->decoderCaps.eCodecType      = ctx->decoderInfo.CodecType;
-	ctx->decoderCaps.eChromaFormat   = ctx->decoderInfo.ChromaFormat;
-	ctx->decoderCaps.nBitDepthMinus8 = ctx->decoderInfo.bitDepthMinus8;
-	if(ctx->cuvidGetDecoderCaps(&ctx->decoderCaps)               != CUDA_SUCCESS ||
-	   !ctx->decoderCaps.bIsSupported                                            ||
-	   ctx->decoderInfo.ulWidth  < ctx->decoderCaps.nMinWidth                    ||
-	   ctx->decoderInfo.ulWidth  > ctx->decoderCaps.nMaxWidth                    ||
-	   ctx->decoderInfo.ulHeight < ctx->decoderCaps.nMinHeight                   ||
-	   ctx->decoderInfo.ulHeight > ctx->decoderCaps.nMaxHeight                   ||
-	   ((ctx->decoderInfo.ulWidth*ctx->decoderInfo.ulHeight/256) >
-	     ctx->decoderCaps.nMaxMBCount)                                           ||
-	   ctx->cuvidCreateDecoder(&ctx->decoder, &ctx->decoderInfo) != CUDA_SUCCESS){
+	if(ctx->cuvidGetDecoderCaps){
+		memset(&ctx->decoderCaps, 0, sizeof(ctx->decoderCaps));
+		ctx->decoderCaps.eCodecType      = ctx->decoderInfo.CodecType;
+		ctx->decoderCaps.eChromaFormat   = ctx->decoderInfo.ChromaFormat;
+		ctx->decoderCaps.nBitDepthMinus8 = ctx->decoderInfo.bitDepthMinus8;
+		if(ctx->cuvidGetDecoderCaps(&ctx->decoderCaps)               != CUDA_SUCCESS ||
+		   !ctx->decoderCaps.bIsSupported                                            ||
+		   ctx->decoderInfo.ulWidth  < ctx->decoderCaps.nMinWidth                    ||
+		   ctx->decoderInfo.ulWidth  > ctx->decoderCaps.nMaxWidth                    ||
+		   ctx->decoderInfo.ulHeight < ctx->decoderCaps.nMinHeight                   ||
+		   ctx->decoderInfo.ulHeight > ctx->decoderCaps.nMaxHeight                   ||
+		   ((ctx->decoderInfo.ulWidth*ctx->decoderInfo.ulHeight/256) > ctx->decoderCaps.nMaxMBCount)){
+			nvdecodeFeederThrdSetStatus(ctx, THRD_NOT_RUNNING);
+			return 0;
+		}
+	}
+	if(ctx->cuvidCreateDecoder(&ctx->decoder, &ctx->decoderInfo) != CUDA_SUCCESS){
 		nvdecodeFeederThrdSetStatus(ctx, THRD_NOT_RUNNING);
 		return 0;
 	}
 	ctx->decoderInited = 1;
 	ctx->decoderRefCnt++;
+	
 	ctx->mallocRefCnt++;
 	
-	/* Initialization successful. Transition SPAWNED -> RUNNING. */
-	nvdecodeFeederThrdSetStatus(ctx, THRD_RUNNING);
-	return 1;
+	nvdecodeFeederThrdSetStatus(ctx, THRD_INITED);
+	if(nvdecodeFeederThrdAwaitAll(ctx)){
+		nvdecodeFeederThrdSetStatus(ctx, THRD_RUNNING);
+		return 1;
+	}else{
+		nvdecodeFeederThrdSetStatus(ctx, THRD_EXITING);
+		nvdecodeMaybeReapDecoder(ctx);
+		nvdecodeMaybeReapMallocs(ctx);
+		nvdecodeFeederThrdSetStatus(ctx, THRD_NOT_RUNNING);
+		return 0;
+	}
+}
+
+/**
+ * @brief Wait for full initialization of all threads.
+ * 
+ * Called with the lock held.
+ * 
+ * @param [in]  ctx
+ * @return Whether (!0) or not (0) all threads reached INITED or RUNNING state.
+ */
+
+BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdAwaitAll (NVDECODE_CTX* ctx){
+	do{
+		if(nvdecodeHelpersFailing(ctx)){return 0;}
+		if(!nvdecodeHelpersAnyStatusIs(ctx, THRD_SPAWNED)){return 1;}
+	}while(pthread_cond_wait(&ctx->feeder.cond, &ctx->lock) == 0);
+	return 0;
 }
 
 /**
@@ -773,7 +786,7 @@ BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdInit    (NVDECODE_CTX* ctx){
  * @return Whether (!0) or not (0) there is work to do.
  */
 
-BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdContinue(NVDECODE_CTX* ctx){
+BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdContinue (NVDECODE_CTX* ctx){
 	do{
 		if(ctx->feeder.cnt == ctx->reader.cnt){
 			if(nvdecodeHelpersShouldExit(ctx)){
@@ -800,6 +813,66 @@ BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdContinue(NVDECODE_CTX* ctx){
 	nvdecodeMaybeReapMallocs   (ctx);
 	nvdecodeMaybeReapDecoder   (ctx);
 	nvdecodeFeederThrdSetStatus(ctx, THRD_NOT_RUNNING);
+	return 0;
+}
+
+/**
+ * @brief Perform the core operation of the feeder thread.
+ * 
+ * Called with the lock held.
+ * 
+ * @param [in]  ctx  The context 
+ * @return 0
+ */
+
+BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdCore     (NVDECODE_CTX* ctx){
+	NVDECODE_RQ*    rq;
+	CUVIDPICPARAMS* pP;
+	CUresult        ret;
+	unsigned int    ZERO = 0;
+	
+	
+	nvdecodeFeederThrdGetCurrRq(ctx, &rq);
+	pP = rq->picParams;
+	
+	/**
+	 * When we generated this dataset, we encoded the byte offset from
+	 * the beginning of the H264 frame in the pointer field. We also
+	 * must supply one slice offset of 0, since there is just one
+	 * slice.
+	 * 
+	 * Patch up these pointers to valid values before supplying it to
+	 * cuvidDecodePicture().
+	 * 
+	 * Also, set a CurrPicIdx value. Allegedly, it is always in the
+	 * range [0, MAX_DECODE_SURFACES).
+	 */
+	
+	pP->pBitstreamData    = rq->data+(uint64_t)pP->pBitstreamData;
+	pP->pSliceDataOffsets = &ZERO;
+	pP->CurrPicIdx        = ctx->feeder.cnt % ctx->decoderInfo.ulNumDecodeSurfaces;
+	
+	/**
+	 * Drop mutex and possibly block attempting to decode image, then
+	 * reacquire mutex.
+	 */
+	
+	pthread_mutex_unlock(&ctx->lock);
+	ret = ctx->cuvidDecodePicture(ctx->decoder, pP);
+	pthread_mutex_lock(&ctx->lock);
+	
+	/* Release data. */
+	free(rq->data);
+	rq->data = NULL;
+	if(ret != CUDA_SUCCESS){
+		nvdecodeFeederThrdSetStatus(ctx, THRD_EXITING);
+		return 0;
+	}
+	
+	/* Bump counters and broadcast signal. */
+	ctx->feeder.cnt++;
+	pthread_cond_broadcast(&ctx->worker.cond);
+	
 	return 0;
 }
 
@@ -842,64 +915,11 @@ BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdGetCurrRq(NVDECODE_CTX* ctx, NVDEC
  * @return NULL.
  */
 
-BENZINA_PLUGIN_STATIC void* nvdecodeWorkerThrdMain    (NVDECODE_CTX* ctx){
-	NVDECODE_RQ*       rq;
-	CUVIDPROCPARAMS    vpp;
-	unsigned long long srcPtr;
-	unsigned           pitch;
-	uint64_t           picIdx = 0;
-	CUresult           retMap;
-	
-	
+BENZINA_PLUGIN_STATIC void* nvdecodeWorkerThrdMain     (NVDECODE_CTX* ctx){
 	pthread_mutex_lock(&ctx->lock);
 	if(nvdecodeWorkerThrdInit(ctx)){
 		while(nvdecodeWorkerThrdContinue(ctx)){
-			nvdecodeWorkerThrdGetCurrRq(ctx, &rq);
-			memset(&vpp, 0, sizeof(vpp));
-			vpp.progressive_frame = 1;
-			vpp.second_field      = 0;
-			vpp.top_field_first   = 0;
-			vpp.unpaired_field    = 0;
-			vpp.output_stream     = ctx->worker.cudaStream;
-			picIdx                = ctx->worker.cnt % ctx->decoderInfo.ulNumDecodeSurfaces;
-			
-			/**
-			 * Drop the mutex and block on the decoder, then perform CUDA ops
-			 * on the returned data. Then, reacquire lock.
-			 */
-			
-			pthread_mutex_unlock(&ctx->lock);
-			retMap = ctx->cuvidMapVideoFrame64(ctx->decoder, picIdx, &srcPtr, &pitch, &vpp);
-			if(retMap == CUDA_SUCCESS){
-				/* From devPtr & pitch to rq->devPtr. */
-				nvdecodePostprocKernelInvoker(ctx->worker.cudaStream,
-				                              rq->devPtr,
-				                              ctx->outputHeight,
-				                              ctx->outputWidth,
-				                              rq->OOB [0], rq->OOB [1], rq->OOB [2],
-				                              rq->B   [0], rq->B   [1], rq->B   [2],
-				                              rq->S   [0], rq->S   [1], rq->S   [2],
-				                              rq->H[0][0], rq->H[0][1], rq->H[0][2],
-				                              rq->H[1][0], rq->H[1][1], rq->H[1][2],
-				                              rq->H[2][0], rq->H[2][1], rq->H[2][2],
-				                              rq->colorMatrix,
-				                              (void*)srcPtr,
-				                              pitch,
-				                              ctx->decoderInfo.ulHeight,
-				                              ctx->decoderInfo.ulWidth);
-				cudaStreamAddCallback(ctx->worker.cudaStream,
-				                      (cudaStreamCallback_t)nvdecodeWorkerThrdCallback,
-				                      ctx,
-				                      0);
-				ctx->cuvidUnmapVideoFrame64(ctx->decoder, srcPtr);
-			}
-			pthread_mutex_lock(&ctx->lock);
-			
-			if(retMap == CUDA_SUCCESS){
-				ctx->worker.cnt++;
-			}else{
-				nvdecodeWorkerThrdSetStatus(ctx, THRD_EXITING); continue;
-			}
+			nvdecodeWorkerThrdCore(ctx);
 		}
 	}
 	pthread_mutex_unlock(&ctx->lock);
@@ -915,32 +935,47 @@ BENZINA_PLUGIN_STATIC void* nvdecodeWorkerThrdMain    (NVDECODE_CTX* ctx){
  * @return Whether (!0) or not (0) initialization was successful.
  */
 
-BENZINA_PLUGIN_STATIC int   nvdecodeWorkerThrdInit    (NVDECODE_CTX* ctx){
-	/**
-	 * If spawning was partially-unsucessful, early-exit.
-	 */
-	
-	if(nvdecodeFailedSpawn(ctx)){
+BENZINA_PLUGIN_STATIC int   nvdecodeWorkerThrdInit     (NVDECODE_CTX* ctx){
+	if(nvdecodeHelpersFailing(ctx)){
 		nvdecodeWorkerThrdSetStatus(ctx, THRD_NOT_RUNNING);
 		return 0;
 	}
-	
-	/**
-	 * Set CUDA device and create stream. If this fails, set status to
-	 * NOT_RUNNING and exit. This sets off a chain of events that leads to all
-	 * other helper threads exiting.
-	 */
 	
 	if(cudaSetDevice   (ctx->deviceOrd)          != cudaSuccess ||
 	   cudaStreamCreate(&ctx->worker.cudaStream) != cudaSuccess){
 		nvdecodeWorkerThrdSetStatus(ctx, THRD_NOT_RUNNING);
 		return 0;
 	}
+	
 	ctx->decoderRefCnt++;
 	
-	/* Initialization successful. Transition SPAWNED -> RUNNING. */
-	nvdecodeWorkerThrdSetStatus(ctx, THRD_RUNNING);
-	return 1;
+	nvdecodeWorkerThrdSetStatus(ctx, THRD_INITED);
+	if(nvdecodeWorkerThrdAwaitAll(ctx)){
+		nvdecodeWorkerThrdSetStatus(ctx, THRD_RUNNING);
+		return 1;
+	}else{
+		nvdecodeWorkerThrdSetStatus(ctx, THRD_EXITING);
+		nvdecodeMaybeReapDecoder(ctx);
+		nvdecodeWorkerThrdSetStatus(ctx, THRD_NOT_RUNNING);
+		return 0;
+	}
+}
+
+/**
+ * @brief Wait for full initialization of all threads.
+ * 
+ * Called with the lock held.
+ * 
+ * @param [in]  ctx
+ * @return Whether (!0) or not (0) all threads reached INITED or RUNNING state.
+ */
+
+BENZINA_PLUGIN_STATIC int   nvdecodeWorkerThrdAwaitAll (NVDECODE_CTX* ctx){
+	do{
+		if(nvdecodeHelpersFailing(ctx)){return 0;}
+		if(!nvdecodeHelpersAnyStatusIs(ctx, THRD_SPAWNED)){return 1;}
+	}while(pthread_cond_wait(&ctx->worker.cond, &ctx->lock) == 0);
+	return 0;
 }
 
 /**
@@ -950,7 +985,7 @@ BENZINA_PLUGIN_STATIC int   nvdecodeWorkerThrdInit    (NVDECODE_CTX* ctx){
  * @return Whether (!0) or not (0) there is work to do.
  */
 
-BENZINA_PLUGIN_STATIC int   nvdecodeWorkerThrdContinue(NVDECODE_CTX* ctx){
+BENZINA_PLUGIN_STATIC int   nvdecodeWorkerThrdContinue (NVDECODE_CTX* ctx){
 	do{
 		if(ctx->worker.cnt == ctx->feeder.cnt){
 			if(nvdecodeHelpersShouldExit(ctx)){
@@ -983,6 +1018,73 @@ BENZINA_PLUGIN_STATIC int   nvdecodeWorkerThrdContinue(NVDECODE_CTX* ctx){
 }
 
 /**
+ * @brief Perform the core operation of the worker thread.
+ * 
+ * Called with the lock held.
+ * 
+ * @param [in]  ctx  The context 
+ * @return 0
+ */
+
+BENZINA_PLUGIN_STATIC int   nvdecodeWorkerThrdCore     (NVDECODE_CTX* ctx){
+	NVDECODE_RQ*       rq;
+	CUVIDPROCPARAMS    vpp;
+	unsigned long long srcPtr;
+	unsigned           pitch;
+	uint64_t           picIdx = 0;
+	CUresult           retMap;
+	
+	nvdecodeWorkerThrdGetCurrRq(ctx, &rq);
+	memset(&vpp, 0, sizeof(vpp));
+	vpp.progressive_frame = 1;
+	vpp.second_field      = 0;
+	vpp.top_field_first   = 0;
+	vpp.unpaired_field    = 0;
+	vpp.output_stream     = ctx->worker.cudaStream;
+	picIdx                = ctx->worker.cnt % ctx->decoderInfo.ulNumDecodeSurfaces;
+	
+	/**
+	 * Drop the mutex and block on the decoder, then perform CUDA ops
+	 * on the returned data. Then, reacquire lock.
+	 */
+	
+	pthread_mutex_unlock(&ctx->lock);
+	retMap = ctx->cuvidMapVideoFrame64(ctx->decoder, picIdx, &srcPtr, &pitch, &vpp);
+	if(retMap == CUDA_SUCCESS){
+		/* From devPtr & pitch to rq->devPtr. */
+		nvdecodePostprocKernelInvoker(ctx->worker.cudaStream,
+		                              rq->devPtr,
+		                              ctx->outputHeight,
+		                              ctx->outputWidth,
+		                              rq->OOB [0], rq->OOB [1], rq->OOB [2],
+		                              rq->B   [0], rq->B   [1], rq->B   [2],
+		                              rq->S   [0], rq->S   [1], rq->S   [2],
+		                              rq->H[0][0], rq->H[0][1], rq->H[0][2],
+		                              rq->H[1][0], rq->H[1][1], rq->H[1][2],
+		                              rq->H[2][0], rq->H[2][1], rq->H[2][2],
+		                              rq->colorMatrix,
+		                              (void*)srcPtr,
+		                              pitch,
+		                              ctx->decoderInfo.ulHeight,
+		                              ctx->decoderInfo.ulWidth);
+		cudaStreamAddCallback(ctx->worker.cudaStream,
+		                      (cudaStreamCallback_t)nvdecodeWorkerThrdCallback,
+		                      ctx,
+		                      0);
+		ctx->cuvidUnmapVideoFrame64(ctx->decoder, srcPtr);
+	}
+	pthread_mutex_lock(&ctx->lock);
+	
+	if(retMap == CUDA_SUCCESS){
+		ctx->worker.cnt++;
+	}else{
+		nvdecodeWorkerThrdSetStatus(ctx, THRD_EXITING); return 0;
+	}
+	
+	return 0;
+}
+
+/**
  * @brief Post-processing Callback
  * @param [in]   stream The stream onto which this callback had been scheduled.
  * @param [in]   status The error status of this device or stream.
@@ -990,9 +1092,9 @@ BENZINA_PLUGIN_STATIC int   nvdecodeWorkerThrdContinue(NVDECODE_CTX* ctx){
  * @return 
  */
 
-BENZINA_PLUGIN_STATIC void  nvdecodeWorkerThrdCallback(cudaStream_t  stream,
-                                                       cudaError_t   status,
-                                                       NVDECODE_CTX* ctx){
+BENZINA_PLUGIN_STATIC void  nvdecodeWorkerThrdCallback (cudaStream_t  stream,
+                                                        cudaError_t   status,
+                                                        NVDECODE_CTX* ctx){
 	(void)stream;
 	
 	pthread_mutex_lock(&ctx->lock);
@@ -1045,7 +1147,7 @@ BENZINA_PLUGIN_STATIC int   nvdecodeWorkerThrdGetCurrRq(NVDECODE_CTX* ctx, NVDEC
  * @return 0 if successful; !0 otherwise.
  */
 
-BENZINA_PLUGIN_STATIC int   nvdecodeSetDevice         (NVDECODE_CTX* ctx, const char*   deviceId){
+BENZINA_PLUGIN_STATIC int   nvdecodeSetDevice          (NVDECODE_CTX* ctx, const char*   deviceId){
 	int ret, deviceCount=0, i=-1;
 	char* s;
 	struct cudaDeviceProp prop;
@@ -1117,7 +1219,7 @@ BENZINA_PLUGIN_STATIC int   nvdecodeSetDevice         (NVDECODE_CTX* ctx, const 
  * @return A pointer to the context, if successful; NULL otherwise.
  */
 
-BENZINA_PLUGIN_HIDDEN int   nvdecodeAlloc(void** ctxOut, const BENZINA_DATASET* dataset){
+BENZINA_PLUGIN_HIDDEN int   nvdecodeAlloc              (void** ctxOut, const BENZINA_DATASET* dataset){
 	NVDECODE_CTX* ctx = NULL;
 	const char*   datasetRoot = NULL;
 	size_t        datasetLen;
@@ -1179,7 +1281,7 @@ BENZINA_PLUGIN_HIDDEN int   nvdecodeAlloc(void** ctxOut, const BENZINA_DATASET* 
  * @return Error code.
  */
 
-BENZINA_PLUGIN_STATIC int   nvdecodeAllocDataOpen(NVDECODE_CTX* ctx){
+BENZINA_PLUGIN_STATIC int   nvdecodeAllocDataOpen      (NVDECODE_CTX* ctx){
 	struct stat   s0, s1, s2, s3, s4;
 	int           dirfd;
 	
@@ -1213,7 +1315,7 @@ BENZINA_PLUGIN_STATIC int   nvdecodeAllocDataOpen(NVDECODE_CTX* ctx){
  * @return Error code.
  */
 
-BENZINA_PLUGIN_STATIC int   nvdecodeAllocPBParse(NVDECODE_CTX* ctx){
+BENZINA_PLUGIN_STATIC int   nvdecodeAllocPBParse       (NVDECODE_CTX* ctx){
 	BENZINA_BUF bbuf;
 	int         pbFd    = ctx->datasetProtobufFd;
 	size_t      bufSize = ctx->datasetProtobufStat.st_size;
@@ -1284,7 +1386,7 @@ BENZINA_PLUGIN_STATIC int   nvdecodeAllocPBParse(NVDECODE_CTX* ctx){
  * @return Error code.
  */
 
-BENZINA_PLUGIN_STATIC int   nvdecodeAllocNvcuvid(NVDECODE_CTX* ctx){
+BENZINA_PLUGIN_STATIC int   nvdecodeAllocNvcuvid       (NVDECODE_CTX* ctx){
 	ctx->cuvidHandle = dlopen("libnvcuvid.so.1", RTLD_LAZY);
 	if(!ctx->cuvidHandle){
 		return nvdecodeAllocCleanup(ctx, -1);
@@ -1318,7 +1420,7 @@ BENZINA_PLUGIN_STATIC int   nvdecodeAllocNvcuvid(NVDECODE_CTX* ctx){
  * @return Error code.
  */
 
-BENZINA_PLUGIN_STATIC int   nvdecodeAllocThreading(NVDECODE_CTX* ctx){
+BENZINA_PLUGIN_STATIC int   nvdecodeAllocThreading     (NVDECODE_CTX* ctx){
 	if(pthread_mutex_init(&ctx->lock,        0)){goto fail_lock;}
 	if(pthread_cond_init (&ctx->master.cond, 0)){goto fail_master;}
 	if(pthread_cond_init (&ctx->reader.cond, 0)){goto fail_reader;}
@@ -1345,7 +1447,7 @@ BENZINA_PLUGIN_STATIC int   nvdecodeAllocThreading(NVDECODE_CTX* ctx){
  * @return The value `ret`.
  */
 
-BENZINA_PLUGIN_STATIC int   nvdecodeAllocCleanup(NVDECODE_CTX* ctx, int ret){
+BENZINA_PLUGIN_STATIC int   nvdecodeAllocCleanup       (NVDECODE_CTX* ctx, int ret){
 	if(ret == 0){
 		return ret;
 	}
@@ -1377,10 +1479,10 @@ BENZINA_PLUGIN_STATIC int   nvdecodeAllocCleanup(NVDECODE_CTX* ctx, int ret){
  * @return 0 if successful in initializing; !0 otherwise.
  */
 
-BENZINA_PLUGIN_HIDDEN int   nvdecodeInit(NVDECODE_CTX* ctx){
+BENZINA_PLUGIN_HIDDEN int   nvdecodeInit               (NVDECODE_CTX* ctx){
 	int ret;
 	pthread_mutex_lock(&ctx->lock);
-	ret = nvdecodeStartHelpers(ctx);
+	ret = nvdecodeHelpersStart(ctx);
 	pthread_mutex_unlock(&ctx->lock);
 	return ret;
 }
@@ -1392,7 +1494,7 @@ BENZINA_PLUGIN_HIDDEN int   nvdecodeInit(NVDECODE_CTX* ctx){
  * @return 0 if successful; !0 otherwise.
  */
 
-BENZINA_PLUGIN_HIDDEN int   nvdecodeRetain(NVDECODE_CTX* ctx){
+BENZINA_PLUGIN_HIDDEN int   nvdecodeRetain             (NVDECODE_CTX* ctx){
 	if(!ctx){return 0;}
 	
 	pthread_mutex_lock(&ctx->lock);
@@ -1410,7 +1512,7 @@ BENZINA_PLUGIN_HIDDEN int   nvdecodeRetain(NVDECODE_CTX* ctx){
  * @return 0 if successful; !0 otherwise.
  */
 
-BENZINA_PLUGIN_HIDDEN int   nvdecodeRelease(NVDECODE_CTX* ctx){
+BENZINA_PLUGIN_HIDDEN int   nvdecodeRelease            (NVDECODE_CTX* ctx){
 	if(!ctx){return 0;}
 	
 	pthread_mutex_lock(&ctx->lock);
@@ -1432,7 +1534,7 @@ BENZINA_PLUGIN_HIDDEN int   nvdecodeRelease(NVDECODE_CTX* ctx){
 	 *   - Free this pointer
 	 */
 	
-	nvdecodeStopHelpers  (ctx);
+	nvdecodeHelpersStop  (ctx);
 	pthread_mutex_unlock (&ctx->lock);
 	
 	pthread_cond_destroy (&ctx->worker.cond);
@@ -1459,6 +1561,32 @@ BENZINA_PLUGIN_HIDDEN int   nvdecodeRelease(NVDECODE_CTX* ctx){
 }
 
 /**
+ * @brief Begin defining a batch of samples.
+ * 
+ * @param [in]  ctx       The iterator context in which.
+ * @return 0 if successful; !0 otherwise.
+ */
+
+BENZINA_PLUGIN_HIDDEN int   nvdecodeDefineBatch        (NVDECODE_CTX* ctx){
+	NVDECODE_BATCH* batch;
+	int ret = 0;
+	
+	pthread_mutex_lock(&ctx->lock);
+	if(ctx->master.cntBatchSub-ctx->master.cntBatchAck >= ctx->multibuffering){
+		ret = -1;
+	}else{
+		nvdecodeMasterThrdGetSubmBt(ctx, &batch);
+		batch->startIndex = ctx->master.cntSubmitted;
+		batch->stopIndex  = ctx->master.cntSubmitted;
+		batch->token      = NULL;
+		ret =  0;
+	}
+	pthread_mutex_unlock(&ctx->lock);
+	
+	return ret;
+}
+
+/**
  * @brief Close and push a batch of work into the pipeline.
  * 
  * @param [in]  ctx    The iterator context in which.
@@ -1467,13 +1595,14 @@ BENZINA_PLUGIN_HIDDEN int   nvdecodeRelease(NVDECODE_CTX* ctx){
  * @return 0 if successful; !0 otherwise.
  */
 
-BENZINA_PLUGIN_HIDDEN int   nvdecodePushBatch(NVDECODE_CTX* ctx, const void* token){
-	(void)ctx;
-	(void)token;
+BENZINA_PLUGIN_HIDDEN int   nvdecodeSubmitBatch        (NVDECODE_CTX* ctx, const void* token){
+	NVDECODE_BATCH* batch;
 	
-	do{
-		
-	}while(pthread_cond_wait(&ctx->master.cond, &ctx->lock) == 0);
+	pthread_mutex_lock(&ctx->lock);
+	nvdecodeMasterThrdGetSubmBt(ctx, &batch);
+	batch->token = token;
+	ctx->master.cntBatchSub++;
+	pthread_mutex_unlock(&ctx->lock);
 	
 	return 0;
 }
@@ -1489,9 +1618,10 @@ BENZINA_PLUGIN_HIDDEN int   nvdecodePushBatch(NVDECODE_CTX* ctx, const void* tok
  * @return 0 if successful; !0 otherwise.
  */
 
-BENZINA_PLUGIN_HIDDEN int   nvdecodePullBatch(NVDECODE_CTX* ctx, const void** token, double timeout){
+BENZINA_PLUGIN_HIDDEN int   nvdecodeWaitBatch(NVDECODE_CTX* ctx, const void** token, double timeout){
+	NVDECODE_BATCH* batch;
 	struct timespec ts;
-	int ret = 0;
+	int             ret = 0;
 	
 	*token = NULL;
 	if(timeout > 0){
@@ -1499,72 +1629,66 @@ BENZINA_PLUGIN_HIDDEN int   nvdecodePullBatch(NVDECODE_CTX* ctx, const void** to
 	}
 	
 	pthread_mutex_lock(&ctx->lock);
-	if(timeout > 0){
-		do{
-			
-		}while((ret = pthread_cond_timedwait(&ctx->master.cond, &ctx->lock, &ts)) == 0);
-	}else{
-		do{
-			
-		}while(pthread_cond_wait(&ctx->master.cond, &ctx->lock) == 0);
-	}
+	do{
+		if(ctx->master.cntBatchAck == ctx->master.cntBatchSub){
+			continue;
+		}
+		/* FIXME: Possible to "age out" with multiple callers! */
+		nvdecodeMasterThrdGetRetrBt(ctx, &batch);
+		if(ctx->master.cntCompleted >= batch->stopIndex){
+			*token = batch->token;
+			ctx->master.cntBatchAck++;
+			ret = 0;
+			break;
+		}
+	}while((ret = (timeout > 0 ? pthread_cond_timedwait(&ctx->master.cond, &ctx->lock, &ts) :
+	                             pthread_cond_wait     (&ctx->master.cond, &ctx->lock))) != 0);
 	pthread_mutex_unlock(&ctx->lock);
 	return ret;
 }
 
 /**
- * @brief Stop the pipeline.
+ * @brief Begin defining a new sample.
  * 
- * Work already in the pipeline completes, but no more may be submitted.
- * 
- * @param [in]  ctx
- * @return 0 if successful; !0 otherwise.
- */
-
-BENZINA_PLUGIN_HIDDEN int   nvdecodeStop(NVDECODE_CTX* ctx){
-	pthread_mutex_lock(&ctx->lock);
-	pthread_mutex_unlock(&ctx->lock);
-	return 0;
-}
-
-/**
- * @brief Is the iterator in an abnormal, error condition?
- * 
- * @param [in]  ctx
+ * @param [in]  ctx     
+ * @param [in]  i       Index into dataset.
+ * @param [in]  dstPtr  Destination Pointer.
  * @return 0 if no errors; !0 otherwise.
  */
 
-BENZINA_PLUGIN_HIDDEN int   nvdecodeHasError(NVDECODE_CTX* ctx){
+BENZINA_PLUGIN_HIDDEN int   nvdecodeDefineSample(NVDECODE_CTX* ctx, uint64_t i, void* dstPtr){
+	NVDECODE_RQ*    rq;
+	NVDECODE_BATCH* batch;
+	int ret = 0;
+	
 	pthread_mutex_lock(&ctx->lock);
+	nvdecodeMasterThrdGetSubmBt(ctx, &batch);
+	nvdecodeMasterThrdGetSubmRq(ctx, &rq);
+	if(batch->stopIndex-batch->startIndex >= ctx->batchSize){
+		ret = -1;
+	}else{
+		batch->stopIndex++;
+		rq->batch        = batch;
+		rq->datasetIndex = i;
+		rq->devPtr       = dstPtr;
+		ret = 0;
+	}
 	pthread_mutex_unlock(&ctx->lock);
-	return 0;
+	
+	return ret;
 }
 
 /**
- * @brief Begin defining a new job.
- * 
- * @param [in]  ctx  
- * @param [in]  i    Index into dataset.
- * @return 0 if no errors; !0 otherwise.
- */
-
-BENZINA_PLUGIN_HIDDEN int   nvdecodeDefineJob(NVDECODE_CTX* ctx, uint64_t i, void* dstPtr){
-	pthread_mutex_lock(&ctx->lock);
-	pthread_mutex_unlock(&ctx->lock);
-	(void)i;
-	(void)dstPtr;
-	return 0;
-}
-
-/**
- * @brief Submit current job.
+ * @brief Submit current sample.
  * 
  * @param [in]  ctx
  * @return 0 if no errors; !0 otherwise.
  */
 
-BENZINA_PLUGIN_HIDDEN int   nvdecodeSubmitJob(NVDECODE_CTX* ctx){
+BENZINA_PLUGIN_HIDDEN int   nvdecodeSubmitSample(NVDECODE_CTX* ctx){
 	pthread_mutex_lock(&ctx->lock);
+	ctx->master.cntSubmitted++;
+	pthread_cond_broadcast(&ctx->reader.cond);
 	pthread_mutex_unlock(&ctx->lock);
 	return 0;
 }
@@ -1584,13 +1708,13 @@ BENZINA_PLUGIN_HIDDEN int   nvdecodeSubmitJob(NVDECODE_CTX* ctx){
  * @return Zero if successful; Non-zero otherwise.
  */
 
-BENZINA_PLUGIN_HIDDEN int   nvdecodeSetBuffer(NVDECODE_CTX* ctx,
-                                              const char*   deviceId,
-                                              void*         outputPtr,
-                                              uint32_t      multibuffering,
-                                              uint32_t      batchSize,
-                                              uint32_t      outputHeight,
-                                              uint32_t      outputWidth){
+BENZINA_PLUGIN_HIDDEN int   nvdecodeSetBuffer               (NVDECODE_CTX* ctx,
+                                                             const char*   deviceId,
+                                                             void*         outputPtr,
+                                                             uint32_t      multibuffering,
+                                                             uint32_t      batchSize,
+                                                             uint32_t      outputHeight,
+                                                             uint32_t      outputWidth){
 	uint64_t i;
 	int ret;
 	
@@ -1703,13 +1827,11 @@ BENZINA_PLUGIN_PUBLIC BENZINA_PLUGIN_NVDECODE_VTABLE VTABLE = {
 	.init                     = (void*)nvdecodeInit,
 	.retain                   = (void*)nvdecodeRetain,
 	.release                  = (void*)nvdecodeRelease,
-	.pushBatch                = (void*)nvdecodePushBatch,
-	.pullBatch                = (void*)nvdecodePullBatch,
-	.stop                     = (void*)nvdecodeStop,
-	.hasError                 = (void*)nvdecodeHasError,
-	
-	.defineJob                = (void*)nvdecodeDefineJob,
-	.submitJob                = (void*)nvdecodeSubmitJob,
+	.defineBatch              = (void*)nvdecodeDefineBatch,
+	.submitBatch              = (void*)nvdecodeSubmitBatch,
+	.waitBatch                = (void*)nvdecodeWaitBatch,
+	.defineSample             = (void*)nvdecodeDefineSample,
+	.submitSample             = (void*)nvdecodeSubmitSample,
 	
 	.setBuffer                = (void*)nvdecodeSetBuffer,
 	

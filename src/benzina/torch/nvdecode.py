@@ -5,7 +5,7 @@ import torchvision
 
 from torch.utils.data import (Dataset, DataLoader)
 from benzina.native   import (BenzinaDatasetCore,
-                              BenzinaLoaderIterCore)
+                              BenzinaPluginNvdecodeCore)
 
 
 """
@@ -27,7 +27,7 @@ BenzinaLoader:
 		- Sampler
 		- The ID of one GPU device. (In a distant future, a CPU backend might
 		  exist too.)
-	- Responsible for creating an NVDECLoaderIter at every epoch.
+	- Responsible for creating an BenzinaLoaderIter at every epoch.
 
 BenzinaLoaderIter:
 	- Responsible for allocating suitable N-buffer
@@ -88,7 +88,6 @@ class BenzinaLoader(DataLoader):
 		                 drop_last      = drop_last,
 		                 timeout        = float(timeout),
 		                 worker_init_fn = None)
-		
 		self.device_id      = device_id or 0
 		self.shape          = shape     or dataset.shape
 		self.multibuffering = multibuffering
@@ -97,171 +96,103 @@ class BenzinaLoader(DataLoader):
 		return BenzinaLoaderIter(self)
 
 
-class SynchronousPipelineIter(object):
-	def __init__(self, stages=3):
-		self._stages      = stages
-		self._insnFetched = 0
-		self._insnRetired = 0
-	
-	def __iter__(self):
-		return self
-	
-	def __next__(self):
-		try:                  self.pushFrontend(self.pullFrontEnd())
-		except StopIteration: self.doomFrontend()
-		return                self.pushBackEnd (self.pullBackEnd ())
-	
-	@property
-	def doomed(self):
-		return hasattr(self, "_insnDoomed")
-	
-	@property
-	def dead(self):
-		return self.doomed and self._insnRetired >= self._insnDoomed
-	
-	def pullFrontend(self):
-		pass
-	
-	def pushFrontend(self, *args, **kwargs):
-		#
-		# When subclassing, it's critical to do the super() call *AFTER* the
-		# actual work is done.
-		#
-		if self.doomed: return
-		self._insnFetched += 1
-		while self._insnFetched<self._stages:
-			self.pushFrontend(self.pullFrontEnd())
-	
-	def pullBackend (self):
-		if self.dead:
-			raise StopIteration
-		else:
-			self._insnRetired += 1
-	
-	def pushBackend (self, *args, **kwargs):
-		pass
-	
-	def doomFrontend(self):
-		if not self.doomed:
-			self._insnDoomed = self._insnFetched
-
-
-class BenzinaLoaderIter(SynchronousPipelineIter):
+class BenzinaLoaderIter(object):
 	def __init__(self, loader):
 		self.dataset        = loader.dataset
 		self.multibuffering = loader.multibuffering
 		self.shape          = loader.shape
-		self.deviceId       = loader.device_id
-		if self.deviceId is None:
-			self.deviceId = torch.cuda.current_device()
-		self.sampleIter     = enumerate(loader.batch_sampler)
+		self.device_id      = loader.device_id
+		if self.device_id is None:
+			self.device_id = torch.cuda.current_device()
+		self.batch_iter     = iter(loader.batch_sampler)
 		self.length         = len(loader)
 		self.multibuffer    = None
-		self._core          = None
-		# Will only become known after first next(self.samplerIter) call.
-		self.batchSize      = None
-		
-		super().__init__(self.multibuffering)
+		self.core           = None
+		self.batch_size     = None
+		self._si            = StopIteration
+		self.pushed         = 0
+		self.pulled         = 0
+	
+	def __iter__(self):
+		return self
 	
 	def __len__(self):
 		return self.length
 	
-	def pullFrontend(self):
-		if self.doomed: raise  StopIteration
-		else:           return next(self.sample_iter)
+	def __next__(self):
+		if self.core_needs_init():
+			self.pull_first_batch()
+			self.init_core()
+			self.push_first_batch()
+			self.fill_core()
+			return self.pull()
+		else:
+			self.fill_one_batch()
+			return self.pull()
 	
-	def pushFrontend(self, i_indices):
-		if self.doomed: return
-		if not self._core:
-			self._init(i_indices[1])
-		self._core.push(**self.getJob(i_indices))
-		super().pushFrontend()
+	def core_needs_init(self):
+		return self.core is None
 	
-	def pullBackend (self):
-		if self.dead: raise StopIteration
-		batch = self._core.pull()
-		super().pullBackend()
-		return batch
-	
-	def pushBackend (self, batch):
-		return batch
-	
-	def doomFrontend(self):
-		if self.doomed: return
-		super().doomFrontend()
-		self.sampleIter = None
-	
-	def getJob      (self, i_indices):
-		i, indices = i_indices
+	def pull_first_batch(self):
+		self.first_batch = next(self.batch_iter)
 		
-		batchSize  = len(indices)
-		buffer     = self.multibuffer[i % self.multibuffering][:batchSize]
-		
-		intIndices = []
-		offsets    = []
-		lengths    = []
-		cudaPtrs   = []
-		for idx in indices:
-			offset, length = self.dataset[idx]
-			cudaPtr        = buffer[idx].data_ptr()
-			intIndices.append(int(idx))
-			offsets   .append(offset)
-			lengths   .append(length)
-			cudaPtrs  .append(cudaPtr)
-		
-		return {
-			"batchSize":  batchSize,
-			"indices":    np.array(intIndices, dtype=np.uint64).tobytes(),
-			"offsets":    np.array(offsets,    dtype=np.uint64).tobytes(),
-			"lengths":    np.array(lengths,    dtype=np.uint64).tobytes(),
-			"cudaPtrs":   np.array(cudaPtrs,   dtype=np.uint64).tobytes(),
-			"H":          np.eye(3, dtype=np.float32)                    \
-			                [np.newaxis, ...]                            \
-			                .repeat(batchSize, axis=0)                   \
-			                .copy("C")                                   \
-			                .tobytes(),
-			"C":          np.eye(3, dtype=np.float32)                    \
-			                [np.newaxis, ...]                            \
-			                .repeat(batchSize, axis=0)                   \
-			                .copy("C")                                   \
-			                .tobytes(),
-			"B":          np.zeros((batchSize, 3), dtype=np.float32)     \
-			                .copy("C")                                   \
-			                .tobytes(),
-			"aux":        (buffer,),
-		}
+	def init_core(self):
+		device_id        = "cuda:{}".format(self.device_id)
+		self.batch_size  = len(self.first_batch)
+		self.multibuffer = torch.zeros([self.multibuffering,
+		                                self.batch_size,
+		                                3,
+		                                self.shape[0],
+		                                self.shape[1]],
+		                               dtype  = torch.float32,
+		                               device = torch.device(self.deviceId))
+		self.core        = BenzinaPluginNvdecodeCore(
+		                       self.dataset,
+		                       device_id,
+		                       self.multibuffer.data_ptr(),
+		                       self.batch_size,
+		                       self.multibuffering,
+		                       self.shape[0],
+		                       self.shape[1],
+		                   )
 	
-	def shutdown    (self):
-		if not self.doomed:
-			self.doomFrontend()
-		
-		if self._core:
-			self._core.shutdown()
-			self._core = None
-			self.multibuffer = None
+	def push_first_batch(self):
+		self.push(self.__dict__.pop("first_batch"))
 	
-	def _init       (self, indices):
-		"""Initialize C Core."""
-		self.batchSize   = len(indices)
-		self.multibuffer = torch.ones([self.multibuffering,
-		                               self.batchSize,
-		                               3,
-		                               self.shape[0],
-		                               self.shape[1]],
-		                              dtype  = torch.float32,
-		                              device = torch.device(self.deviceId))
+	def fill_core(self):
+		for i in range(self.multibuffering-1):
+			try:
+				self.push(next(self.batch_iter))
+			except StopIteration as self._si:
+				pass
+	
+	def push(self, batch):
+		assert(len(batch) <= self.batch_size)
+		buffer = self.multibuffer[self.pushed % self.multibuffering]
 		
-		#
-		# The core needs to know:
-		#   - BenzinaDatasetCore
-		#   - Device
-		#   - Multibuffering depth
-		#   - Maximum batch size
-		#   - Target image shape
-		#
-		self._core = BenzinaLoaderIterCore(self.dataset._core,
-		                                   self.deviceId,
-		                                   self.multibuffering,
-		                                   self.batchSize,
-		                                   self.shape[0],
-		                                   self.shape[1])
+		self.core.defineBatch()
+		for i,s in enumerate(batch):
+			self.core.defineSample     (int(s), buffer[i].data_ptr())
+			self.core.setHomography    (1.0, 0.0, 0.0,
+			                            0.0, 1.0, 0.0,
+			                            0.0, 0.0, 1.0)
+			self.core.setBias          (0.0, 0.0, 0.0)
+			self.core.setScale         (1.0, 1.0, 1.0)
+			self.core.setOOBColor      (0.0, 0.0, 0.0)
+			self.core.selectColorMatrix(0)
+			self.core.submitSample()
+		self.core.submitBatch(buffer)
+		self.pushed += 1
+	
+	def pull(self):
+		if self.pulled >= self.pushed:
+			raise self._si
+		self.pulled += 1
+		return self.core.pull(True, timeout=self.timeout)
+	
+	def fill_one_batch(self):
+		try:
+			self.push(next(self.batch_iter))
+		except StopIteration as self._si:
+			pass
+	

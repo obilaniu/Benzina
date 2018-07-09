@@ -30,7 +30,9 @@ static PyObject* BenzinaDatasetCore_new      (PyTypeObject* type,
                                               PyObject*     kwargs){
 	BenzinaDatasetCore* self = (BenzinaDatasetCore*)type->tp_alloc(type, 0);
 	
-	self->dataset = NULL;
+	if(self){
+		self->dataset = NULL;
+	}
 	
 	return (PyObject*)self;
 }

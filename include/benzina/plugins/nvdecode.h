@@ -38,19 +38,19 @@ typedef struct BENZINA_PLUGIN_NVDECODE_VTABLE BENZINA_PLUGIN_NVDECODE_VTABLE;
 
 /* Plugin Function Table */
 struct BENZINA_PLUGIN_NVDECODE_VTABLE{
-	int (*alloc)       (void** ctx, const BENZINA_DATASET* dataset);
-	int (*init)        (void*  ctx);
-	int (*retain)      (void*  ctx);
-	int (*release)     (void*  ctx);
-	int (*pushBatch)   (void*  ctx, const void*  tokenIn);
-	int (*pullBatch)   (void*  ctx, const void** tokenOut, double timeout);
-	int (*stop)        (void*  ctx);
-	int (*hasError)    (void*  ctx);
+	int (*alloc)                   (void** ctx, const BENZINA_DATASET* dataset);
+	int (*init)                    (void*  ctx);
+	int (*retain)                  (void*  ctx);
+	int (*release)                 (void*  ctx);
+	int (*defineBatch)             (void*  ctx);
+	int (*submitBatch)             (void*  ctx, const void*  tokenIn);
+	int (*waitBatch)               (void*  ctx, const void** tokenOut, int block, double timeout);
 	
-	int (*defineJob)   (void*  ctx, uint64_t datasetIndex, void* dstPtr);
-	int (*submitJob)   (void*  ctx);
+	int (*defineSample)            (void*  ctx, uint64_t datasetIndex, void* dstPtr);
+	int (*submitSample)            (void*  ctx);
 	
-	int (*setBuffer)   (void*  ctx, const char* deviceId,
+	int (*setBuffer)               (void*  ctx,
+	                                const char* deviceId,
 	                                void*       devicePtr,
 	                                uint32_t    multibuffering,
 	                                uint32_t    batchSize,
@@ -62,11 +62,11 @@ struct BENZINA_PLUGIN_NVDECODE_VTABLE{
 	int (*setDefaultOOBColor)      (void*  ctx, const float* OOB);
 	int (*selectDefaultColorMatrix)(void*  ctx, uint32_t     matrix);
 	
-	int (*setHomography)    (void*  ctx, const float* H);
-	int (*setBias)          (void*  ctx, const float* B);
-	int (*setScale)         (void*  ctx, const float* S);
-	int (*setOOBColor)      (void*  ctx, const float* OOB);
-	int (*selectColorMatrix)(void*  ctx, uint32_t     matrix);
+	int (*setHomography)           (void*  ctx, const float* H);
+	int (*setBias)                 (void*  ctx, const float* B);
+	int (*setScale)                (void*  ctx, const float* S);
+	int (*setOOBColor)             (void*  ctx, const float* OOB);
+	int (*selectColorMatrix)       (void*  ctx, uint32_t     matrix);
 };
 
 
