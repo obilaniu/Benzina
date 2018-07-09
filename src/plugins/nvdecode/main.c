@@ -796,7 +796,7 @@ BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdContinue (NVDECODE_CTX* ctx){
 	 * initialized.
 	 */
 	
-	nvdecodeReaderThrdSetStatus(ctx, THRD_EXITING);
+	nvdecodeFeederThrdSetStatus(ctx, THRD_EXITING);
 	nvdecodeMaybeReapMallocs   (ctx);
 	nvdecodeMaybeReapDecoder   (ctx);
 	nvdecodeFeederThrdSetStatus(ctx, THRD_NOT_RUNNING);
