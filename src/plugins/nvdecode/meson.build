@@ -23,7 +23,7 @@
 
 libbenzina_plugin_nvdecodeCudaSrcs = files('kernels.cu')
 nvcc_compile                       = generator     (nvcc,
-                                                    arguments       : pluginCDefs+['@INPUT@', '-I'+benzinaIncsDir, '-Xcompiler', '-fPIC', '-c', '-o', '@OUTPUT@'],
+                                                    arguments       : pluginCDefs+['@INPUT@', '-I'+benzinaIncsDir, '-Xcompiler', '-fPIC', '--use_fast_math', '-O', '-Xptxas', '-O3', '-c', '-o', '@OUTPUT@'],
                                                     output          : ['@BASENAME@.o'])
 libbenzina_plugin_nvdecodeCudaObjs = nvcc_compile.process(libbenzina_plugin_nvdecodeCudaSrcs)
 libbenzina_plugin_nvdecodeCudaCmd  = [nvcc, '-Xcompiler', '-fPIC', '@INPUT@', '-dlink', '-o', '@OUTPUT@']

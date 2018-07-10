@@ -12,8 +12,12 @@
 
 /* CUDA kernels */
 
-BENZINA_PLUGIN_STATIC __device__ uchar3 ycbcr2rgb(uchar3 yuv, unsigned colorMatrix){
-	unsigned char Y = yuv.x, Cb = yuv.y, Cr = yuv.z, R, G, B;
+/**
+ * YCbCr to RGB colorspace conversion kernel
+ */
+
+BENZINA_PLUGIN_STATIC __device__ float3 ycbcr2rgb(float3 yuv, unsigned colorMatrix){
+	float Y = yuv.x, Cb = yuv.y, Cr = yuv.z, R, G, B;
 	switch(colorMatrix){
 		case 0:
 			/* See ITU-T Rec. T.871 (JFIF), Section 7 */
@@ -28,7 +32,7 @@ BENZINA_PLUGIN_STATIC __device__ uchar3 ycbcr2rgb(uchar3 yuv, unsigned colorMatr
 		break;
 	}
 	
-	return make_uchar3(R,G,B);
+	return make_float3(R,G,B);
 }
 
 /**
@@ -37,41 +41,41 @@ BENZINA_PLUGIN_STATIC __device__ uchar3 ycbcr2rgb(uchar3 yuv, unsigned colorMatr
 
 BENZINA_PLUGIN_HIDDEN __global__ void
 __launch_bounds__(1024, 2)
-nvdecodePostprocKernel(void*    dstPtr,
-                       unsigned dstH,
-                       unsigned dstW,
-                       float    OOB0,
-                       float    OOB1,
-                       float    OOB2,
-                       float    B0,
-                       float    B1,
-                       float    B2,
-                       float    S0,
-                       float    S1,
-                       float    S2,
-                       float    H00,
-                       float    H01,
-                       float    H02,
-                       float    H10,
-                       float    H11,
-                       float    H12,
-                       float    H20,
-                       float    H21,
-                       float    H22,
-                       unsigned colorMatrix,
-                       void*    srcPtr,
-                       unsigned srcPitch,
-                       unsigned srcH,
-                       unsigned srcW){
+nvdecodePostprocKernel(void* __restrict__       dstPtr,
+                       unsigned                 dstH,
+                       unsigned                 dstW,
+                       float                    OOB0,
+                       float                    OOB1,
+                       float                    OOB2,
+                       float                    B0,
+                       float                    B1,
+                       float                    B2,
+                       float                    S0,
+                       float                    S1,
+                       float                    S2,
+                       float                    H00,
+                       float                    H01,
+                       float                    H02,
+                       float                    H10,
+                       float                    H11,
+                       float                    H12,
+                       float                    H20,
+                       float                    H21,
+                       float                    H22,
+                       unsigned                 colorMatrix,
+                       const void* __restrict__ srcPtr,
+                       unsigned                 srcPitch,
+                       unsigned                 srcH,
+                       unsigned                 srcW){
 	/* Compute Destination Coordinates */
 	const unsigned x = blockDim.x*blockIdx.x + threadIdx.x;
 	const unsigned y = blockDim.y*blockIdx.y + threadIdx.y;
 	if(x >= dstW || y >= dstH){return;}
 	
 	/* Compute Destination R,G,B Pointers */
-	float* const dstPtr0 = (float*)dstPtr + 0*dstH*dstW + y*dstW + x;
-	float* const dstPtr1 = (float*)dstPtr + 1*dstH*dstW + y*dstW + x;
-	float* const dstPtr2 = (float*)dstPtr + 2*dstH*dstW + y*dstW + x;
+	float* const __restrict__ dstPtr0 = (float*)dstPtr + 0*dstH*dstW + y*dstW + x;
+	float* const __restrict__ dstPtr1 = (float*)dstPtr + 1*dstH*dstW + y*dstW + x;
+	float* const __restrict__ dstPtr2 = (float*)dstPtr + 2*dstH*dstW + y*dstW + x;
 	
 	/* Compute Source Coordinates in homogeneous coordinates, then prespective-divide: X = Hx */
 	const float _X = H00*x + H01*y + H02;
@@ -129,8 +133,8 @@ nvdecodePostprocKernel(void*    dstPtr,
 	
 	const float    Xf   = X-clX0,            Yf   = Y-clY0;
 	
-	#define LUMAAT(X,Y)     ((uchar1*)((uchar1*)srcPtr + (Y)       *srcPitch +   (X)))
-	#define CHROMAAT(X,Y)   ((uchar2*)((uchar1*)srcPtr + (srcH+(Y))*srcPitch + 2*(X)))
+	#define LUMAAT(X,Y)     ((const uchar1*)((const uchar1*)srcPtr + (Y)       *srcPitch +   (X)))
+	#define CHROMAAT(X,Y)   ((const uchar2*)((const uchar1*)srcPtr + (srcH+(Y))*srcPitch + 2*(X)))
 	const uchar1   vl0  = *LUMAAT  (clX0, clY0);
 	const uchar1   vl1  = *LUMAAT  (clX1, clY1);
 	const uchar1   vl2  = *LUMAAT  (clX2, clY2);
@@ -146,10 +150,10 @@ nvdecodePostprocKernel(void*    dstPtr,
 	 * YUV -> RGB colorspace conversion of the 4 sample points.
 	 */
 	
-	const uchar3   v0   = ycbcr2rgb(make_uchar3(vl0.x, vc0.x, vc0.y), colorMatrix);
-	const uchar3   v1   = ycbcr2rgb(make_uchar3(vl1.x, vc1.x, vc1.y), colorMatrix);
-	const uchar3   v2   = ycbcr2rgb(make_uchar3(vl2.x, vc2.x, vc2.y), colorMatrix);
-	const uchar3   v3   = ycbcr2rgb(make_uchar3(vl3.x, vc3.x, vc3.y), colorMatrix);
+	const float3   v0   = ycbcr2rgb(make_float3(vl0.x, vc0.x, vc0.y), colorMatrix);
+	const float3   v1   = ycbcr2rgb(make_float3(vl1.x, vc1.x, vc1.y), colorMatrix);
+	const float3   v2   = ycbcr2rgb(make_float3(vl2.x, vc2.x, vc2.y), colorMatrix);
+	const float3   v3   = ycbcr2rgb(make_float3(vl3.x, vc3.x, vc3.y), colorMatrix);
 	
 	/**
 	 * Linear Interpolation between the sample points.
