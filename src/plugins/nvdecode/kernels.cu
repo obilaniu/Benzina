@@ -178,7 +178,7 @@ nvdecodePostprocKernel(void* __restrict__       dstPtr,
 #endif
 
 BENZINA_PLUGIN_STATIC __global__ void
-__launch_bounds__(1024, 3)
+__launch_bounds__(1024, 2)
 nvdecodePostprocKernelTex2D(void* __restrict__       dstPtr,
                             unsigned                 dstH,
                             unsigned                 dstW,

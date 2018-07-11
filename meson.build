@@ -1,6 +1,6 @@
 project('Benzina', 'c', 'cpp',
         version:                 '0.0.0',
-        meson_version:           '>=0.45',
+        meson_version:           '>=0.46',
         license:                 'MIT',
         default_options:         [
             'c_std=gnu99',
@@ -20,6 +20,7 @@ threadsDep  = dependency('threads')
 libm        = cc.find_library('m',    required: false)
 libdl       = cc.find_library('dl',   required: true)
 librt       = cc.find_library('rt',   required: true)
+
 
 #
 # Relax a bit the warning flags on GCC & Clang. -Wpedantic is very noisy.
@@ -46,6 +47,20 @@ libcuda      = cc.find_library('cuda',          required: true, dirs: cudaLibDir
 libcudart    = cc.find_library(CUDA_RUNTIME,    required: true, dirs: cudaLibDirs)
 libcudadevrt = cc.find_library('cudadevrt',     required: true, dirs: cudaLibDirs)
 nvcc         = find_program(join_paths(CUDA_HOME, 'bin', 'nvcc'), required: true)
+CUDA_ARCH    = get_option('cuda_arch')
+pymodule     = import('python')
+python       = pymodule.find_installation()
+detectGPUs   = run_command(python,
+                           [files(join_paths('scripts', 'detectgpus.py')), nvcc, CUDA_ARCH])
+if detectGPUs.returncode() != 0
+  warning('GPU detection failed:')
+  warning(detectGPUs.stdout())
+  warning(detectGPUs.stderr())
+  cudaGenCodeFlags = []
+else
+  message('Building for CUDA architectures ['+detectGPUs.stderr()+']')
+  cudaGenCodeFlags = detectGPUs.stdout().split()
+endif
 
 
 #
