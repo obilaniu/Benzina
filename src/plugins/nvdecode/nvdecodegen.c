@@ -3,8 +3,6 @@
 #define __HAVE_FLOAT128 0
 #include <cuda.h>
 #include <dlfcn.h>
-#include <dynlink_cuviddec.h>
-#include <dynlink_nvcuvid.h>
 #include <linux/limits.h>
 #include <pthread.h>
 #include <stddef.h>
@@ -16,6 +14,9 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
+
+#include "cuviddec.h"
+#include "nvcuvid.h"
 
 
 
@@ -38,26 +39,14 @@ struct UNIVERSE{
 	CUcontext                 cuCtx;
 	
 	/* NVDECODE */
-	void*                     libnvcuvid;
-	#define USE_SYMBOL(fn) t ## fn* fn
-	USE_SYMBOL               (cuvidCreateVideoParser);
-	USE_SYMBOL               (cuvidParseVideoData);
-	USE_SYMBOL               (cuvidDestroyVideoParser);
-	USE_SYMBOL               (cuvidGetDecoderCaps);
-	USE_SYMBOL               (cuvidCreateDecoder);
-	USE_SYMBOL               (cuvidDestroyDecoder);
-	USE_SYMBOL               (cuvidDecodePicture);
-	USE_SYMBOL               (cuvidMapVideoFrame64);
-	USE_SYMBOL               (cuvidUnmapVideoFrame64);
-	#undef USE_SYMBOL
-	CUvideodecoder           decoder;
-	CUVIDDECODECREATEINFO    decoderInfo;
-	CUvideoparser            parser;
-	CUVIDPARSERPARAMS        parserParams;
+	CUvideodecoder            decoder;
+	CUVIDDECODECREATEINFO     decoderInfo;
+	CUvideoparser             parser;
+	CUVIDPARSERPARAMS         parserParams;
 	
 	/* Processing */
-	long                     numProcessedImages;
-	uint64_t*                byteOffsets;
+	long                      numProcessedImages;
+	uint64_t*                 byteOffsets;
 };
 static UNIVERSE u;
 
@@ -196,23 +185,6 @@ static int   initCUDA(UNIVERSE* u){
 		goto exit_cuCtxSetCurrent;
 	}
 	
-	u->libnvcuvid = dlopen("libnvcuvid.so.1", RTLD_LAZY);
-	if(!u->libnvcuvid){
-		printf("Failed to dynamically load libnvcuvid.so.1!\n");
-		goto exit_dlopennvcuvid;
-	}
-	#define READ_SYMBOL(fn)  u->fn = *(t ## fn*)dlsym(u->libnvcuvid, #fn)
-	READ_SYMBOL(cuvidCreateVideoParser);
-	READ_SYMBOL(cuvidParseVideoData);
-	READ_SYMBOL(cuvidDestroyVideoParser);
-	READ_SYMBOL(cuvidGetDecoderCaps);
-	READ_SYMBOL(cuvidCreateDecoder);
-	READ_SYMBOL(cuvidDestroyDecoder);
-	READ_SYMBOL(cuvidDecodePicture);
-	READ_SYMBOL(cuvidMapVideoFrame64);
-	READ_SYMBOL(cuvidUnmapVideoFrame64);
-	#undef READ_SYMBOL
-	
 	memset(&u->decoderInfo, 0, sizeof(u->decoderInfo));
 	u->decoderInfo.ulWidth             = w;
 	u->decoderInfo.ulHeight            = h;
@@ -236,7 +208,7 @@ static int   initCUDA(UNIVERSE* u){
 	u->decoderInfo.target_rect.top     = 0;
 	u->decoderInfo.target_rect.right   = u->decoderInfo.ulTargetWidth;
 	u->decoderInfo.target_rect.bottom  = u->decoderInfo.ulTargetHeight;
-	result = u->cuvidCreateDecoder(&u->decoder, &u->decoderInfo);
+	result = cuvidCreateDecoder(&u->decoder, &u->decoderInfo);
 	if(result != CUDA_SUCCESS){
 		printf("Failed to create NVDEC decoder (%d)!\n", (int)result);
 		goto exit_cuvidCreateDecoder;
@@ -252,7 +224,7 @@ static int   initCUDA(UNIVERSE* u){
 	u->parserParams.pfnSequenceCallback    = (PFNVIDSEQUENCECALLBACK)sequenceCb;
 	u->parserParams.pfnDecodePicture       = (PFNVIDDECODECALLBACK)  decodeCb;
 	u->parserParams.pfnDisplayPicture      = (PFNVIDDISPLAYCALLBACK) displayCb;
-	result = u->cuvidCreateVideoParser(&u->parser, &u->parserParams);
+	result = cuvidCreateVideoParser(&u->parser, &u->parserParams);
 	if(result != CUDA_SUCCESS){
 		printf("Failed to create CUVID video parser (%d)!\n", (int)result);
 		goto exit_cuvidCreateVideoParser;
@@ -263,10 +235,8 @@ static int   initCUDA(UNIVERSE* u){
 	
 	
 	exit_cuvidCreateVideoParser:
-	u->cuvidDestroyDecoder(u->decoder);
+	cuvidDestroyDecoder(u->decoder);
 	exit_cuvidCreateDecoder:
-	dlclose(u->libnvcuvid);
-	exit_dlopennvcuvid:
 	exit_cuCtxSetCurrent:
 	cuCtxDestroy(u->cuCtx);
 	exit_cuCtxCreate:
@@ -390,7 +360,7 @@ static int   run(UNIVERSE* u){
 		packet.payload_size = u->fileH264LengthsData[i];
 		packet.payload      = p;
 		packet.timestamp    = 0;
-		result = u->cuvidParseVideoData(u->parser, &packet);
+		result = cuvidParseVideoData(u->parser, &packet);
 		if(result != CUDA_SUCCESS){
 			goto exit_cuvidParseVideoData;
 		}
@@ -399,7 +369,7 @@ static int   run(UNIVERSE* u){
 	packet.payload_size = 0;
 	packet.payload      = 0;
 	packet.timestamp    = 0;
-	result = u->cuvidParseVideoData(u->parser, &packet);
+	result = cuvidParseVideoData(u->parser, &packet);
 	if(result != CUDA_SUCCESS){
 		goto exit_cuvidParseVideoData;
 	}
