@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-import threading
 import torch
-import torchvision
 
 from torch.utils.data import (Dataset, DataLoader)
 from benzina.native   import (BenzinaDatasetCore,
