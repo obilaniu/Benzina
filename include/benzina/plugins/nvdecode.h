@@ -8,19 +8,23 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <errno.h>
 #include "benzina/benzina.h"
 
 
 
 /* Defines */
 #define BENZINA_DATALOADER_ITER_SUCCESS       0
-#define BENZINA_DATALOADER_ITER_FAILED        1
-#define BENZINA_DATALOADER_ITER_INITFAILED    2
-#define BENZINA_DATALOADER_ITER_ALREADYINITED 3
-#define BENZINA_DATALOADER_ITER_INVALIDARGS   4
-#define BENZINA_DATALOADER_ITER_INTERNAL      5
-#define BENZINA_DATALOADER_ITER_OVERFLOW      6
-#define BENZINA_DATALOADER_ITER_STOPPED       7
+#define BENZINA_DATALOADER_ITER_INTR          EINTR
+#define BENZINA_DATALOADER_ITER_IO            EIO
+#define BENZINA_DATALOADER_ITER_NOMEM         ENOMEM
+#define BENZINA_DATALOADER_ITER_FAILED        10001
+#define BENZINA_DATALOADER_ITER_INITFAILED    10002
+#define BENZINA_DATALOADER_ITER_ALREADYINITED 10003
+#define BENZINA_DATALOADER_ITER_INVALIDARGS   10004
+#define BENZINA_DATALOADER_ITER_INTERNAL      10005
+#define BENZINA_DATALOADER_ITER_OVERFLOW      10006
+#define BENZINA_DATALOADER_ITER_STOPPED       10007
 
 
 
@@ -45,9 +49,14 @@ struct BENZINA_PLUGIN_NVDECODE_VTABLE{
 	int (*defineBatch)             (void*  ctx);
 	int (*submitBatch)             (void*  ctx, const void*  tokenIn);
 	int (*waitBatch)               (void*  ctx, const void** tokenOut, int block, double timeout);
+	int (*waitToken)               (void*  ctx, const void** tokenOut);
 	
 	int (*defineSample)            (void*  ctx, uint64_t datasetIndex, void* dstPtr);
 	int (*submitSample)            (void*  ctx);
+	
+	int (*getNumPushes)            (void*  ctx, uint64_t* out);
+	int (*getNumPulls)             (void*  ctx, uint64_t* out);
+	int (*getMultibuffering)       (void*  ctx, uint64_t* out);
 	
 	int (*setBuffer)               (void*  ctx,
 	                                const char* deviceId,

@@ -102,18 +102,18 @@ class BenzinaLoaderIter(object):
 		self.dataset        = loader.dataset
 		self.multibuffering = loader.multibuffering
 		self.shape          = loader.shape
-		self.device_id      = loader.device_id
 		self.timeout        = loader.timeout
-		if self.device_id is None:
-			self.device_id = torch.cuda.current_device()
+		if   loader.device_id is None or loader.device_id == "cuda":
+			self.device_id = torch.device(torch.cuda.current_device())
+		elif isinstance(loader.device_id, (str, int)):
+			self.device_id = torch.device(loader.device_id)
+		else:
+			self.device_id = loader.device_id
 		self.batch_iter     = iter(loader.batch_sampler)
 		self.length         = len(loader)
 		self.multibuffer    = None
 		self.core           = None
 		self.batch_size     = None
-		self._si            = StopIteration
-		self.pushed         = 0
-		self.pulled         = 0
 	
 	def __iter__(self):
 		return self
@@ -127,10 +127,9 @@ class BenzinaLoaderIter(object):
 			self.init_core()
 			self.push_first_batch()
 			self.fill_core()
-			return self.pull()
 		else:
 			self.fill_one_batch()
-			return self.pull()
+		return self.pull()
 	
 	def core_needs_init(self):
 		return self.core is None
@@ -139,7 +138,6 @@ class BenzinaLoaderIter(object):
 		self.first_batch = next(self.batch_iter)
 		
 	def init_core(self):
-		device_id        = "cuda:{}".format(self.device_id)
 		self.batch_size  = len(self.first_batch)
 		self.multibuffer = torch.zeros([self.multibuffering,
 		                                self.batch_size,
@@ -147,10 +145,11 @@ class BenzinaLoaderIter(object):
 		                                self.shape[0],
 		                                self.shape[1]],
 		                               dtype  = torch.float32,
-		                               device = torch.device(device_id))
+		                               device = self.device_id)
 		self.core        = BenzinaPluginNvdecodeCore(
 		                       self.dataset._core,
-		                       device_id,
+		                       str(self.device_id),
+		                       self.multibuffer,
 		                       self.multibuffer.data_ptr(),
 		                       self.batch_size,
 		                       self.multibuffering,
@@ -162,19 +161,20 @@ class BenzinaLoaderIter(object):
 		self.push(self.__dict__.pop("first_batch"))
 	
 	def fill_core(self):
-		for i in range(self.multibuffering-1):
-			try:
+		try:
+			while self.core.pushes < self.core.multibuffering:
 				self.push(next(self.batch_iter))
-			except StopIteration as si:
-				self._si = si
+		except StopIteration: pass
 	
 	def push(self, batch):
 		assert(len(batch) <= self.batch_size)
-		buffer = self.multibuffer[self.pushed % self.multibuffering]
+		buffer = self.multibuffer[self.core.pushes % self.core.multibuffering, :len(batch)]
 		
 		self.core.defineBatch()
-		for i,s in enumerate(batch):
-			self.core.defineSample     (int(s), buffer[i].data_ptr())
+		for s,b in zip(batch, buffer):
+			s = int(s)
+			# d = self.dataset[s]  # FIXME: Get useful transforms out of this!
+			self.core.defineSample     (s, b.data_ptr())
 			self.core.setHomography    (1.0, 0.0, 0.0,
 			                            0.0, 1.0, 0.0,
 			                            0.0, 0.0, 1.0)
@@ -183,20 +183,15 @@ class BenzinaLoaderIter(object):
 			self.core.setOOBColor      (0.0, 0.0, 0.0)
 			self.core.selectColorMatrix(0)
 			self.core.submitSample()
-		token = buffer[:len(batch)]
-		self.core.submitBatch(token)
-		self.pushed += 1
+		self.core.submitBatch(buffer)
 	
 	def pull(self):
-		if self.pulled >= self.pushed:
-			raise self._si
-		self.pulled += 1
-		token = self.core.waitBatch(True, timeout=self.timeout)
-		return token
+		if self.core.pulls >= self.core.pushes:
+			raise StopIteration
+		return self.core.waitBatch(block=True, timeout=self.timeout)
 	
 	def fill_one_batch(self):
 		try:
 			self.push(next(self.batch_iter))
-		except StopIteration as si:
-			self._si = si
+		except StopIteration: pass
 	

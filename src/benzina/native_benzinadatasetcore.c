@@ -18,6 +18,7 @@
 
 static void      BenzinaDatasetCore_dealloc  (BenzinaDatasetCore* self){
 	benzinaDatasetFree(self->dataset);
+	self->dataset = NULL;
 	Py_TYPE(self)->tp_free(self);
 }
 

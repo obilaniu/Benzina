@@ -18,10 +18,16 @@
  */
 
 static void      BenzinaPluginNvdecodeCore_dealloc                 (BenzinaPluginNvdecodeCore* self){
+	void* token;
+	
+	while(self->v->waitToken(self->ctx, &token) == 0){
+		Py_CLEAR(token);
+	}
 	self->v->release(self->ctx);
+	
+	Py_CLEAR(self->datasetCore);
+	Py_CLEAR(self->bufferObj);
 	dlclose(self->pluginHandle);
-	Py_XDECREF(self->datasetCore);
-	self->datasetCore  = NULL;
 	self->pluginHandle = NULL;
 	self->v            = NULL;
 	self->ctx          = NULL;
@@ -73,7 +79,8 @@ static int       BenzinaPluginNvdecodeCore_init                    (BenzinaPlugi
 	void*               ctx            = NULL;
 	BenzinaDatasetCore* datasetCore    = NULL;
 	const char*         deviceId       = "cuda:0";
-	unsigned long long  devicePtr      = 0;
+	PyObject*           bufferObj      = NULL;
+	unsigned long long  bufferPtr      = 0;
 	unsigned long long  batchSize      = 256;
 	unsigned long long  multibuffering = 3;
 	unsigned long long  outputHeight   = 256;
@@ -81,16 +88,17 @@ static int       BenzinaPluginNvdecodeCore_init                    (BenzinaPlugi
 	
 	static char *kwargsList[] = {"dataset",
 	                             "deviceId",
-	                             "devicePtr",
+	                             "bufferObj",
+	                             "bufferPtr",
 	                             "batchSize",
 	                             "multibuffering",
 	                             "outputHeight",
 	                             "outputWidth",
 	                             NULL};
 	
-	if(!PyArg_ParseTupleAndKeywords(args, kwargs, "OsK|KKKK", kwargsList,
-	                                &datasetCore,  &deviceId,    &devicePtr,
-	                                &batchSize,    &multibuffering,
+	if(!PyArg_ParseTupleAndKeywords(args, kwargs, "OsOK|KKKK", kwargsList,
+	                                &datasetCore,  &deviceId,  &bufferObj,
+	                                &bufferPtr,    &batchSize, &multibuffering,
 	                                &outputHeight, &outputWidth)){
 		return -1;
 	}
@@ -101,7 +109,7 @@ static int       BenzinaPluginNvdecodeCore_init                    (BenzinaPlugi
 		return -1;
 	}
 	
-	if(self->v->setBuffer(ctx, deviceId, (void*)devicePtr, multibuffering,
+	if(self->v->setBuffer(ctx, deviceId, (void*)bufferPtr, multibuffering,
 	                      batchSize, outputHeight, outputWidth) != 0){
 		self->v->release(ctx);
 		PyErr_SetString(PyExc_RuntimeError,
@@ -118,10 +126,33 @@ static int       BenzinaPluginNvdecodeCore_init                    (BenzinaPlugi
 	}
 	
 	Py_INCREF(datasetCore);
+	Py_INCREF(bufferObj);
+	self->bufferObj   = bufferObj;
 	self->datasetCore = datasetCore;
 	self->ctx         = ctx;
 	return 0;
 }
+
+/**
+ * GETTER/SETTER
+ */
+
+static PyObject* BenzinaPluginNvdecodeCore_getPushes               (BenzinaPluginNvdecodeCore* self, void *closure){
+	uint64_t i = 0;
+	if(self->ctx){self->v->getNumPushes     (self->ctx, &i);}
+	return PyLong_FromUnsignedLongLong(i);
+}
+static PyObject* BenzinaPluginNvdecodeCore_getPulls                (BenzinaPluginNvdecodeCore* self, void *closure){
+	uint64_t i = 0;
+	if(self->ctx){self->v->getNumPulls      (self->ctx, &i);}
+	return PyLong_FromUnsignedLongLong(i);
+}
+static PyObject* BenzinaPluginNvdecodeCore_getMultibuffering       (BenzinaPluginNvdecodeCore* self, void *closure){
+	uint64_t i = 0;
+	if(self->ctx){self->v->getMultibuffering(self->ctx, &i);}
+	return PyLong_FromUnsignedLongLong(i);
+}
+
 
 /**
  * METHODS
@@ -183,22 +214,22 @@ static PyObject* BenzinaPluginNvdecodeCore_waitBatch               (BenzinaPlugi
 	ret = self->v->waitBatch(self->ctx, (const void**)&token, block, timeout);
 	Py_END_ALLOW_THREADS
 	
-	if      (ret == ETIMEDOUT){
-		PyErr_SetString(PyExc_TimeoutError,
-		                "waitBatch() timed out!");
-		Py_XDECREF(token);
+	switch(ret){
+		case ETIMEDOUT:
+			PyErr_SetString(PyExc_TimeoutError, "waitBatch() timed out!");
+			Py_XDECREF(token);
 		return NULL;
-	}else if(ret != 0){
-		PyErr_SetString(PyExc_RuntimeError,
-		                "Error in pull()!");
+		default:
+			PyErr_SetString(PyExc_RuntimeError, "Error in pull()!");
+			Py_XDECREF(token);
 		return NULL;
+		case 0:
+			if(!token){
+				token = Py_None;
+				Py_INCREF(token);
+			}
+		return token;
 	}
-	
-	if(!token){
-		token = Py_None;
-		Py_INCREF(token);
-	}
-	return token;
 }
 static PyObject* BenzinaPluginNvdecodeCore_defineSample            (BenzinaPluginNvdecodeCore* self,
                                                                     PyObject*                  args,
@@ -452,6 +483,17 @@ static PyObject* BenzinaPluginNvdecodeCore_selectDefaultColorMatrix(BenzinaPlugi
 }
 
 /**
+ * Getter/Setter table.
+ */
+
+static PyGetSetDef BenzinaPluginNvdecodeCore_getsetters[] = {
+    {"pushes",                   (getter)BenzinaPluginNvdecodeCore_getPushes,         0, "Number of batches pushed into the core",                NULL},
+    {"pulls",                    (getter)BenzinaPluginNvdecodeCore_getPulls,          0, "Number of batches pulled out of the core",              NULL},
+    {"multibuffering",           (getter)BenzinaPluginNvdecodeCore_getMultibuffering, 0, "Maximum number of batches outstanding within the core", NULL},
+    {NULL}  /* Sentinel */
+};
+
+/**
  * Methods table.
  */
 
@@ -503,7 +545,7 @@ static PyTypeObject BenzinaPluginNvdecodeCoreType = {
     0,                                              /* tp_iternext */
     BenzinaPluginNvdecodeCore_methods,              /* tp_methods */
     0,                                              /* tp_members */
-    0,                                              /* tp_getset */
+    BenzinaPluginNvdecodeCore_getsetters,           /* tp_getset */
     0,                                              /* tp_base */
     0,                                              /* tp_dict */
     0,                                              /* tp_descr_get */

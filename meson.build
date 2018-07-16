@@ -10,6 +10,38 @@ project('Benzina', 'c', 'cpp',
 
 
 #
+# Import Meson Modules
+#
+pymodule = import('python')
+
+
+#
+# Python
+#
+# If building a Python package, we override the default install directories
+# bindir, libdir and includedir.
+#
+PYINTERPRETER = get_option('py_interpreter')
+if PYINTERPRETER == ''
+  python = pymodule.find_installation()
+else
+  python = pymodule.find_installation(PYINTERPRETER)
+endif
+
+BUILDINGPYPKG = get_option('building_py_pkg')
+if BUILDINGPYPKG
+  message('Entering special Python-package build mode. Overriding bindir, libdir & includedir.')
+  bindir     = join_paths('benzina', 'libs')
+  libdir     = join_paths('benzina', 'libs')
+  includedir = join_paths('benzina', 'include')
+else
+  bindir     = get_option('bindir')
+  libdir     = get_option('libdir')
+  includedir = get_option('includedir')
+endif
+
+
+#
 # Compiler, Dependencies & Libraries
 #
 # Library and Include Search Paths
@@ -21,16 +53,15 @@ libm        = cc.find_library('m',    required: false)
 libdl       = cc.find_library('dl',   required: true)
 librt       = cc.find_library('rt',   required: true)
 
-
-#
 # Relax a bit the warning flags on GCC & Clang. -Wpedantic is very noisy.
-#
 if cc.get_id() == 'gcc' or cc.get_id() == 'clang'
   add_project_arguments('-Wno-pedantic', language: 'c')
   add_project_arguments('-Wno-pedantic', language: 'cpp')
 endif
 
 
+#
+# NVIDIA
 #
 # CUDA Toolkit
 #
@@ -43,40 +74,40 @@ endif
 cudaLibDirs  = join_paths(CUDA_HOME, 'lib64')
 cudaIncDirs  = join_paths(CUDA_HOME, 'include')
 cudaIncs     = include_directories(cudaIncDirs)
-libcuda      = cc.find_library('cuda',          required: true, dirs: cudaLibDirs)
+libcuda      = cc.find_library('cuda',          required: true)
 libcudart    = cc.find_library(CUDA_RUNTIME,    required: true, dirs: cudaLibDirs)
 libcudadevrt = cc.find_library('cudadevrt',     required: true, dirs: cudaLibDirs)
+libnvcuvid   = cc.find_library('nvcuvid',       required: true)
 nvcc         = find_program(join_paths(CUDA_HOME, 'bin', 'nvcc'), required: true)
-CUDA_ARCH    = get_option('cuda_arch')
-pymodule     = import('python')
-python       = pymodule.find_installation()
-detectGPUs   = run_command(python,
-                           [files(join_paths('scripts', 'detectgpus.py')), nvcc, CUDA_ARCH])
-if detectGPUs.returncode() != 0
-  warning('GPU detection failed:')
-  warning(detectGPUs.stdout())
-  warning(detectGPUs.stderr())
-  cudaGenCodeFlags = []
+
+#
+# NVDECODE/Video Codec SDK feature detection
+#
+if   cc.has_function('cuvidReconfigureDecoder', dependencies: [libnvcuvid])
+  message('Found Video Codec SDK >=8.2 (NVIDIA Driver >=396.24 will be required)')
+  nvcuvidCDefs = ['-DNVDECODE=8002']
+elif cc.has_function('cuvidGetDecoderCaps',     dependencies: [libnvcuvid])
+  message('Found Video Codec SDK ==8.1 (NVIDIA Driver >=390.25 will be required)')
+  nvcuvidCDefs = ['-DNVDECODE=8001']
 else
-  message('Building for CUDA architectures ['+detectGPUs.stderr()+']')
-  cudaGenCodeFlags = detectGPUs.stdout().split()
+  message('Found Video Codec SDK <=8.0 (NVIDIA Driver >=378.13 will be required)')
+  nvcuvidCDefs = ['-DNVDECODE=8000']
 endif
 
-
 #
-# If building a Python package, we override the default install directories
-# bindir, libdir and includedir.
+# GPU presence detection and architecture selection
 #
-BUILDINGPYPKG = get_option('building_py_pkg')
-if BUILDINGPYPKG
-  message('Entering special Python-package build mode. Overriding bindir, libdir & includedir.')
-  bindir     = join_paths('benzina', 'libs')
-  libdir     = join_paths('benzina', 'libs')
-  includedir = join_paths('benzina', 'include')
+CUDA_ARCH    = get_option('cuda_arch')
+detectGPUpy  = files(join_paths('scripts', 'detectgpus.py'))
+detectGPU    = run_command(python, [detectGPUpy, nvcc, CUDA_ARCH])
+if detectGPU.returncode() != 0
+  warning('GPU detection failed:')
+  warning(detectGPU.stdout())
+  warning(detectGPU.stderr())
+  cudaGenCodeFlags = []
 else
-  bindir     = get_option('bindir')
-  libdir     = get_option('libdir')
-  includedir = get_option('includedir')
+  message(detectGPU.stderr())
+  cudaGenCodeFlags = detectGPU.stdout().split()
 endif
 
 

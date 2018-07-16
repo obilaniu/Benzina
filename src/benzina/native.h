@@ -46,6 +46,7 @@ typedef struct {
 	void* pluginHandle;
 	BENZINA_PLUGIN_NVDECODE_VTABLE* v;
 	BenzinaDatasetCore* datasetCore;
+	PyObject* bufferObj;
 	void* ctx;
 } BenzinaPluginNvdecodeCore;
 

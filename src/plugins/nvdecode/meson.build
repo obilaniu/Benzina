@@ -22,9 +22,16 @@
 #
 
 libbenzina_plugin_nvdecodeCudaSrcs = files('kernels.cu')
-nvcc_compile                       = generator     (nvcc,
-                                                    arguments       : pluginCDefs+cudaGenCodeFlags+['@INPUT@', '-I'+benzinaIncsDir, '-Xcompiler', '-fPIC', '--use_fast_math', '-O3', '-Xptxas', '--warn-on-double-precision-use,-O3', '-c', '-o', '@OUTPUT@'],
-                                                    output          : ['@BASENAME@.o'])
+nvcc_compile = generator(nvcc,
+                         arguments: pluginCDefs+nvcuvidCDefs+cudaGenCodeFlags+[
+                                        '@INPUT@',
+                                        '-I'+benzinaIncsDir,
+                                        '-Xcompiler', '-fPIC',
+                                        '--use_fast_math',
+                                        '-O3',
+                                        '-Xptxas', '--warn-on-double-precision-use,-O3',
+                                        '-c', '-o', '@OUTPUT@'],
+                         output   : ['@BASENAME@.o'])
 libbenzina_plugin_nvdecodeCudaObjs = nvcc_compile.process(libbenzina_plugin_nvdecodeCudaSrcs)
 libbenzina_plugin_nvdecodeCudaCmd  = [nvcc, '-Xcompiler', '-fPIC', '@INPUT@', '-dlink', '-o', '@OUTPUT@']
 libbenzina_plugin_nvdecodeCudaDObj = custom_target ('libbenzina_plugin_nvdecode_cuda',
@@ -37,9 +44,9 @@ libbenzina_plugin_nvdecodeCudaDObj = custom_target ('libbenzina_plugin_nvdecode_
 libbenzina_plugin_nvdecodeSrcs     = [files('main.c', 'kernels.cpp'),
                                       libbenzina_plugin_nvdecodeCudaObjs,
                                       libbenzina_plugin_nvdecodeCudaDObj]
-libbenzina_plugin_nvdecodeDeps     = [threadsDep, libm, libdl, librt, libcuda, libcudart, libcudadevrt]
+libbenzina_plugin_nvdecodeDeps     = [threadsDep, libm, libdl, librt, libcuda, libcudart, libcudadevrt, libnvcuvid]
 libbenzina_plugin_nvdecodeIncs     = [cudaIncs, benzinaIncs]
-libbenzina_plugin_nvdecodeCArgs    = pluginCArgs
+libbenzina_plugin_nvdecodeCArgs    = pluginCArgs+nvcuvidCDefs
 libbenzina_plugin_nvdecode         = shared_library('benzina_plugin_nvdecode',
                                                     libbenzina_plugin_nvdecodeSrcs,
                                                     include_directories: libbenzina_plugin_nvdecodeIncs,
@@ -60,14 +67,16 @@ libbenzina_plugin_nvdecode         = shared_library('benzina_plugin_nvdecode',
 # corresponding data.nvdecode file.
 #
 
-benzina_nvdecode_genSrcs = files('nvdecodegen.c')
-benzina_nvdecode_genDeps = [threadsDep, libm, libcuda, libdl]
-benzina_nvdecode_genIncs = [cudaIncs, benzinaIncs]
-benzina_nvdecode_gen     = executable('benzina_nvdecode_gen', benzina_nvdecode_genSrcs,
-                                      include_directories: benzina_nvdecode_genIncs,
-                                      dependencies       : benzina_nvdecode_genDeps,
-                                      install            : true,
-                                      install_dir        : bindir)
+benzina_nvdecode_genSrcs  = files('nvdecodegen.c')
+benzina_nvdecode_genDeps  = [threadsDep, libm, libdl, libcuda, libnvcuvid]
+benzina_nvdecode_genIncs  = [cudaIncs, benzinaIncs]
+benzina_nvdecode_genCArgs = [cudaIncs, benzinaIncs]
+benzina_nvdecode_gen      = executable('benzina_nvdecode_gen', benzina_nvdecode_genSrcs,
+                                       include_directories: benzina_nvdecode_genIncs,
+                                       dependencies       : benzina_nvdecode_genDeps,
+                                       c_args             : nvcuvidCDefs,
+                                       install            : true,
+                                       install_dir        : bindir)
 
 
 

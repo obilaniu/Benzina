@@ -11,6 +11,14 @@ if __name__ == "__main__":
 	detected = ""
 	if cuda_arch_list == "Auto":
 		detected = cuda_detect_installed_gpus(nvcc, os.environ.get("MESON_BUILD_ROOT"))
+	
 	flags, readable = cuda_select_nvcc_arch_flags(cuda_version, cuda_arch_list, detected)
+	
 	sys.stdout.write(os.linesep.join(flags))
-	sys.stderr.write(" ".join(readable))
+	if cuda_arch_list == "Auto":
+		if detected:
+			sys.stderr.write("Building for detected GPUs [{}]".format(" ".join(readable)))
+		else:
+			sys.stderr.write("Building for common GPUs [{}]".format(" ".join(readable)))
+	else:
+		sys.stderr.write("Building for selected GPUs [{}]".format(" ".join(readable)))

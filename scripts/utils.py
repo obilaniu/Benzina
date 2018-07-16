@@ -46,6 +46,7 @@ class build_ext(setuptools.command.build_ext.build_ext):
 			                       "--buildtype",       "release",
 			                       "-Dbuilding_py_pkg=true",
 			                       "-Dcuda_runtime=static",
+			                       "-Dpy_interpreter="+sys.executable,
 			                       "-Dcuda_arch="+os.environ.get("CUDA_ARCH", "Auto"),
 			                       "-Dcuda_home="+os.environ.get("CUDA_HOME", "/usr/local/cuda")],
 			                      stdin  = subprocess.DEVNULL,
