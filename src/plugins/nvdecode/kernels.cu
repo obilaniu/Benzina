@@ -340,8 +340,9 @@ BENZINA_PLUGIN_HIDDEN int   nvdecodePostprocKernelInvoker(cudaStream_t cudaStrea
                                                           unsigned     srcPitch,
                                                           unsigned     srcH,
                                                           unsigned     srcW){
-	dim3 Db = {                32,                 32, 1},
-	     Dg = {(dstW+Db.x-1)/Db.x, (dstH+Db.y-1)/Db.y, 1};
+	dim3 Db, Dg;
+	Db.x =                 32; Db.y =                 32; Db.z = 1;
+	Dg.x = (dstW+Db.x-1)/Db.x; Dg.y = (dstH+Db.y-1)/Db.y; Dg.z = 1;
 #if 0
 	nvdecodePostprocKernel<<<Dg, Db, 0, cudaStream>>>(dstPtr,
 	                                                  dstH,
