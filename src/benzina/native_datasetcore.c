@@ -16,7 +16,7 @@
  * @brief Slot tp_dealloc
  */
 
-static void      BenzinaDatasetCore_dealloc  (BenzinaDatasetCore* self){
+static void      DatasetCore_dealloc  (DatasetCore* self){
 	benzinaDatasetFree(self->dataset);
 	self->dataset = NULL;
 	Py_TYPE(self)->tp_free(self);
@@ -26,10 +26,10 @@ static void      BenzinaDatasetCore_dealloc  (BenzinaDatasetCore* self){
  * @brief Slot tp_new
  */
 
-static PyObject* BenzinaDatasetCore_new      (PyTypeObject* type,
+static PyObject* DatasetCore_new      (PyTypeObject* type,
                                               PyObject*     args,
                                               PyObject*     kwargs){
-	BenzinaDatasetCore* self = (BenzinaDatasetCore*)type->tp_alloc(type, 0);
+	DatasetCore* self = (DatasetCore*)type->tp_alloc(type, 0);
 	
 	if(self){
 		self->dataset = NULL;
@@ -42,7 +42,7 @@ static PyObject* BenzinaDatasetCore_new      (PyTypeObject* type,
  * @brief Slot tp_init
  */
 
-static int       BenzinaDatasetCore_init     (BenzinaDatasetCore* self,
+static int       DatasetCore_init     (DatasetCore* self,
                                               PyObject*           args,
                                               PyObject*           kwargs){
 	PyObject* root=NULL;
@@ -79,7 +79,7 @@ static int       BenzinaDatasetCore_init     (BenzinaDatasetCore* self,
  * @brief Getter for length.
  */
 
-static PyObject* BenzinaDatasetCore_getlength(BenzinaDatasetCore* self,
+static PyObject* DatasetCore_getlength(DatasetCore* self,
                                               void*               closure){
 	size_t length;
 	
@@ -97,7 +97,7 @@ static PyObject* BenzinaDatasetCore_getlength(BenzinaDatasetCore* self,
  * @return The shape, as a tuple (h,w).
  */
 
-static PyObject* BenzinaDatasetCore_getshape (BenzinaDatasetCore* self,
+static PyObject* DatasetCore_getshape (DatasetCore* self,
                                               void*               closure){
 	size_t    h,w;
 	PyObject* hObj, *wObj, *tObj;
@@ -136,9 +136,9 @@ static PyObject* BenzinaDatasetCore_getshape (BenzinaDatasetCore* self,
  * We only have getters.
  */
 
-static PyGetSetDef       BenzinaDatasetCore_getsetters[] = {
-    {"length", (getter)BenzinaDatasetCore_getlength, 0, "Length of Dataset",             NULL},
-    {"shape",  (getter)BenzinaDatasetCore_getshape,  0, "Coded shape of dataset images", NULL},
+static PyGetSetDef       DatasetCore_getsetters[] = {
+    {"length", (getter)DatasetCore_getlength, 0, "Length of Dataset",             NULL},
+    {"shape",  (getter)DatasetCore_getshape,  0, "Coded shape of dataset images", NULL},
     {NULL}  /* Sentinel */
 };
 
@@ -146,7 +146,7 @@ static PyGetSetDef       BenzinaDatasetCore_getsetters[] = {
  * @brief Implementation of __len__
  */
 
-static Py_ssize_t        BenzinaDatasetCore___len__(BenzinaDatasetCore* self){
+static Py_ssize_t        DatasetCore___len__(DatasetCore* self){
 	size_t length;
 	
 	if(benzinaDatasetGetLength(self->dataset, &length) != 0){
@@ -167,7 +167,7 @@ static Py_ssize_t        BenzinaDatasetCore___len__(BenzinaDatasetCore* self){
  *           - The length of the slice into it.
  */
 
-static PyObject*         BenzinaDatasetCore___getitem__(BenzinaDatasetCore* self,
+static PyObject*         DatasetCore___getitem__(DatasetCore* self,
                                                         Py_ssize_t          i){
 	size_t    off, len;
 	PyObject* lenObj, *iObj, *offObj, *tObj;
@@ -203,26 +203,26 @@ static PyObject*         BenzinaDatasetCore___getitem__(BenzinaDatasetCore* self
 	return tObj;
 }
 
-static PySequenceMethods BenzinaDatasetCore_as_seq_methods = {
-    (lenfunc)BenzinaDatasetCore___len__,          /* sq_length */
+static PySequenceMethods DatasetCore_as_seq_methods = {
+    (lenfunc)DatasetCore___len__,          /* sq_length */
     0,                                            /* sq_concat */
     0,                                            /* sq_repeat */
-    (ssizeargfunc)BenzinaDatasetCore___getitem__, /* sq_item */
+    (ssizeargfunc)DatasetCore___getitem__, /* sq_item */
 };
 
-static PyTypeObject BenzinaDatasetCoreType = {
+static PyTypeObject DatasetCoreType = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    "native.BenzinaDatasetCore",            /* tp_name */
-    sizeof(BenzinaDatasetCore),             /* tp_basicsize */
+    "native.DatasetCore",            /* tp_name */
+    sizeof(DatasetCore),             /* tp_basicsize */
     0,                                      /* tp_itemsize */
-    (destructor)BenzinaDatasetCore_dealloc, /* tp_dealloc */
+    (destructor)DatasetCore_dealloc, /* tp_dealloc */
     0,                                      /* tp_print */
     0,                                      /* tp_getattr */
     0,                                      /* tp_setattr */
     0,                                      /* tp_reserved */
     0,                                      /* tp_repr */
     0,                                      /* tp_as_number */
-    &BenzinaDatasetCore_as_seq_methods,     /* tp_as_sequence */
+    &DatasetCore_as_seq_methods,     /* tp_as_sequence */
     0,                                      /* tp_as_mapping */
     0,                                      /* tp_hash  */
     0,                                      /* tp_call */
@@ -231,7 +231,7 @@ static PyTypeObject BenzinaDatasetCoreType = {
     0,                                      /* tp_setattro */
     0,                                      /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE, /* tp_flags */
-    "BenzinaDatasetCore object",            /* tp_doc */
+    "DatasetCore object",            /* tp_doc */
     0,                                      /* tp_traverse */
     0,                                      /* tp_clear */
     0,                                      /* tp_richcompare */
@@ -240,13 +240,13 @@ static PyTypeObject BenzinaDatasetCoreType = {
     0,                                      /* tp_iternext */
     0,                                      /* tp_methods */
     0,                                      /* tp_members */
-    BenzinaDatasetCore_getsetters,          /* tp_getset */
+    DatasetCore_getsetters,          /* tp_getset */
     0,                                      /* tp_base */
     0,                                      /* tp_dict */
     0,                                      /* tp_descr_get */
     0,                                      /* tp_descr_set */
     0,                                      /* tp_dictoffset */
-    (initproc)BenzinaDatasetCore_init,      /* tp_init */
+    (initproc)DatasetCore_init,      /* tp_init */
     0,                                      /* tp_alloc */
-    BenzinaDatasetCore_new,                 /* tp_new */
+    DatasetCore_new,                 /* tp_new */
 };

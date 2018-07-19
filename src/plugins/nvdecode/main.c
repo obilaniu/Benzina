@@ -1392,27 +1392,35 @@ BENZINA_PLUGIN_STATIC int   nvdecodeSetDevice          (NVDECODE_CTX* ctx, const
 	}
 	
 	
-	/* Determine maximum device ordinal. */
-	ret = cudaGetDeviceCount(&deviceCount);
-	if(ret != cudaSuccess){return ret;}
-	
-	
-	/* Select a device ordinal i by one of several identification string schemes. */
-	if      (strncmp(deviceId, "cuda:", strlen("cuda:")) == 0){
-		if(deviceId[strlen("cuda:")] == '\0'){
-			return BENZINA_DATALOADER_ITER_INVALIDARGS;
-		}
-		i = strtoull(deviceId+strlen("cuda:"), &s, 10);
-		if(*s != '\0')      {return BENZINA_DATALOADER_ITER_INVALIDARGS;}
-		if(i >= deviceCount){return BENZINA_DATALOADER_ITER_INVALIDARGS;}
-	}else if(strncmp(deviceId, "pci:",  strlen("pci:"))  == 0){
-		if(cudaDeviceGetByPCIBusId(&i, deviceId+strlen("pci:")) != cudaSuccess){
-			return BENZINA_DATALOADER_ITER_INVALIDARGS;
-		}
+	/**
+	 * If deviceId is NULL, select current device, whatever it may be. Otherwise,
+	 * parse deviceId to figure out the device.
+	 */
+	if(!deviceId){
+		ret = cudaGetDevice(&i);
+		if(ret != cudaSuccess){return ret;}
 	}else{
-		return BENZINA_DATALOADER_ITER_INVALIDARGS;
+		/* Determine maximum device ordinal. */
+		ret = cudaGetDeviceCount(&deviceCount);
+		if(ret != cudaSuccess){return ret;}
+		
+		
+		/* Select a device ordinal i by one of several identification string schemes. */
+		if      (strncmp(deviceId, "cuda:", strlen("cuda:")) == 0){
+			if(deviceId[strlen("cuda:")] == '\0'){
+				return BENZINA_DATALOADER_ITER_INVALIDARGS;
+			}
+			i = strtoull(deviceId+strlen("cuda:"), &s, 10);
+			if(*s != '\0')      {return BENZINA_DATALOADER_ITER_INVALIDARGS;}
+			if(i >= deviceCount){return BENZINA_DATALOADER_ITER_INVALIDARGS;}
+		}else if(strncmp(deviceId, "pci:",  strlen("pci:"))  == 0){
+			if(cudaDeviceGetByPCIBusId(&i, deviceId+strlen("pci:")) != cudaSuccess){
+				return BENZINA_DATALOADER_ITER_INVALIDARGS;
+			}
+		}else{
+			return BENZINA_DATALOADER_ITER_INVALIDARGS;
+		}
 	}
-	
 	
 	/**
 	 * Verify that the device satisfies several important requirements by

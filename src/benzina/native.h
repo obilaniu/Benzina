@@ -29,26 +29,26 @@ extern "C" {
 /* Data Structure Definitions */
 
 /**
- * @brief Python BenzinaDatasetCore object.
+ * @brief Python DatasetCore object.
  */
 
 typedef struct{
     PyObject_HEAD
     BENZINA_DATASET* dataset;
-} BenzinaDatasetCore;
+} DatasetCore;
 
 /**
- * @brief Python BenzinaPluginNvdecodeCore object.
+ * @brief Python NvdecodeDataLoaderIterCore object.
  */
 
 typedef struct {
 	PyObject_HEAD
 	void* pluginHandle;
 	BENZINA_PLUGIN_NVDECODE_VTABLE* v;
-	BenzinaDatasetCore* datasetCore;
+	DatasetCore* datasetCore;
 	PyObject* bufferObj;
 	void* ctx;
-} BenzinaPluginNvdecodeCore;
+} NvdecodeDataLoaderIterCore;
 
 
 

@@ -33,8 +33,8 @@ PyObject* noop(PyObject* self, PyObject* args){
  * into one Python type per C file.
  */
 
-#include "./native_benzinadatasetcore.c"
-#include "./native_benzinapluginnvdecodecore.c"
+#include "./native_datasetcore.c"
+#include "./native_nvdecodedataloaderitercore.c"
 
 
 
@@ -76,18 +76,18 @@ PyMODINIT_FUNC PyInit_native(void){
 	}
 	
 	/* Finish readying Python wrapper types. */
-	if(PyType_Ready(&BenzinaDatasetCoreType       ) < 0){return NULL;};
-	if(PyType_Ready(&BenzinaPluginNvdecodeCoreType) < 0){return NULL;};
+	if(PyType_Ready(&DatasetCoreType               ) < 0){return NULL;};
+	if(PyType_Ready(&NvdecodeDataLoaderIterCoreType) < 0){return NULL;};
 	
 	/* Create the module. */
 	m = PyModule_Create(&native_module_def);
 	if(!m){return NULL;}
 	
 	/* Register Python wrapper types. */
-	Py_INCREF(&BenzinaDatasetCoreType);
-	Py_INCREF(&BenzinaPluginNvdecodeCoreType);
-	PyModule_AddObject(m, "BenzinaDatasetCore",        (PyObject*)&BenzinaDatasetCoreType);
-	PyModule_AddObject(m, "BenzinaPluginNvdecodeCore", (PyObject*)&BenzinaPluginNvdecodeCoreType);
+	Py_INCREF(&DatasetCoreType);
+	Py_INCREF(&NvdecodeDataLoaderIterCoreType);
+	PyModule_AddObject(m, "DatasetCore",                (PyObject*)&DatasetCoreType);
+	PyModule_AddObject(m, "NvdecodeDataLoaderIterCore", (PyObject*)&NvdecodeDataLoaderIterCoreType);
 	
 	/* Return module. */
 	return m;

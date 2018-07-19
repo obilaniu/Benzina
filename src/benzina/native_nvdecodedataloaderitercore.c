@@ -17,7 +17,7 @@
  * @brief Slot tp_dealloc
  */
 
-static void      BenzinaPluginNvdecodeCore_dealloc                 (BenzinaPluginNvdecodeCore* self){
+static void      NvdecodeDataLoaderIterCore_dealloc                 (NvdecodeDataLoaderIterCore* self){
 	void* token;
 	
 	while(self->v->waitToken(self->ctx, &token) == 0){
@@ -38,9 +38,12 @@ static void      BenzinaPluginNvdecodeCore_dealloc                 (BenzinaPlugi
  * @brief Slot tp_new
  */
 
-static PyObject* BenzinaPluginNvdecodeCore_new                     (PyTypeObject* type,
-                                                                    PyObject*     args,
-                                                                    PyObject*     kwargs){
+static PyObject* NvdecodeDataLoaderIterCore_new                     (PyTypeObject* type,
+                                                                     PyObject*     args,
+                                                                     PyObject*     kwargs){
+	(void)args;
+	(void)kwargs;
+	
 	void* pluginHandle, *v;
 	
 	pluginHandle = dlopen("libbenzina_plugin_nvdecode.so", RTLD_LAZY);
@@ -55,7 +58,7 @@ static PyObject* BenzinaPluginNvdecodeCore_new                     (PyTypeObject
 		return NULL;
 	}
 	
-	BenzinaPluginNvdecodeCore* self = (BenzinaPluginNvdecodeCore*)type->tp_alloc(type, 0);
+	NvdecodeDataLoaderIterCore* self = (NvdecodeDataLoaderIterCore*)type->tp_alloc(type, 0);
 	
 	if(self){
 		self->pluginHandle = pluginHandle;
@@ -73,18 +76,18 @@ static PyObject* BenzinaPluginNvdecodeCore_new                     (PyTypeObject
  * @brief Slot tp_init
  */
 
-static int       BenzinaPluginNvdecodeCore_init                    (BenzinaPluginNvdecodeCore* self,
-                                                                    PyObject*                  args,
-                                                                    PyObject*                  kwargs){
-	void*               ctx            = NULL;
-	BenzinaDatasetCore* datasetCore    = NULL;
-	const char*         deviceId       = "cuda:0";
-	PyObject*           bufferObj      = NULL;
-	unsigned long long  bufferPtr      = 0;
-	unsigned long long  batchSize      = 256;
-	unsigned long long  multibuffering = 3;
-	unsigned long long  outputHeight   = 256;
-	unsigned long long  outputWidth    = 256;
+static int       NvdecodeDataLoaderIterCore_init                    (NvdecodeDataLoaderIterCore* self,
+                                                                     PyObject*                   args,
+                                                                     PyObject*                   kwargs){
+	void*              ctx            = NULL;
+	DatasetCore*       datasetCore    = NULL;
+	const char*        deviceId       = NULL;
+	PyObject*          bufferObj      = NULL;
+	unsigned long long bufferPtr      = 0;
+	unsigned long long batchSize      = 256;
+	unsigned long long multibuffering = 3;
+	unsigned long long outputHeight   = 256;
+	unsigned long long outputWidth    = 256;
 	
 	static char *kwargsList[] = {"dataset",
 	                             "deviceId",
@@ -137,17 +140,17 @@ static int       BenzinaPluginNvdecodeCore_init                    (BenzinaPlugi
  * GETTER/SETTER
  */
 
-static PyObject* BenzinaPluginNvdecodeCore_getPushes               (BenzinaPluginNvdecodeCore* self, void *closure){
+static PyObject* NvdecodeDataLoaderIterCore_getPushes               (NvdecodeDataLoaderIterCore* self, void *closure){
 	uint64_t i = 0;
 	if(self->ctx){self->v->getNumPushes     (self->ctx, &i);}
 	return PyLong_FromUnsignedLongLong(i);
 }
-static PyObject* BenzinaPluginNvdecodeCore_getPulls                (BenzinaPluginNvdecodeCore* self, void *closure){
+static PyObject* NvdecodeDataLoaderIterCore_getPulls                (NvdecodeDataLoaderIterCore* self, void *closure){
 	uint64_t i = 0;
 	if(self->ctx){self->v->getNumPulls      (self->ctx, &i);}
 	return PyLong_FromUnsignedLongLong(i);
 }
-static PyObject* BenzinaPluginNvdecodeCore_getMultibuffering       (BenzinaPluginNvdecodeCore* self, void *closure){
+static PyObject* NvdecodeDataLoaderIterCore_getMultibuffering       (NvdecodeDataLoaderIterCore* self, void *closure){
 	uint64_t i = 0;
 	if(self->ctx){self->v->getMultibuffering(self->ctx, &i);}
 	return PyLong_FromUnsignedLongLong(i);
@@ -158,7 +161,7 @@ static PyObject* BenzinaPluginNvdecodeCore_getMultibuffering       (BenzinaPlugi
  * METHODS
  */
 
-static PyObject* BenzinaPluginNvdecodeCore_defineBatch             (BenzinaPluginNvdecodeCore* self){
+static PyObject* NvdecodeDataLoaderIterCore_defineBatch             (NvdecodeDataLoaderIterCore* self){
 	if(self->v->defineBatch(self->ctx) != 0){
 		PyErr_SetString(PyExc_RuntimeError,
 		                "Error in defineBatch()!");
@@ -168,9 +171,9 @@ static PyObject* BenzinaPluginNvdecodeCore_defineBatch             (BenzinaPlugi
 	Py_INCREF(Py_None);
 	return Py_None;
 }
-static PyObject* BenzinaPluginNvdecodeCore_submitBatch             (BenzinaPluginNvdecodeCore* self,
-                                                                    PyObject*                  args,
-                                                                    PyObject*                  kwargs){
+static PyObject* NvdecodeDataLoaderIterCore_submitBatch             (NvdecodeDataLoaderIterCore* self,
+                                                                     PyObject*                   args,
+                                                                     PyObject*                   kwargs){
 	void*  token   = NULL;
 	
 	static char *kwargsList[] = {"token", NULL};
@@ -193,9 +196,9 @@ static PyObject* BenzinaPluginNvdecodeCore_submitBatch             (BenzinaPlugi
 	Py_INCREF(Py_None);
 	return Py_None;
 }
-static PyObject* BenzinaPluginNvdecodeCore_waitBatch               (BenzinaPluginNvdecodeCore* self,
-                                                                    PyObject*                  args,
-                                                                    PyObject*                  kwargs){
+static PyObject* NvdecodeDataLoaderIterCore_waitBatch               (NvdecodeDataLoaderIterCore* self,
+                                                                     PyObject*                   args,
+                                                                     PyObject*                   kwargs){
 	void*  token   = NULL;
 	int    block   = 1;
 	double timeout = 0;
@@ -231,9 +234,9 @@ static PyObject* BenzinaPluginNvdecodeCore_waitBatch               (BenzinaPlugi
 		return token;
 	}
 }
-static PyObject* BenzinaPluginNvdecodeCore_defineSample            (BenzinaPluginNvdecodeCore* self,
-                                                                    PyObject*                  args,
-                                                                    PyObject*                  kwargs){
+static PyObject* NvdecodeDataLoaderIterCore_defineSample            (NvdecodeDataLoaderIterCore* self,
+                                                                     PyObject*                   args,
+                                                                     PyObject*                   kwargs){
 	unsigned long long  datasetIndex   = -1;
 	unsigned long long  devicePtr      = 0;
 	
@@ -257,7 +260,7 @@ static PyObject* BenzinaPluginNvdecodeCore_defineSample            (BenzinaPlugi
 	Py_INCREF(Py_None);
 	return Py_None;
 }
-static PyObject* BenzinaPluginNvdecodeCore_submitSample            (BenzinaPluginNvdecodeCore* self){
+static PyObject* NvdecodeDataLoaderIterCore_submitSample            (NvdecodeDataLoaderIterCore* self){
 	if(self->v->submitSample(self->ctx) != 0){
 		PyErr_SetString(PyExc_RuntimeError,
 		                "Error in submitSample()!");
@@ -267,9 +270,9 @@ static PyObject* BenzinaPluginNvdecodeCore_submitSample            (BenzinaPlugi
 	Py_INCREF(Py_None);
 	return Py_None;
 }
-static PyObject* BenzinaPluginNvdecodeCore_setHomography           (BenzinaPluginNvdecodeCore* self,
-                                                                    PyObject*                  args,
-                                                                    PyObject*                  kwargs){
+static PyObject* NvdecodeDataLoaderIterCore_setHomography           (NvdecodeDataLoaderIterCore* self,
+                                                                     PyObject*                   args,
+                                                                     PyObject*                   kwargs){
 	float H[3][3] = {{1,0,0},
 	                 {0,1,0},
 	                 {0,0,1}};
@@ -297,9 +300,9 @@ static PyObject* BenzinaPluginNvdecodeCore_setHomography           (BenzinaPlugi
 	Py_INCREF(Py_None);
 	return Py_None;
 }
-static PyObject* BenzinaPluginNvdecodeCore_setBias                 (BenzinaPluginNvdecodeCore* self,
-                                                                    PyObject*                  args,
-                                                                    PyObject*                  kwargs){
+static PyObject* NvdecodeDataLoaderIterCore_setBias                 (NvdecodeDataLoaderIterCore* self,
+                                                                     PyObject*                   args,
+                                                                     PyObject*                   kwargs){
 	float B[3] = {0,0,0};
 	
 	static char *kwargsList[] = {"B0", "B1", "B2", NULL};
@@ -320,9 +323,9 @@ static PyObject* BenzinaPluginNvdecodeCore_setBias                 (BenzinaPlugi
 	Py_INCREF(Py_None);
 	return Py_None;
 }
-static PyObject* BenzinaPluginNvdecodeCore_setScale                (BenzinaPluginNvdecodeCore* self,
-                                                                    PyObject*                  args,
-                                                                    PyObject*                  kwargs){
+static PyObject* NvdecodeDataLoaderIterCore_setScale                (NvdecodeDataLoaderIterCore* self,
+                                                                     PyObject*                   args,
+                                                                     PyObject*                   kwargs){
 	float S[3] = {0,0,0};
 	
 	static char *kwargsList[] = {"S0", "S1", "S2", NULL};
@@ -343,9 +346,9 @@ static PyObject* BenzinaPluginNvdecodeCore_setScale                (BenzinaPlugi
 	Py_INCREF(Py_None);
 	return Py_None;
 }
-static PyObject* BenzinaPluginNvdecodeCore_setOOBColor             (BenzinaPluginNvdecodeCore* self,
-                                                                    PyObject*                  args,
-                                                                    PyObject*                  kwargs){
+static PyObject* NvdecodeDataLoaderIterCore_setOOBColor             (NvdecodeDataLoaderIterCore* self,
+                                                                     PyObject*                   args,
+                                                                     PyObject*                   kwargs){
 	float OOB[3] = {0,0,0};
 	
 	static char *kwargsList[] = {"OOB0", "OOB1", "OOB2", NULL};
@@ -366,9 +369,9 @@ static PyObject* BenzinaPluginNvdecodeCore_setOOBColor             (BenzinaPlugi
 	Py_INCREF(Py_None);
 	return Py_None;
 }
-static PyObject* BenzinaPluginNvdecodeCore_selectColorMatrix       (BenzinaPluginNvdecodeCore* self,
-                                                                    PyObject*                  args,
-                                                                    PyObject*                  kwargs){
+static PyObject* NvdecodeDataLoaderIterCore_selectColorMatrix       (NvdecodeDataLoaderIterCore* self,
+                                                                     PyObject*                   args,
+                                                                     PyObject*                   kwargs){
 	unsigned long long colorMatrix = 0;
 	
 	static char *kwargsList[] = {"colorMatrix", NULL};
@@ -389,9 +392,9 @@ static PyObject* BenzinaPluginNvdecodeCore_selectColorMatrix       (BenzinaPlugi
 	Py_INCREF(Py_None);
 	return Py_None;
 }
-static PyObject* BenzinaPluginNvdecodeCore_setDefaultBias          (BenzinaPluginNvdecodeCore* self,
-                                                                    PyObject*                  args,
-                                                                    PyObject*                  kwargs){
+static PyObject* NvdecodeDataLoaderIterCore_setDefaultBias          (NvdecodeDataLoaderIterCore* self,
+                                                                     PyObject*                   args,
+                                                                     PyObject*                   kwargs){
 	float B[3] = {0,0,0};
 	
 	static char *kwargsList[] = {"B0", "B1", "B2", NULL};
@@ -412,9 +415,9 @@ static PyObject* BenzinaPluginNvdecodeCore_setDefaultBias          (BenzinaPlugi
 	Py_INCREF(Py_None);
 	return Py_None;
 }
-static PyObject* BenzinaPluginNvdecodeCore_setDefaultScale         (BenzinaPluginNvdecodeCore* self,
-                                                                    PyObject*                  args,
-                                                                    PyObject*                  kwargs){
+static PyObject* NvdecodeDataLoaderIterCore_setDefaultScale         (NvdecodeDataLoaderIterCore* self,
+                                                                     PyObject*                   args,
+                                                                     PyObject*                   kwargs){
 	float S[3] = {0,0,0};
 	
 	static char *kwargsList[] = {"S0", "S1", "S2", NULL};
@@ -435,9 +438,9 @@ static PyObject* BenzinaPluginNvdecodeCore_setDefaultScale         (BenzinaPlugi
 	Py_INCREF(Py_None);
 	return Py_None;
 }
-static PyObject* BenzinaPluginNvdecodeCore_setDefaultOOBColor      (BenzinaPluginNvdecodeCore* self,
-                                                                    PyObject*                  args,
-                                                                    PyObject*                  kwargs){
+static PyObject* NvdecodeDataLoaderIterCore_setDefaultOOBColor      (NvdecodeDataLoaderIterCore* self,
+                                                                     PyObject*                   args,
+                                                                     PyObject*                   kwargs){
 	float OOB[3] = {0,0,0};
 	
 	static char *kwargsList[] = {"OOB0", "OOB1", "OOB2", NULL};
@@ -458,9 +461,9 @@ static PyObject* BenzinaPluginNvdecodeCore_setDefaultOOBColor      (BenzinaPlugi
 	Py_INCREF(Py_None);
 	return Py_None;
 }
-static PyObject* BenzinaPluginNvdecodeCore_selectDefaultColorMatrix(BenzinaPluginNvdecodeCore* self,
-                                                                    PyObject*                  args,
-                                                                    PyObject*                  kwargs){
+static PyObject* NvdecodeDataLoaderIterCore_selectDefaultColorMatrix(NvdecodeDataLoaderIterCore* self,
+                                                                     PyObject*                   args,
+                                                                     PyObject*                   kwargs){
 	unsigned long long colorMatrix = 0;
 	
 	static char *kwargsList[] = {"colorMatrix", NULL};
@@ -486,10 +489,10 @@ static PyObject* BenzinaPluginNvdecodeCore_selectDefaultColorMatrix(BenzinaPlugi
  * Getter/Setter table.
  */
 
-static PyGetSetDef BenzinaPluginNvdecodeCore_getsetters[] = {
-    {"pushes",                   (getter)BenzinaPluginNvdecodeCore_getPushes,         0, "Number of batches pushed into the core",                NULL},
-    {"pulls",                    (getter)BenzinaPluginNvdecodeCore_getPulls,          0, "Number of batches pulled out of the core",              NULL},
-    {"multibuffering",           (getter)BenzinaPluginNvdecodeCore_getMultibuffering, 0, "Maximum number of batches outstanding within the core", NULL},
+static PyGetSetDef NvdecodeDataLoaderIterCore_getsetters[] = {
+    {"pushes",                   (getter)NvdecodeDataLoaderIterCore_getPushes,         0, "Number of batches pushed into the core",                NULL},
+    {"pulls",                    (getter)NvdecodeDataLoaderIterCore_getPulls,          0, "Number of batches pulled out of the core",              NULL},
+    {"multibuffering",           (getter)NvdecodeDataLoaderIterCore_getMultibuffering, 0, "Maximum number of batches outstanding within the core", NULL},
     {NULL}  /* Sentinel */
 };
 
@@ -497,30 +500,30 @@ static PyGetSetDef BenzinaPluginNvdecodeCore_getsetters[] = {
  * Methods table.
  */
 
-static PyMethodDef BenzinaPluginNvdecodeCore_methods[] = {
-    {"defineBatch",              (PyCFunction)BenzinaPluginNvdecodeCore_defineBatch,              METH_NOARGS,                "Begin defining a new batch of samples."},
-    {"submitBatch",              (PyCFunction)BenzinaPluginNvdecodeCore_submitBatch,              METH_VARARGS|METH_KEYWORDS, "Submit a new batch of samples."},
-    {"waitBatch",                (PyCFunction)BenzinaPluginNvdecodeCore_waitBatch,                METH_VARARGS|METH_KEYWORDS, "Wait for a batch of samples to become complete."},
-    {"defineSample",             (PyCFunction)BenzinaPluginNvdecodeCore_defineSample,             METH_VARARGS|METH_KEYWORDS, "Begin defining a new sample within a batch."},
-    {"submitSample",             (PyCFunction)BenzinaPluginNvdecodeCore_submitSample,             METH_NOARGS,                "Submit a new sample within a batch."},
-    {"setHomography",            (PyCFunction)BenzinaPluginNvdecodeCore_setHomography,            METH_VARARGS|METH_KEYWORDS, "Set homography for this job."},
-    {"setBias",                  (PyCFunction)BenzinaPluginNvdecodeCore_setBias,                  METH_VARARGS|METH_KEYWORDS, "Set bias for this job."},
-    {"setScale",                 (PyCFunction)BenzinaPluginNvdecodeCore_setScale,                 METH_VARARGS|METH_KEYWORDS, "Set scale for this job."},
-    {"setOOBColor",              (PyCFunction)BenzinaPluginNvdecodeCore_setOOBColor,              METH_VARARGS|METH_KEYWORDS, "Set out-of-bounds color for this job."},
-    {"selectColorMatrix",        (PyCFunction)BenzinaPluginNvdecodeCore_selectColorMatrix,        METH_VARARGS|METH_KEYWORDS, "Select color matrix for this job."},
-    {"setDefaultBias",           (PyCFunction)BenzinaPluginNvdecodeCore_setDefaultBias,           METH_VARARGS|METH_KEYWORDS, "Set default bias."},
-    {"setDefaultScale",          (PyCFunction)BenzinaPluginNvdecodeCore_setDefaultScale,          METH_VARARGS|METH_KEYWORDS, "Set default scale."},
-    {"setDefaultOOBColor",       (PyCFunction)BenzinaPluginNvdecodeCore_setDefaultOOBColor,       METH_VARARGS|METH_KEYWORDS, "Set default out-of-bounds color."},
-    {"selectDefaultColorMatrix", (PyCFunction)BenzinaPluginNvdecodeCore_selectDefaultColorMatrix, METH_VARARGS|METH_KEYWORDS, "Select default color matrix."},
+static PyMethodDef NvdecodeDataLoaderIterCore_methods[] = {
+    {"defineBatch",              (PyCFunction)NvdecodeDataLoaderIterCore_defineBatch,              METH_NOARGS,                "Begin defining a new batch of samples."},
+    {"submitBatch",              (PyCFunction)NvdecodeDataLoaderIterCore_submitBatch,              METH_VARARGS|METH_KEYWORDS, "Submit a new batch of samples."},
+    {"waitBatch",                (PyCFunction)NvdecodeDataLoaderIterCore_waitBatch,                METH_VARARGS|METH_KEYWORDS, "Wait for a batch of samples to become complete."},
+    {"defineSample",             (PyCFunction)NvdecodeDataLoaderIterCore_defineSample,             METH_VARARGS|METH_KEYWORDS, "Begin defining a new sample within a batch."},
+    {"submitSample",             (PyCFunction)NvdecodeDataLoaderIterCore_submitSample,             METH_NOARGS,                "Submit a new sample within a batch."},
+    {"setHomography",            (PyCFunction)NvdecodeDataLoaderIterCore_setHomography,            METH_VARARGS|METH_KEYWORDS, "Set homography for this job."},
+    {"setBias",                  (PyCFunction)NvdecodeDataLoaderIterCore_setBias,                  METH_VARARGS|METH_KEYWORDS, "Set bias for this job."},
+    {"setScale",                 (PyCFunction)NvdecodeDataLoaderIterCore_setScale,                 METH_VARARGS|METH_KEYWORDS, "Set scale for this job."},
+    {"setOOBColor",              (PyCFunction)NvdecodeDataLoaderIterCore_setOOBColor,              METH_VARARGS|METH_KEYWORDS, "Set out-of-bounds color for this job."},
+    {"selectColorMatrix",        (PyCFunction)NvdecodeDataLoaderIterCore_selectColorMatrix,        METH_VARARGS|METH_KEYWORDS, "Select color matrix for this job."},
+    {"setDefaultBias",           (PyCFunction)NvdecodeDataLoaderIterCore_setDefaultBias,           METH_VARARGS|METH_KEYWORDS, "Set default bias."},
+    {"setDefaultScale",          (PyCFunction)NvdecodeDataLoaderIterCore_setDefaultScale,          METH_VARARGS|METH_KEYWORDS, "Set default scale."},
+    {"setDefaultOOBColor",       (PyCFunction)NvdecodeDataLoaderIterCore_setDefaultOOBColor,       METH_VARARGS|METH_KEYWORDS, "Set default out-of-bounds color."},
+    {"selectDefaultColorMatrix", (PyCFunction)NvdecodeDataLoaderIterCore_selectDefaultColorMatrix, METH_VARARGS|METH_KEYWORDS, "Select default color matrix."},
 	{NULL}  /* Sentinel */
 };
 
-static PyTypeObject BenzinaPluginNvdecodeCoreType = {
+static PyTypeObject NvdecodeDataLoaderIterCoreType = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    "native.BenzinaPluginNvdecodeCore",             /* tp_name */
-    sizeof(BenzinaPluginNvdecodeCore),              /* tp_basicsize */
+    "native.NvdecodeDataLoaderIterCore",            /* tp_name */
+    sizeof(NvdecodeDataLoaderIterCore),             /* tp_basicsize */
     0,                                              /* tp_itemsize */
-    (destructor)BenzinaPluginNvdecodeCore_dealloc,  /* tp_dealloc */
+    (destructor)NvdecodeDataLoaderIterCore_dealloc, /* tp_dealloc */
     0,                                              /* tp_print */
     0,                                              /* tp_getattr */
     0,                                              /* tp_setattr */
@@ -536,22 +539,22 @@ static PyTypeObject BenzinaPluginNvdecodeCoreType = {
     0,                                              /* tp_setattro */
     0,                                              /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,         /* tp_flags */
-    "BenzinaPluginNvdecodeCore objects",            /* tp_doc */
+    "NvdecodeDataLoaderIterCore objects",           /* tp_doc */
     0,                                              /* tp_traverse */
     0,                                              /* tp_clear */
     0,                                              /* tp_richcompare */
     0,                                              /* tp_weaklistoffset */
     0,                                              /* tp_iter */
     0,                                              /* tp_iternext */
-    BenzinaPluginNvdecodeCore_methods,              /* tp_methods */
+    NvdecodeDataLoaderIterCore_methods,             /* tp_methods */
     0,                                              /* tp_members */
-    BenzinaPluginNvdecodeCore_getsetters,           /* tp_getset */
+    NvdecodeDataLoaderIterCore_getsetters,          /* tp_getset */
     0,                                              /* tp_base */
     0,                                              /* tp_dict */
     0,                                              /* tp_descr_get */
     0,                                              /* tp_descr_set */
     0,                                              /* tp_dictoffset */
-    (initproc)BenzinaPluginNvdecodeCore_init,       /* tp_init */
+    (initproc)NvdecodeDataLoaderIterCore_init,      /* tp_init */
     0,                                              /* tp_alloc */
-    BenzinaPluginNvdecodeCore_new,                  /* tp_new */
+    NvdecodeDataLoaderIterCore_new,                 /* tp_new */
 };
