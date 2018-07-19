@@ -16,14 +16,77 @@
  * YCbCr to RGB colorspace conversion kernel
  */
 
-BENZINA_PLUGIN_STATIC __device__ float3 ycbcr2rgb(float3 yuv, unsigned colorMatrix){
-	float Y = yuv.x, Cb = yuv.y, Cr = yuv.z, R, G, B;
+BENZINA_PLUGIN_STATIC __device__ float3 ycbcr2rgb(float3 ycbcr, unsigned colorMatrix){
+	float Kr, Kg, Kb, Y = ycbcr.x, Cb = ycbcr.y, Cr = ycbcr.z, R, G, B;
 	switch(colorMatrix){
 		case 0:
-			/* See ITU-T Rec. T.871 (JFIF), Section 7 */
-			R = min(max(0.0f, round(Y                        +1.402000f*(Cr-128.0f))), 255.0f);
-			G = min(max(0.0f, round(Y -0.344136f*(Cb-128.0f) -0.714136f*(Cr-128.0f))), 255.0f);
-			B = min(max(0.0f, round(Y +1.772000f*(Cb-128.0f)                       )), 255.0f);
+			/**
+			 * See ITU-T Rec. T.871 (JFIF), Section 7
+			 * 
+			 * Uses ITU-R BT.601-6-625 recommentation
+			 *   Kr = 0.299
+			 *   Kg = 0.587
+			 *   Kb = 0.114
+			 * but full scale
+			 *    Y,Cb,Cr in [0, 255]
+			 */
+			R = Y                        +1.402000f*(Cr-128.0f);
+			G = Y -0.344136f*(Cb-128.0f) -0.714136f*(Cr-128.0f);
+			B = Y +1.772000f*(Cb-128.0f)                       ;
+			R = min(max(0.0f, round(R)), 255.0f);
+			G = min(max(0.0f, round(G)), 255.0f);
+			B = min(max(0.0f, round(B)), 255.0f);
+		break;
+		case 1:
+			/**
+			 * ITU-R BT.601-6-625 recommentation, with head/footroom
+			 *    Y       in [16,235]
+			 *    Cb,Cr   in [16,240]
+			 */
+			Kr = 0.299f; Kg = 0.587f; Kb = 0.114f;
+			Y = 255.0f/219.0f*(Y - 16.0f);
+			Cb= 255.0f/112.0f*(Cb-128.0f);
+			Cr= 255.0f/112.0f*(Cr-128.0f);
+			R = Y                        +         (1.0f-Kr)*Cr;
+			G = Y - (Kb/Kg)*(1.0f-Kb)*Cb - (Kr/Kg)*(1.0f-Kr)*Cr;
+			B = Y +         (1.0f-Kb)*Cb;
+			R = min(max(0.0f, round(R)), 255.0f);
+			G = min(max(0.0f, round(G)), 255.0f);
+			B = min(max(0.0f, round(B)), 255.0f);
+		break;
+		case 2:
+			/**
+			 * ITU-R BT.709 recommentation, with head/footroom
+			 *    Y       in [16,235]
+			 *    Cb,Cr   in [16,240]
+			 */
+			Kr = 0.2126f; Kg = 0.7152f; Kb = 0.0722f;
+			Y = 255.0f/219.0f*(Y - 16.0f);
+			Cb= 255.0f/112.0f*(Cb-128.0f);
+			Cr= 255.0f/112.0f*(Cr-128.0f);
+			R = Y                        +         (1.0f-Kr)*Cr;
+			G = Y - (Kb/Kg)*(1.0f-Kb)*Cb - (Kr/Kg)*(1.0f-Kr)*Cr;
+			B = Y +         (1.0f-Kb)*Cb;
+			R = min(max(0.0f, round(R)), 255.0f);
+			G = min(max(0.0f, round(G)), 255.0f);
+			B = min(max(0.0f, round(B)), 255.0f);
+		break;
+		case 3:
+			/**
+			 * ITU-R BT.2020 recommentation, with head/footroom
+			 *    Y       in [16,235]
+			 *    Cb,Cr   in [16,240]
+			 */
+			Kr = 0.2627f; Kg = 0.6780f; Kb = 0.0593f;
+			Y = 255.0f/219.0f*(Y - 16.0f);
+			Cb= 255.0f/112.0f*(Cb-128.0f);
+			Cr= 255.0f/112.0f*(Cr-128.0f);
+			R = Y                        +         (1.0f-Kr)*Cr;
+			G = Y - (Kb/Kg)*(1.0f-Kb)*Cb - (Kr/Kg)*(1.0f-Kr)*Cr;
+			B = Y +         (1.0f-Kb)*Cb;
+			R = min(max(0.0f, round(R)), 255.0f);
+			G = min(max(0.0f, round(G)), 255.0f);
+			B = min(max(0.0f, round(B)), 255.0f);
 		break;
 		default:
 			R = Y;
@@ -38,144 +101,6 @@ BENZINA_PLUGIN_STATIC __device__ float3 ycbcr2rgb(float3 yuv, unsigned colorMatr
 /**
  * @brief CUDA post-processing kernel
  */
-
-#if 0
-BENZINA_PLUGIN_STATIC __global__ void
-__launch_bounds__(1024, 2)
-nvdecodePostprocKernel(void* __restrict__       dstPtr,
-                       unsigned                 dstH,
-                       unsigned                 dstW,
-                       float                    OOB0,
-                       float                    OOB1,
-                       float                    OOB2,
-                       float                    B0,
-                       float                    B1,
-                       float                    B2,
-                       float                    S0,
-                       float                    S1,
-                       float                    S2,
-                       float                    H00,
-                       float                    H01,
-                       float                    H02,
-                       float                    H10,
-                       float                    H11,
-                       float                    H12,
-                       float                    H20,
-                       float                    H21,
-                       float                    H22,
-                       unsigned                 colorMatrix,
-                       const void* __restrict__ srcPtr,
-                       unsigned                 srcPitch,
-                       unsigned                 srcH,
-                       unsigned                 srcW){
-	/* Compute Destination Coordinates */
-	const unsigned x = blockDim.x*blockIdx.x + threadIdx.x;
-	const unsigned y = blockDim.y*blockIdx.y + threadIdx.y;
-	if(x >= dstW || y >= dstH){return;}
-	
-	/* Compute Destination R,G,B Pointers */
-	float* const __restrict__ dstPtr0 = (float*)dstPtr + 0*dstH*dstW + y*dstW + x;
-	float* const __restrict__ dstPtr1 = (float*)dstPtr + 1*dstH*dstW + y*dstW + x;
-	float* const __restrict__ dstPtr2 = (float*)dstPtr + 2*dstH*dstW + y*dstW + x;
-	
-	/* Compute Source Coordinates in homogeneous coordinates, then prespective-divide: X = Hx */
-	const float _X = H00*x + H01*y + H02;
-	const float _Y = H10*x + H11*y + H12;
-	const float _W = H20*x + H21*y + H22;
-	const float X  = _X/_W;
-	const float Y  = _Y/_W;
-	
-	/* Out of Bounds Check */
-	if(X<0 || X>srcW-1 || Y<0 || Y>srcH-1 || isnan(X) || isnan(Y)){
-		*dstPtr0 = OOB0;
-		*dstPtr1 = OOB1;
-		*dstPtr2 = OOB2;
-		return;
-	}
-	
-	/**
-	 * YUV420 Pixel Quad Fetch from NV12
-	 * 
-	 * In NV12 YUV420, the pixel data is laid out as follows: A plane of luma
-	 * (Y) samples first, then an interleaved plane of chroma (U,V) samples,
-	 * subsampled 2x vertically and 2x horizontally. In ASCII art:
-	 * 
-	 * YYYYYYYYYYYYYYYY
-	 * YYYYYYYYYYYYYYYY
-	 * YYYYYYYYYYYYYYYY
-	 * YYYYYYYYYYYYYYYY
-	 * UVUVUVUVUVUVUVUV
-	 * UVUVUVUVUVUVUVUV
-	 * 
-	 * We will perform linear interpolation between sample points. For this we
-	 * need the coordinates and values of 4 samples about P = (X,Y), which we
-	 * number 0,1,2,3. The coordinates of luma are (clX*, clY*). The coordinates
-	 * of chroma are (ccX*, ccY*). In ASCII art:
-	 * 
-	 *  (0,0)
-	 *      +-----------> X
-	 *      |
-	 *      |
-	 *      |
-	 *      v           0  1
-	 *      Y             P
-	 *                  2  3
-	 */
-	
-	const unsigned clX0 = floor(X),          clY0 = floor(Y);
-	const unsigned clX1 = min(clX0+1, srcW), clY1 = clY0;
-	const unsigned clX2 = clX0,              clY2 = min(clY0+1, srcH);
-	const unsigned clX3 = clX1,              clY3 = clY2;
-	
-	const unsigned ccX0 = clX0/2,            ccY0 = clY0/2;
-	const unsigned ccX1 = clX1/2,            ccY1 = clY1/2;
-	const unsigned ccX2 = clX2/2,            ccY2 = clY2/2;
-	const unsigned ccX3 = clX3/2,            ccY3 = clY3/2;
-	
-	const float    Xf   = X-clX0,            Yf   = Y-clY0;
-	
-	#define LUMAAT(X,Y)     ((const uchar1*)((const uchar1*)srcPtr + (Y)       *srcPitch +   (X)))
-	#define CHROMAAT(X,Y)   ((const uchar2*)((const uchar1*)srcPtr + (srcH+(Y))*srcPitch + 2*(X)))
-	const uchar1   vl0  = *LUMAAT  (clX0, clY0);
-	const uchar1   vl1  = *LUMAAT  (clX1, clY1);
-	const uchar1   vl2  = *LUMAAT  (clX2, clY2);
-	const uchar1   vl3  = *LUMAAT  (clX3, clY3);
-	const uchar2   vc0  = *CHROMAAT(ccX0, ccY0);
-	const uchar2   vc1  = *CHROMAAT(ccX1, ccY1);
-	const uchar2   vc2  = *CHROMAAT(ccX2, ccY2);
-	const uchar2   vc3  = *CHROMAAT(ccX3, ccY3);
-	#undef LUMAAT
-	#undef CHROMAAT
-	
-	/**
-	 * YUV -> RGB colorspace conversion of the 4 sample points.
-	 */
-	
-	const float3   v0   = ycbcr2rgb(make_float3(vl0.x, vc0.x, vc0.y), colorMatrix);
-	const float3   v1   = ycbcr2rgb(make_float3(vl1.x, vc1.x, vc1.y), colorMatrix);
-	const float3   v2   = ycbcr2rgb(make_float3(vl2.x, vc2.x, vc2.y), colorMatrix);
-	const float3   v3   = ycbcr2rgb(make_float3(vl3.x, vc3.x, vc3.y), colorMatrix);
-	
-	/**
-	 * Linear Interpolation between the sample points.
-	 */
-	
-	#define LERP(a,b,alpha) make_float3((1.0f-(alpha))*a.x + ((alpha))*b.x, \
-	                                    (1.0f-(alpha))*a.y + ((alpha))*b.y, \
-	                                    (1.0f-(alpha))*a.z + ((alpha))*b.z)
-	const float3   v    = LERP(LERP(v0, v1, Xf),
-	                           LERP(v2, v3, Xf), Yf);
-	#undef LERP
-	
-	/**
-	 * Scaling, Biasing, Write-out.
-	 */
-	
-	*dstPtr0 = v.x*S0 + B0;
-	*dstPtr1 = v.y*S1 + B1;
-	*dstPtr2 = v.z*S2 + B2;
-}
-#endif
 
 BENZINA_PLUGIN_STATIC __global__ void
 __launch_bounds__(1024, 2)
@@ -257,18 +182,45 @@ nvdecodePostprocKernelTex2D(void* __restrict__       dstPtr,
 	 *      v           0  1
 	 *      Y             P
 	 *                  2  3
+	 * 
+	 * Under JFIF, chroma samples are exactly in the center of every luma quad:
+	 * 
+	 *         L   L   L   L   L   L   L   L   L   L   L   L
+	 *                                                      
+	 *           C       C       C       C       C       C  
+	 *                                                      
+	 *         L   L   L   L   L   L   L   L   L   L   L   L
+	 *                                                      
+	 *                                                      
+	 *                                                      
+	 *         L   L   L   L   L   L   L   L   L   L   L   L
+	 *                                                      
+	 *           C       C       C       C       C       C  
+	 *                                                      
+	 *         L   L   L   L   L   L   L   L   L   L   L   L
+	 *                                                      
+	 *                                                      
+	 *                                                      
+	 *         L   L   L   L   L   L   L   L   L   L   L   L
+	 *                                                      
+	 *           C       C       C       C       C       C  
+	 *                                                      
+	 *         L   L   L   L   L   L   L   L   L   L   L   L
 	 */
 	
-	const float  clX0 = X-0.5f,          clY0 = Y-0.5f;
-	const float  clX1 = X+0.5f,          clY1 = Y-0.5f;
-	const float  clX2 = X-0.5f,          clY2 = Y+0.5f;
-	const float  clX3 = X+0.5f,          clY3 = Y+0.5f;
-	const float  ccX0 = 0.5f*clX0-0.25f, ccY0 = 0.5f*clY0-0.25f;
-	const float  ccX1 = 0.5f*clX1-0.25f, ccY1 = 0.5f*clY1-0.25f;
-	const float  ccX2 = 0.5f*clX2-0.25f, ccY2 = 0.5f*clY2-0.25f;
-	const float  ccX3 = 0.5f*clX3-0.25f, ccY3 = 0.5f*clY3-0.25f;
+	const float  Xc   = 0.5f*X-0.25f, Yc   = 0.5f*Y-0.25f;
 	
-	const float  Xf   = X-floor(X),      Yf   = Y-floor(Y);
+	const float  clX0 = floorf(X),    clY0 = floorf(Y);
+	const float  clX1 = clX0+1,       clY1 = clY0;
+	const float  clX2 = clX0,         clY2 = clY0+1;
+	const float  clX3 = clX1,         clY3 = clY2;
+	const float  ccX0 = floorf(Xc),   ccY0 = floorf(Yc);
+	const float  ccX1 = ccX0+1,       ccY1 = ccY0;
+	const float  ccX2 = ccX0,         ccY2 = ccY0+1;
+	const float  ccX3 = ccX1,         ccY3 = ccY2;
+	
+	const float  Xlf  = X  - clX0,    Ylf  = Y  - clY0;
+	const float  Xcf  = Xc - ccX0,    Ycf  = Yc - ccY0;
 	
 	const uchar1 vl0  = tex2D<uchar1>(srcYPlane, clX0, clY0);
 	const uchar1 vl1  = tex2D<uchar1>(srcYPlane, clX1, clY1);
@@ -280,24 +232,23 @@ nvdecodePostprocKernelTex2D(void* __restrict__       dstPtr,
 	const uchar2 vc3  = tex2D<uchar2>(srcCPlane, ccX3, ccY3);
 	
 	/**
-	 * YUV -> RGB colorspace conversion of the 4 sample points.
-	 */
-	
-	const float3   v0   = ycbcr2rgb(make_float3(vl0.x, vc0.x, vc0.y), colorMatrix);
-	const float3   v1   = ycbcr2rgb(make_float3(vl1.x, vc1.x, vc1.y), colorMatrix);
-	const float3   v2   = ycbcr2rgb(make_float3(vl2.x, vc2.x, vc2.y), colorMatrix);
-	const float3   v3   = ycbcr2rgb(make_float3(vl3.x, vc3.x, vc3.y), colorMatrix);
-	
-	/**
 	 * Linear Interpolation between the sample points.
 	 */
 	
-	#define LERP(a,b,alpha) make_float3((1.0f-(alpha))*a.x + ((alpha))*b.x, \
-	                                    (1.0f-(alpha))*a.y + ((alpha))*b.y, \
-	                                    (1.0f-(alpha))*a.z + ((alpha))*b.z)
-	const float3   v    = LERP(LERP(v0, v1, Xf),
-	                           LERP(v2, v3, Xf), Yf);
+	#define LERP(a,b,alpha) ((1.0f-(alpha))*(a) + ((alpha))*(b))
+	const float3 s    = make_float3(LERP(LERP(vl0.x, vl1.x, Xlf),
+	                                     LERP(vl2.x, vl3.x, Xlf), Ylf),
+	                                LERP(LERP(vc0.x, vc1.x, Xcf),
+	                                     LERP(vc2.x, vc3.x, Xcf), Ycf),
+	                                LERP(LERP(vc0.y, vc1.y, Xcf),
+	                                     LERP(vc2.y, vc3.y, Xcf), Ycf));
 	#undef LERP
+	
+	/**
+	 * YCbCr -> RGB colorspace conversion of the interpolated point.
+	 */
+	
+	const float3 v    = ycbcr2rgb(s, colorMatrix);
 	
 	/**
 	 * Scaling, Biasing, Write-out.
@@ -343,34 +294,7 @@ BENZINA_PLUGIN_HIDDEN int   nvdecodePostprocKernelInvoker(cudaStream_t cudaStrea
 	dim3 Db, Dg;
 	Db.x =                 32; Db.y =                 32; Db.z = 1;
 	Dg.x = (dstW+Db.x-1)/Db.x; Dg.y = (dstH+Db.y-1)/Db.y; Dg.z = 1;
-#if 0
-	nvdecodePostprocKernel<<<Dg, Db, 0, cudaStream>>>(dstPtr,
-	                                                  dstH,
-	                                                  dstW,
-	                                                  OOB0,
-	                                                  OOB1,
-	                                                  OOB2,
-	                                                  B0,
-	                                                  B1,
-	                                                  B2,
-	                                                  S0,
-	                                                  S1,
-	                                                  S2,
-	                                                  H00,
-	                                                  H01,
-	                                                  H02,
-	                                                  H10,
-	                                                  H11,
-	                                                  H12,
-	                                                  H20,
-	                                                  H21,
-	                                                  H22,
-	                                                  colorMatrix,
-	                                                  srcPtr,
-	                                                  srcPitch,
-	                                                  srcH,
-	                                                  srcW);
-#else
+	
 	/* Specify texture */
 	struct cudaResourceDesc yResDesc, cResDesc;
 	struct cudaTextureDesc  yTexDesc, cTexDesc;
@@ -449,6 +373,6 @@ BENZINA_PLUGIN_HIDDEN int   nvdecodePostprocKernelInvoker(cudaStream_t cudaStrea
 	                                                       srcW);
 	cudaDestroyTextureObject(yTexObj);
 	cudaDestroyTextureObject(cTexObj);
-#endif
+	
 	return 0;
 }
