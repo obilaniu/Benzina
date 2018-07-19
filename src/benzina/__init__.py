@@ -1,2 +1,9 @@
 # -*- coding: utf-8 -*-
-from . import native
+#
+# We early-import __version__ so that all submodules can see this information
+# if needed.
+#
+# Other packages follow.
+#
+from .version import __version__
+from .        import native, version
