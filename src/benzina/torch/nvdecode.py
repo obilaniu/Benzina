@@ -257,7 +257,7 @@ class NvdecodeBiasTransform:
 
 
 class NvdecodeSimilarityTransform(NvdecodeWarpTransform):
-	def __init__(self, s=(+1,+1), r=(-0,+0), tx=(-0,+0), ty=(-0,+0)):
+	def __init__(self, s=(+1,+1), r=(-0,+0), tx=(-0,+0), ty=(-0,+0), autoscale=True):
 		if isinstance(s, (int, float)):
 			s = float(s)
 			s = min(s, 1/s)
@@ -284,6 +284,7 @@ class NvdecodeSimilarityTransform(NvdecodeWarpTransform):
 		self.r  = r
 		self.tx = tx
 		self.ty = ty
+		self.autoscale = autoscale
 	
 	def __call__(self, dataloaderiter, i):
 		"""Return a random similarity transformation."""
@@ -303,8 +304,11 @@ class NvdecodeSimilarityTransform(NvdecodeWarpTransform):
 		T_outshape = np.asarray([[1, 0, -T_o_x],
 		                         [0, 1, -T_o_y],
 		                         [0, 0,    1  ]])
-		S_y = (inshape[0]-1)/(outshape[0]-1)/s
-		S_x = (inshape[1]-1)/(outshape[1]-1)/s
+		S_y = 1/s
+		S_x = 1/s
+		if self.autoscale:
+			S_y *= (inshape[0]-1)/(outshape[0]-1)
+			S_x *= (inshape[1]-1)/(outshape[1]-1)
 		S          = np.asarray([[S_x,  0,   0],
 		                         [ 0,  S_y,  0],
 		                         [ 0,   0,   1]])
