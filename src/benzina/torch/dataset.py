@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import benzina.native
+import numpy            as np
 import os
 import torch.utils.data
 
@@ -10,6 +11,7 @@ class Dataset(torch.utils.data.Dataset):
 		self._check_have_dir()
 		self._check_have_file("data.bin")
 		self._check_have_file("data.lengths")
+		self._check_have_file("data.nvdecode")
 		self._check_have_file("data.protobuf")
 		self._check_have_file("README.md")
 		self._check_have_file("SHA256SUMS")
@@ -20,10 +22,13 @@ class Dataset(torch.utils.data.Dataset):
 	
 	def __getitem__(self, index):
 		#
-		# This does not return images; Rather, it returns a tuple
-		# (index, byteOffset, byteLength). It's actually BenzinaLoaderIter's
-		# responsibility to translate indices into asynchronously-loaded
-		# images.
+		# This does not return images; Rather, it returns a tuple of some kind,
+		# e.g. (index, byteOffset, byteLength). The iterator will *not* use
+		# this method for image loading, since it can directly access the
+		# dataset core and translate indices into asynchronously-loaded images.
+		#
+		# This should be overriden in a subclass to return e.g. labels or
+		# target information.
 		#
 		return self._core[index]
 	
@@ -46,3 +51,15 @@ class Dataset(torch.utils.data.Dataset):
 		filePath = os.path.join(self.root, *paths)
 		if not os.path.isfile(filePath):
 			raise FileNotFoundError(filePath)
+
+
+class ImageNet(Dataset):
+	def __init__(self, root):
+		super().__init__(root)
+		self._check_have_file("data.filenames")
+		self._check_have_file("data.targets")
+		with open(os.path.join(self.root, "data.targets"), "r") as f:
+			self.targets = np.fromfile(f, np.dtype("<i8"))
+	
+	def __getitem__(self, index):
+		return (int(self.targets[index]),)

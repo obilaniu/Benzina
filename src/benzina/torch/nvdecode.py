@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 import benzina.native
-import numpy                  as np
+import numpy                           as np
 import os
 import torch
 import torch.utils.data
 
-from   contextlib         import suppress
+from   torch.utils.data.dataloader import default_collate
+from   contextlib                  import suppress
 
 
 
@@ -16,6 +17,7 @@ class NvdecodeDataLoader(torch.utils.data.DataLoader):
 	             shuffle         = False,
 	             sampler         = None,
 	             batch_sampler   = None,
+	             collate_fn      = default_collate,
 	             drop_last       = False,
 	             timeout         = 0,
 	             shape           = None,
@@ -33,7 +35,7 @@ class NvdecodeDataLoader(torch.utils.data.DataLoader):
 		                 sampler        = sampler,
 		                 batch_sampler  = batch_sampler,
 		                 num_workers    = 0,
-		                 collate_fn     = None,
+		                 collate_fn     = collate_fn,
 		                 pin_memory     = True,
 		                 drop_last      = drop_last,
 		                 timeout        = float(timeout),
@@ -113,6 +115,7 @@ class NvdecodeDataLoaderIter:
 		self.batch_iter      = iter(loader.batch_sampler)
 		self.multibuffering  = loader.multibuffering
 		self.shape           = loader.shape
+		self.collate_fn      = loader.collate_fn
 		self.drop_last       = loader.drop_last
 		self.timeout         = loader.timeout
 		if   loader.device_id is None or loader.device_id == "cuda":
@@ -194,9 +197,11 @@ class NvdecodeDataLoaderIter:
 		self.check_or_set_batch_size(batch)
 		buffer = self.multibuffer[self.core.pushes % self.core.multibuffering, :len(batch)]
 		
+		aux = []
 		self.core.defineBatch()
 		for s,b in zip(batch, buffer):
 			s = int(s)
+			aux.append(self.dataset[s])
 			self.core.defineSample     (s, int(b.data_ptr()))
 			self.core.setHomography    (*self.warp_transform (self, s))
 			self.core.selectColorMatrix(*self.color_transform(self, s))
@@ -204,7 +209,8 @@ class NvdecodeDataLoaderIter:
 			self.core.setScale         (*self.scale_transform(self, s))
 			self.core.setOOBColor      (*self.oob_transform  (self, s))
 			self.core.submitSample()
-		self.core.submitBatch(buffer)
+		aux = self.collate_fn(aux)
+		self.core.submitBatch((buffer, *aux))
 	
 	def pull(self):
 		if self.core.pulls >= self.core.pushes:

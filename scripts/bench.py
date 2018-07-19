@@ -5,7 +5,7 @@ import benzina.torch as B
 if __name__ == "__main__":
 	x = torch.cuda.FloatTensor(10,10)
 	del x
-	d = B.Dataset(sys.argv[1])
+	d = B.ImageNet(sys.argv[1])
 	l = B.NvdecodeDataLoader(d,
 	                         batch_size      = 256,
 	                         seed            = 0,
@@ -17,10 +17,15 @@ if __name__ == "__main__":
 	n = 0
 	try:
 		t =- time.time()
-		for s in l:
-			n += len(s)
+		for images, targets in l:
+			#
+			# The targets tensor is still collated on CPU. Move it to same
+			# device as images.
+			#
+			targets = targets.to(images.device)
+			n += len(images)
 	except:
-		pass
+		raise
 	finally:
 		t += time.time()
 		print("Time:   {}".format(t))
