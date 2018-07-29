@@ -251,12 +251,12 @@ nvdecodePostprocKernelTex2D(void* __restrict__       dstPtr,
 	const float3 v    = ycbcr2rgb(s, colorMatrix);
 	
 	/**
-	 * Scaling, Biasing, Write-out.
+	 * Biasing, Scaling, Write-out.
 	 */
 	
-	*dstPtr0 = v.x*S0 + B0;
-	*dstPtr1 = v.y*S1 + B1;
-	*dstPtr2 = v.z*S2 + B2;
+	*dstPtr0 = (v.x-B0)*S0;
+	*dstPtr1 = (v.y-B1)*S1;
+	*dstPtr2 = (v.z-B2)*S2;
 }
 
 
