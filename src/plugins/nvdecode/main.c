@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <math.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -396,6 +397,7 @@ BENZINA_PLUGIN_STATIC int   nvdecodeMasterThrdGetSubmRq    (NVDECODE_CTX* ctx, N
 BENZINA_PLUGIN_STATIC int   nvdecodeHelpersStart           (NVDECODE_CTX* ctx){
 	uint64_t       i;
 	pthread_attr_t attr;
+	sigset_t       oldset, allblockedset;
 	
 	switch(ctx->master.status){
 		case CTX_HELPERS_EXITING: return -1;
@@ -422,9 +424,12 @@ BENZINA_PLUGIN_STATIC int   nvdecodeHelpersStart           (NVDECODE_CTX* ctx){
 		pthread_attr_destroy(&attr);
 		return -1;
 	}
+	sigfillset(&allblockedset);
+	pthread_sigmask(SIG_SETMASK, &allblockedset, &oldset);
 	ctx->reader.status = pthread_create(&ctx->reader.thrd, &attr, (void*(*)(void*))nvdecodeReaderThrdMain, ctx) == 0 ? THRD_SPAWNED : THRD_NOT_RUNNING;
 	ctx->feeder.status = pthread_create(&ctx->feeder.thrd, &attr, (void*(*)(void*))nvdecodeFeederThrdMain, ctx) == 0 ? THRD_SPAWNED : THRD_NOT_RUNNING;
 	ctx->worker.status = pthread_create(&ctx->worker.thrd, &attr, (void*(*)(void*))nvdecodeWorkerThrdMain, ctx) == 0 ? THRD_SPAWNED : THRD_NOT_RUNNING;
+	pthread_sigmask(SIG_SETMASK, &oldset, NULL);
 	ctx->reader.err    = ctx->reader.status == THRD_NOT_RUNNING ? 1 : 0;
 	ctx->feeder.err    = ctx->feeder.status == THRD_NOT_RUNNING ? 1 : 0;
 	ctx->worker.err    = ctx->worker.status == THRD_NOT_RUNNING ? 1 : 0;
