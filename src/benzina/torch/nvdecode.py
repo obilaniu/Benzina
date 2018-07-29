@@ -54,43 +54,16 @@ class NvdecodeDataLoader(torch.utils.data.DataLoader):
 			                     device = "cpu")
 			seed = int(seed)
 		
-		if warp_transform is None:
-			warp_transform  = lambda *l, **d: (1.0, 0.0, 0.0,
-			                                   0.0, 1.0, 0.0,
-			                                   0.0, 0.0, 1.0)
-		
-		if   color_transform is None:
-			color_transform = lambda *l, **d: (0,)
-		elif isinstance(color_transform, int):
-			ret             = (color_transform,)
-			color_transform = lambda *l, **d: ret
-		
-		if   oob_transform is None:
-			oob_transform   = lambda *l, **d: (0.0, 0.0, 0.0)
-		elif isinstance(oob_transform, (int, float)):
-			ret             = (float(oob_transform),)*3
-			oob_transform   = lambda *l, **d: ret
-		elif isinstance(oob_transform, (tuple, list)):
-			ret             = tuple(oob_transform[:3])
-			oob_transform   = lambda *l, **d: ret
-		
-		if   scale_transform is None:
-			scale_transform = lambda *l, **d: (1.0, 1.0, 1.0)
-		elif isinstance(scale_transform, (int, float)):
-			ret             = (float(scale_transform),)*3
-			scale_transform = lambda *l, **d: ret
-		elif isinstance(scale_transform, (tuple, list)):
-			ret             = tuple(scale_transform[:3])
-			scale_transform = lambda *l, **d: ret
-		
-		if   bias_transform is None:
-			bias_transform  = lambda *l, **d: (0.0, 0.0, 0.0)
-		elif isinstance(bias_transform,  (int, float)):
-			ret             = (float(bias_transform),)*3
-			bias_transform  = lambda *l, **d: ret
-		elif isinstance(bias_transform, (tuple, list)):
-			ret             = tuple(bias_transform[:3])
-			bias_transform  = lambda *l, **d: ret
+		if not isinstance(warp_transform,  NvdecodeWarpTransform):
+			warp_transform  = NvdecodeConstantWarpTransform (warp_transform)
+		if not isinstance(color_transform, NvdecodeColorTransform):
+			color_transform = NvdecodeConstantColorTransform(color_transform)
+		if not isinstance(oob_transform,   NvdecodeOOBTransform):
+			oob_transform   = NvdecodeConstantOOBTransform  (oob_transform)
+		if not isinstance(scale_transform, NvdecodeScaleTransform):
+			scale_transform = NvdecodeConstantScaleTransform(scale_transform)
+		if not isinstance(bias_transform,  NvdecodeWarpTransform):
+			bias_transform  = NvdecodeConstantBiasTransform (bias_transform)
 		
 		self.device_id       = device_id
 		self.multibuffering  = multibuffering
@@ -262,8 +235,64 @@ class NvdecodeBiasTransform:
 		return (0.0, 0.0, 0.0)
 
 
-class NvdecodeSimilarityTransform(NvdecodeWarpTransform):
-	def __init__(self, s=(+1,+1), r=(-0,+0), tx=(-0,+0), ty=(-0,+0), autoscale=True):
+class NvdecodeConstantWarpTransform (NvdecodeWarpTransform):
+	def __init__(self, warp=None):
+		if warp is None:
+			warp = (1.0, 0.0, 0.0,
+			        0.0, 1.0, 0.0,
+			        0.0, 0.0, 1.0)
+		self.warp = tuple(warp)
+	def __call__(self, dataloaderiter, i):
+		return self.warp
+
+
+class NvdecodeConstantOOBTransform  (NvdecodeOOBTransform):
+	def __init__(self, oob=None):
+		if   oob is None:
+			oob = (0.0, 0.0, 0.0)
+		elif isinstance(oob, (int, float)):
+			oob = (float(oob),)*3
+		self.oob = tuple(oob)
+	def __call__(self, dataloaderiter, i):
+		return self.oob
+
+
+class NvdecodeConstantColorTransform(NvdecodeColorTransform):
+	def __init__(self, color=None):
+		if   color is None:
+			color = (0,)
+		elif isinstance(color, (int)):
+			color = (int(color),)
+		self.color = tuple(color)
+	def __call__(self, dataloaderiter, i):
+		return self.color
+
+
+class NvdecodeConstantScaleTransform(NvdecodeScaleTransform):
+	def __init__(self, scale=None):
+		if   scale is None:
+			scale = (1.0, 1.0, 1.0)
+		elif isinstance(scale, (int, float)):
+			scale = (float(scale),)*3
+		self.scale = tuple(scale)
+	def __call__(self, dataloaderiter, i):
+		return self.scale
+
+
+class NvdecodeConstantBiasTransform (NvdecodeBiasTransform):
+	def __init__(self, bias=None):
+		if   bias is None:
+			bias = (0.0, 0.0, 0.0)
+		elif isinstance(bias, (int, float)):
+			bias = (float(bias),)*3
+		self.bias = tuple(bias)
+	def __call__(self, dataloaderiter, i):
+		return self.bias
+
+
+class NvdecodeSimilarityTransform   (NvdecodeWarpTransform):
+	def __init__(self, s=(+1,+1), r=(-0,+0), tx=(-0,+0), ty=(-0,+0),
+	    reflecth=0.0, reflectv=0.0, autoscale=False):
 		if isinstance(s, (int, float)):
 			s = float(s)
 			s = min(s, 1/s)
@@ -286,10 +315,12 @@ class NvdecodeSimilarityTransform(NvdecodeWarpTransform):
 		
 		assert(s[0] > 0 and s[1] > 0)
 		
-		self.s  = s
-		self.r  = r
-		self.tx = tx
-		self.ty = ty
+		self.s         = s
+		self.r         = r
+		self.tx        = tx
+		self.ty        = ty
+		self.reflecth  = float(reflecth)
+		self.reflectv  = float(reflectv)
 		self.autoscale = autoscale
 	
 	def __call__(self, dataloaderiter, i):
@@ -301,6 +332,8 @@ class NvdecodeSimilarityTransform(NvdecodeWarpTransform):
 		r        = np.deg2rad(RNG.uniform(low =        self.r [0],  high =        self.r [1]))
 		tx       =            RNG.uniform(low =        self.tx[0],  high =        self.tx[1])
 		ty       =            RNG.uniform(low =        self.ty[0],  high =        self.ty[1])
+		reflecth = 1-2*(RNG.uniform() < self.reflecth)
+		reflectv = 1-2*(RNG.uniform() < self.reflectv)
 		
 		#
 		# H = T_inshape*T*R*S*T_outshape
@@ -310,27 +343,24 @@ class NvdecodeSimilarityTransform(NvdecodeWarpTransform):
 		T_outshape = np.asarray([[1, 0, -T_o_x],
 		                         [0, 1, -T_o_y],
 		                         [0, 0,    1  ]])
-		S_y = 1/s
-		S_x = 1/s
+		S_y = reflectv/s
+		S_x = reflecth/s
 		if self.autoscale:
-			S_y *= (inshape[0]-1)/(outshape[0]-1)
-			S_x *= (inshape[1]-1)/(outshape[1]-1)
+			S_y *= inshape[0]/outshape[0]
+			S_x *= inshape[1]/outshape[1]
 		S          = np.asarray([[S_x,  0,   0],
 		                         [ 0,  S_y,  0],
 		                         [ 0,   0,   1]])
-		T          = np.asarray([[1, 0, tx],
-		                         [0, 1, ty],
-		                         [0, 0, 1 ]])
 		R          = np.asarray([[+np.cos(r), +np.sin(r),   0],
 		                         [-np.sin(r), +np.cos(r),   0],
 		                         [    0,           0,       1]])
 		T_i_y = (inshape[0]-1)/2
 		T_i_x = (inshape[1]-1)/2
-		T_inshape  = np.asarray([[1, 0, +T_i_x],
-		                         [0, 1, +T_i_y],
+		T_inshapeT = np.asarray([[1, 0, tx+T_i_x],
+		                         [0, 1, ty+T_i_y],
 		                         [0, 0,    1  ]])
 		
-		H = T_inshape.dot(T).dot(R).dot(S).dot(T_outshape)
+		H = T_inshapeT.dot(R).dot(S).dot(T_outshape)
 		
 		return tuple(H.flatten().tolist())
 
