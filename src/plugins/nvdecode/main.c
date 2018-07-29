@@ -548,14 +548,27 @@ BENZINA_PLUGIN_STATIC int   nvdecodeMaybeReapMallocs   (NVDECODE_CTX* ctx){
  * The feeder and worker threads share a decoder, but because either thread
  * may fail, the other must be ready to cleanup the decoder.
  * 
+ * Called with the lock held. Will release the lock and reacquire it.
+ * 
  * @param [in]  ctx  The context in question.
  * @return 0.
  */
 
 BENZINA_PLUGIN_STATIC int   nvdecodeMaybeReapDecoder   (NVDECODE_CTX* ctx){
+	CUvideodecoder decoder = ctx->decoder;
+	
 	if(!--ctx->decoderRefCnt && ctx->decoderInited){
-		cuvidDestroyDecoder(ctx->decoder);
 		ctx->decoderInited = 0;
+		
+		/**
+		 * We are forced to release the lock here, because deep inside
+		 * cuvidDestroyDecoder(), there is a call to cuCtxSynchronize(). If
+		 * we do not release the mutex, it is possible for deadlock to occur.
+		 */
+		
+		pthread_mutex_unlock(&ctx->lock);
+		cuvidDestroyDecoder (decoder);
+		pthread_mutex_lock  (&ctx->lock);
 	}
 	
 	return 0;
@@ -1206,11 +1219,11 @@ BENZINA_PLUGIN_STATIC int   nvdecodeWorkerThrdContinue (NVDECODE_CTX* ctx){
 	 */
 	
 	nvdecodeWorkerThrdSetStatus(ctx, THRD_EXITING);
-	nvdecodeMaybeReapDecoder   (ctx);
 	pthread_mutex_unlock       (&ctx->lock);
 	cudaStreamSynchronize      (ctx->worker.cudaStream);
 	cudaStreamDestroy          (ctx->worker.cudaStream);
 	pthread_mutex_lock         (&ctx->lock);
+	nvdecodeMaybeReapDecoder   (ctx);
 	nvdecodeWorkerThrdSetStatus(ctx, THRD_NOT_RUNNING);
 	return 0;
 }
