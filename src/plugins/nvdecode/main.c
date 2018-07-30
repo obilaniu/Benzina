@@ -880,7 +880,7 @@ BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdInit     (NVDECODE_CTX* ctx){
 		return 0;
 	}
 	
-	#if NVDECODE >= 8001
+	#if NVDECODE >= 8000
 	memset(&ctx->decoderCaps, 0, sizeof(ctx->decoderCaps));
 	ctx->decoderCaps.eCodecType      = ctx->decoderInfo.CodecType;
 	ctx->decoderCaps.eChromaFormat   = ctx->decoderInfo.ChromaFormat;

@@ -84,14 +84,19 @@ nvcc         = find_program(join_paths(CUDA_HOME, 'bin', 'nvcc'), required: true
 # NVDECODE/Video Codec SDK feature detection
 #
 if   cc.has_function('cuvidReconfigureDecoder', dependencies: [libnvcuvid])
-  message('Found Video Codec SDK >=8.2 (NVIDIA Driver >=396.24 will be required)')
+  message('Found Video Codec SDK >= 8.2')
+  message('Note: Video Codec SDK 8.2 requires NVIDIA Driver >= 396.24 and mandatory CUDA Toolkit >= 8.0')
   nvcuvidCDefs = ['-DNVDECODE=8002']
 elif cc.has_function('cuvidGetDecoderCaps',     dependencies: [libnvcuvid])
-  message('Found Video Codec SDK ==8.1 (NVIDIA Driver >=390.25 will be required)')
-  nvcuvidCDefs = ['-DNVDECODE=8001']
-else
-  message('Found Video Codec SDK <=8.0 (NVIDIA Driver >=378.13 will be required)')
+  message('Found Video Codec SDK == 8.0 or 8.1')
+  message('Note: Video Codec SDK 8.1 requires NVIDIA Driver >= 390.25 and mandatory CUDA Toolkit >= 8.0')
+  message('Note: Video Codec SDK 8.0 requires NVIDIA Driver >= 378.13 and optional  CUDA Toolkit >= 8.0')
   nvcuvidCDefs = ['-DNVDECODE=8000']
+else
+  message('Found Video Codec SDK <  8.0')
+  message('Note: Video Codec SDK 7.1 requires NVIDIA Driver >= 375.20 and optional CUDA Toolkit >= 7.5')
+  message('Note: Video Codec SDK 7.0 requires NVIDIA Driver >= 367.35 and optional CUDA Toolkit >= 7.5')
+  nvcuvidCDefs = ['-DNVDECODE=7000']
 endif
 
 #
