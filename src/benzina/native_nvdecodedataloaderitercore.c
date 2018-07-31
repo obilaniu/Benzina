@@ -20,7 +20,7 @@
 static void      NvdecodeDataLoaderIterCore_dealloc                 (NvdecodeDataLoaderIterCore* self){
 	void* token;
 	
-	while(self->v->waitToken(self->ctx, &token) == 0){
+	while(self->v->waitToken(self->ctx, (const void**)&token) == 0){
 		Py_CLEAR(token);
 	}
 	self->v->release(self->ctx);
