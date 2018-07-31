@@ -71,14 +71,16 @@ if get_option('cuda_runtime') == 'static'
 else
   CUDA_RUNTIME = 'cudart'
 endif
-cudaLibDirs  = join_paths(CUDA_HOME, 'lib64')
-cudaIncDirs  = join_paths(CUDA_HOME, 'include')
-cudaIncs     = include_directories(cudaIncDirs)
-libcuda      = cc.find_library('cuda',          required: true)
-libcudart    = cc.find_library(CUDA_RUNTIME,    required: true, dirs: cudaLibDirs)
-libcudadevrt = cc.find_library('cudadevrt',     required: true, dirs: cudaLibDirs)
-libnvcuvid   = cc.find_library('nvcuvid',       required: true)
-nvcc         = find_program(join_paths(CUDA_HOME, 'bin', 'nvcc'), required: true)
+nvccPath      = join_paths(CUDA_HOME, 'bin', 'nvcc')
+toolkitLibDir = join_paths(CUDA_HOME, 'lib64')
+toolkitIncDir = join_paths(CUDA_HOME, 'include')
+driverLibDirs = [toolkitLibDir, '/usr/lib64', '/usr/lib64/nvidia']
+cudaIncs      = include_directories(toolkitIncDir)
+libcuda       = cc.find_library('cuda',          required: true, dirs: driverLibDirs)
+libcudart     = cc.find_library(CUDA_RUNTIME,    required: true, dirs: toolkitLibDir)
+libcudadevrt  = cc.find_library('cudadevrt',     required: true, dirs: toolkitLibDir)
+libnvcuvid    = cc.find_library('nvcuvid',       required: true, dirs: driverLibDirs)
+nvcc          = find_program(nvccPath, 'nvcc', required: true)
 
 #
 # NVDECODE/Video Codec SDK feature detection
