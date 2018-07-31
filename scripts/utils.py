@@ -41,9 +41,9 @@ class build_ext(setuptools.command.build_ext.build_ext):
 		if not os.path.isfile(os.path.join(mesonBuildRoot,
 		                                   "meson-private",
 		                                   "coredata.dat")):
-			subprocess.check_call(["meson",             srcRoot,
-			                       "--prefix",          libRoot,
-			                       "--buildtype",       "release",
+			subprocess.check_call(["meson",    srcRoot,
+			                       "--prefix", libRoot,
+			                       "-Dbuildtype="+os.environ.get("BUILD_TYPE", "release"),
 			                       "-Dbuilding_py_pkg=true",
 			                       "-Dcuda_runtime=static",
 			                       "-Dpy_interpreter="+sys.executable,
