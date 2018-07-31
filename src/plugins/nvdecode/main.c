@@ -57,6 +57,8 @@ typedef enum NVDECODE_CTX_STATUS{
 	CTX_HELPERS_RUNNING,     /* Context's helper threads are all running normally. */
 	CTX_HELPERS_EXITING,     /* Context's helper threads are being asked to exit,
 	                            or have begun doing so. */
+	CTX_HELPERS_JOINING,     /* Context's helper threads have exited, but must
+	                            still be joined. */
 } NVDECODE_CTX_STATUS;
 
 
@@ -218,6 +220,7 @@ BENZINA_PLUGIN_STATIC int   nvdecodeMasterThrdSetStatus    (NVDECODE_CTX* ctx, N
 BENZINA_PLUGIN_STATIC int   nvdecodeMasterThrdAwaitShutdown(NVDECODE_CTX* ctx);
 BENZINA_PLUGIN_STATIC int   nvdecodeHelpersStart           (NVDECODE_CTX* ctx);
 BENZINA_PLUGIN_STATIC int   nvdecodeHelpersStop            (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int   nvdecodeHelpersJoin            (NVDECODE_CTX* ctx);
 BENZINA_PLUGIN_STATIC int   nvdecodeHelpersAllStatusIs     (NVDECODE_CTX* ctx, NVDECODE_HLP_THRD_STATUS status);
 BENZINA_PLUGIN_STATIC int   nvdecodeHelpersAnyStatusIs     (NVDECODE_CTX* ctx, NVDECODE_HLP_THRD_STATUS status);
 BENZINA_PLUGIN_STATIC int   nvdecodeHelpersShouldExitNow   (NVDECODE_CTX* ctx);
@@ -375,6 +378,9 @@ BENZINA_PLUGIN_STATIC int   nvdecodeMasterThrdAwaitShutdown(NVDECODE_CTX* ctx){
 		if(!nvdecodeSameLifecycle(ctx, lifecycle)){
 			return -1;
 		}
+		if(ctx->master.status == CTX_HELPERS_JOINING){
+			nvdecodeHelpersJoin(ctx);
+		}
 		if(ctx->master.status == CTX_HELPERS_NOT_RUNNING){
 			return 0;
 		}
@@ -413,9 +419,10 @@ BENZINA_PLUGIN_STATIC int   nvdecodeHelpersStart           (NVDECODE_CTX* ctx){
 	sigset_t       oldset, allblockedset;
 	
 	switch(ctx->master.status){
-		case CTX_HELPERS_EXITING: return -1;
-		case CTX_HELPERS_RUNNING: return  0;
-		default: break;
+		case CTX_HELPERS_NOT_RUNNING: break;
+		case CTX_HELPERS_JOINING:     nvdecodeHelpersJoin(ctx); break;
+		case CTX_HELPERS_EXITING:     return -1;
+		case CTX_HELPERS_RUNNING:     return  0;
 	}
 	
 	if(ctx->reader.err || ctx->feeder.err || ctx->worker.err){
@@ -433,7 +440,7 @@ BENZINA_PLUGIN_STATIC int   nvdecodeHelpersStart           (NVDECODE_CTX* ctx){
 		return -1;
 	}
 	if(pthread_attr_setstacksize  (&attr,                 64*1024) != 0 ||
-	   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED) != 0){
+	   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE) != 0){
 		pthread_attr_destroy(&attr);
 		return -1;
 	}
@@ -473,12 +480,45 @@ BENZINA_PLUGIN_STATIC int   nvdecodeHelpersStart           (NVDECODE_CTX* ctx){
  */
 
 BENZINA_PLUGIN_STATIC int   nvdecodeHelpersStop        (NVDECODE_CTX* ctx){
-	if(ctx->master.status == CTX_HELPERS_NOT_RUNNING){
-		return 0;
+	switch(ctx->master.status){
+		case CTX_HELPERS_NOT_RUNNING:
+		case CTX_HELPERS_JOINING:
+			return nvdecodeHelpersJoin(ctx);
+		default:
+			nvdecodeMasterThrdSetStatus(ctx, CTX_HELPERS_EXITING);
+			return nvdecodeMasterThrdAwaitShutdown(ctx);
+		case CTX_HELPERS_EXITING:
+			return nvdecodeMasterThrdAwaitShutdown(ctx);
 	}
-	
-	nvdecodeMasterThrdSetStatus(ctx, CTX_HELPERS_EXITING);
-	return nvdecodeMasterThrdAwaitShutdown(ctx);
+}
+
+/**
+ * @brief Join helper threads.
+ * 
+ * Called with the lock held. Must not be called from the helper threads.
+ * On successful return, all helper threads are truly no longer running and
+ * have been joined, and the context is in state NOT_RUNNING.
+ * 
+ * Idempotent.
+ * 
+ * @param [in]  ctx
+ * @return 0 if threads successfully joined, or not running in first place.
+ *         !0 if threads were not ready to be joined.
+ */
+
+BENZINA_PLUGIN_STATIC int   nvdecodeHelpersJoin        (NVDECODE_CTX* ctx){
+	switch(ctx->master.status){
+		case CTX_HELPERS_JOINING:
+			pthread_join(ctx->reader.thrd, NULL);
+			pthread_join(ctx->feeder.thrd, NULL);
+			pthread_join(ctx->worker.thrd, NULL);
+			nvdecodeMasterThrdSetStatus(ctx, CTX_HELPERS_NOT_RUNNING);
+			return 0;
+		case CTX_HELPERS_NOT_RUNNING:
+			return 0;
+		default:
+			return -1;
+	}
 }
 
 /**
@@ -819,7 +859,11 @@ BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdSetStatus(NVDECODE_CTX* ctx, NVDEC
 	switch(status){
 		case THRD_NOT_RUNNING:
 			if(nvdecodeHelpersAllStatusIs(ctx, THRD_NOT_RUNNING)){
-				nvdecodeMasterThrdSetStatus(ctx, CTX_HELPERS_NOT_RUNNING);
+				if(ctx->master.status == CTX_HELPERS_EXITING){
+					nvdecodeMasterThrdSetStatus(ctx, CTX_HELPERS_JOINING);
+				}else{
+					nvdecodeMasterThrdSetStatus(ctx, CTX_HELPERS_NOT_RUNNING);
+				}
 			}else{
 				nvdecodeMasterThrdSetStatus(ctx, CTX_HELPERS_EXITING);
 			}
@@ -1088,7 +1132,11 @@ BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdSetStatus(NVDECODE_CTX* ctx, NVDEC
 	switch(status){
 		case THRD_NOT_RUNNING:
 			if(nvdecodeHelpersAllStatusIs(ctx, THRD_NOT_RUNNING)){
-				nvdecodeMasterThrdSetStatus(ctx, CTX_HELPERS_NOT_RUNNING);
+				if(ctx->master.status == CTX_HELPERS_EXITING){
+					nvdecodeMasterThrdSetStatus(ctx, CTX_HELPERS_JOINING);
+				}else{
+					nvdecodeMasterThrdSetStatus(ctx, CTX_HELPERS_NOT_RUNNING);
+				}
 			}else{
 				nvdecodeMasterThrdSetStatus(ctx, CTX_HELPERS_EXITING);
 			}
@@ -1371,7 +1419,11 @@ BENZINA_PLUGIN_STATIC int   nvdecodeWorkerThrdSetStatus(NVDECODE_CTX* ctx, NVDEC
 	switch(status){
 		case THRD_NOT_RUNNING:
 			if(nvdecodeHelpersAllStatusIs(ctx, THRD_NOT_RUNNING)){
-				nvdecodeMasterThrdSetStatus(ctx, CTX_HELPERS_NOT_RUNNING);
+				if(ctx->master.status == CTX_HELPERS_EXITING){
+					nvdecodeMasterThrdSetStatus(ctx, CTX_HELPERS_JOINING);
+				}else{
+					nvdecodeMasterThrdSetStatus(ctx, CTX_HELPERS_NOT_RUNNING);
+				}
 			}else{
 				nvdecodeMasterThrdSetStatus(ctx, CTX_HELPERS_EXITING);
 			}
@@ -1979,12 +2031,16 @@ BENZINA_PLUGIN_HIDDEN int   nvdecodeDefineSample            (NVDECODE_CTX* ctx, 
 BENZINA_PLUGIN_HIDDEN int   nvdecodeSubmitSample            (NVDECODE_CTX* ctx){
 	int ret;
 	pthread_mutex_lock(&ctx->lock);
-	if(ctx->master.status == CTX_HELPERS_EXITING){
-		ret = nvdecodeMasterThrdAwaitShutdown(ctx);
-		if(ret != 0){
-			pthread_mutex_unlock(&ctx->lock);
-			return -2;
-		}
+	switch(ctx->master.status){
+		case CTX_HELPERS_JOINING:
+		case CTX_HELPERS_EXITING:
+			ret = nvdecodeMasterThrdAwaitShutdown(ctx);
+			if(ret != 0){
+				pthread_mutex_unlock(&ctx->lock);
+				return -2;
+			}
+		break;
+		default: break;
 	}
 	ctx->master.push.sample++;
 	ret = nvdecodeHelpersStart(ctx);
