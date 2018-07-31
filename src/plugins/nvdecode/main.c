@@ -208,6 +208,7 @@ struct NVDECODE_CTX{
 
 
 /* Static Function Prototypes */
+BENZINA_PLUGIN_STATIC const void* nvdecodeReturnAndClear   (const void**  ptr);
 BENZINA_PLUGIN_STATIC int   nvdecodeAbstime                (struct timespec* ts, double dt);
 BENZINA_PLUGIN_STATIC int   nvdecodeSameLifecycle          (NVDECODE_CTX* ctx, uint64_t lifecycle);
 BENZINA_PLUGIN_STATIC int   nvdecodeMasterThrdGetSubmRq    (NVDECODE_CTX* ctx, NVDECODE_RQ**    rqOut);
@@ -266,6 +267,18 @@ BENZINA_PLUGIN_STATIC int   nvdecodeAllocCleanup           (NVDECODE_CTX* ctx, i
 
 
 /* Static Function Definitions */
+
+/**
+ * @brief Read pointer at the specified location, return it and clear its source.
+ * @param [in]  ptrPtr  The pointer to the pointer to be read, returned and cleared.
+ * @return *ptrPtr
+ */
+
+BENZINA_PLUGIN_STATIC const void* nvdecodeReturnAndClear   (const void**  ptrPtr){
+	const void* ptr = *ptrPtr;
+	*ptrPtr = NULL;
+	return ptr;
+}
 
 /**
  * @brief Compute timespec for the absolute time NOW + dt.
@@ -1502,7 +1515,7 @@ BENZINA_PLUGIN_STATIC int   nvdecodeWaitBatchLocked    (NVDECODE_CTX*    ctx,
 		}
 		nvdecodeMasterThrdGetRetrBt(ctx, &batch);
 		if(ctx->master.pull.sample >= batch->stopIndex){
-			*token = batch->token;
+			*token = nvdecodeReturnAndClear(&batch->token);
 			ctx->master.pull.batch++;
 			ctx->master.pull.token++;
 			return 0;
@@ -1903,12 +1916,14 @@ BENZINA_PLUGIN_HIDDEN int   nvdecodeWaitBatch               (NVDECODE_CTX* ctx,
  */
 
 BENZINA_PLUGIN_HIDDEN int   nvdecodeWaitToken               (NVDECODE_CTX* ctx, const void** token){
+	NVDECODE_BATCH* batch = NULL;
 	int ret = 0;
 	
 	pthread_mutex_lock(&ctx->lock);
 	if(ctx->master.pull.token < ctx->master.push.token){
-		*token = ctx->batch[ctx->master.pull.token++ % ctx->multibuffering].token;
-		if(ctx->master.pull.token == ctx->master.push.token){
+		nvdecodeMasterThrdGetRetrBt(ctx, &batch);
+		*token = nvdecodeReturnAndClear(&batch->token);
+		if(++ctx->master.pull.token == ctx->master.push.token){
 			ctx->reader.err = 0;
 			ctx->feeder.err = 0;
 			ctx->worker.err = 0;
