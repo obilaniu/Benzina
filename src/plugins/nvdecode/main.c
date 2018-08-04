@@ -640,6 +640,7 @@ BENZINA_PLUGIN_STATIC int   nvdecodeMaybeReapDecoder   (NVDECODE_CTX* ctx){
  */
 
 BENZINA_PLUGIN_STATIC void* nvdecodeReaderThrdMain     (NVDECODE_CTX* ctx){
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 	pthread_mutex_lock(&ctx->lock);
 	if(nvdecodeReaderThrdInit(ctx)){
 		while(nvdecodeReaderThrdContinue(ctx)){
@@ -903,6 +904,7 @@ BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdGetCurrRq(NVDECODE_CTX* ctx, NVDEC
  */
 
 BENZINA_PLUGIN_STATIC void* nvdecodeFeederThrdMain     (NVDECODE_CTX* ctx){
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 	pthread_mutex_lock(&ctx->lock);
 	if(nvdecodeFeederThrdInit(ctx)){
 		while(nvdecodeFeederThrdContinue(ctx)){
@@ -1176,6 +1178,7 @@ BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdGetCurrRq(NVDECODE_CTX* ctx, NVDEC
  */
 
 BENZINA_PLUGIN_STATIC void* nvdecodeWorkerThrdMain     (NVDECODE_CTX* ctx){
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 	pthread_mutex_lock(&ctx->lock);
 	if(nvdecodeWorkerThrdInit(ctx)){
 		while(nvdecodeWorkerThrdContinue(ctx)){
