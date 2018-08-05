@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import benzina.native
+import gc
 import numpy                           as np
 import os
 import torch
@@ -107,6 +108,30 @@ class NvdecodeDataLoaderIter:
 		self.core            = None
 		self.stop_iteration  = None
 	
+	def __del__(self):
+		"""
+		Destroy the iterator and all its resources.
+		
+		Because extraneous and circular references can keep the large GPU
+		multibuffer tensor allocated indefinitely, we:
+		
+		  1. Forcibly destroy all our members, thereby losing all of the
+		     iterator's possible references to the multibuffer and the iterator
+		     core. Tensor deallocations may or may not happen at this moment.
+		  2. Invoke the garbage collector, which is capable of identifying
+		     cyclic trash and removing it. The iterator core object supports
+		     garbage collection and is capable of breaking all reference cycles
+		     involving it.
+		  3. Empty the PyTorch CUDA cache, returning the CUDA memory buffers to
+		     the allocation pool.
+		
+		Because data loaders are not intended to be created extremely often,
+		the extra cycles spent here doing this are worth it.
+		"""
+		
+		del self.__dict__
+		self.garbage_collect()
+	
 	def __iter__(self):
 		return self
 	
@@ -128,9 +153,8 @@ class NvdecodeDataLoaderIter:
 					self.fill_one_batch()
 			return self.pull()
 		except StopIteration as si:
-			self.core           = None
-			self.multibuffer    = None
 			self.stop_iteration = si
+			self.garbage_collect()
 			raise self.stop_iteration
 	
 	def core_needs_init(self):
@@ -140,6 +164,19 @@ class NvdecodeDataLoaderIter:
 		self.first_batch = next(self.batch_iter)
 		
 	def init_core(self):
+		"""
+		Initialize the iterator core.
+		
+		From the first batch drawn from the sample iterator, we know the
+		maximum batch size. We allocate a multibuffer large enough to
+		containing self.multibuffering batches of the maximum size.
+		
+		Before we do so, however, we trigger garbage collection and empty
+		the tensor cache, in an attempt to ensure circular references
+		keeping previous large multibuffers alive have been destroyed.
+		"""
+		
+		self.garbage_collect()
 		self.check_or_set_batch_size(self.first_batch)
 		self.multibuffer = torch.zeros([self.multibuffering,
 		                                self.batch_size,
@@ -204,6 +241,12 @@ class NvdecodeDataLoaderIter:
 		elif self.batch_size > iter_batch_size:
 			if self.drop_last:
 				raise StopIteration
+	
+	def garbage_collect(self):
+		self.core           = None
+		self.multibuffer    = None
+		gc.collect()
+		torch.cuda.empty_cache()
 
 
 class NvdecodeWarpTransform:

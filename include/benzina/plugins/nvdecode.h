@@ -46,10 +46,12 @@ struct BENZINA_PLUGIN_NVDECODE_VTABLE{
 	int (*init)                    (void*  ctx);
 	int (*retain)                  (void*  ctx);
 	int (*release)                 (void*  ctx);
+	int (*startHelpers)            (void*  ctx);
+	int (*stopHelpers)             (void*  ctx);
 	int (*defineBatch)             (void*  ctx);
 	int (*submitBatch)             (void*  ctx, const void*  tokenIn);
 	int (*waitBatch)               (void*  ctx, const void** tokenOut, int block, double timeout);
-	int (*waitToken)               (void*  ctx, const void** tokenOut);
+	int (*peekToken)               (void*  ctx, uint64_t i, int clear, const void** tokenOut);
 	
 	int (*defineSample)            (void*  ctx, uint64_t datasetIndex, void* dstPtr);
 	int (*submitSample)            (void*  ctx);

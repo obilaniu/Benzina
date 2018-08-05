@@ -1586,7 +1586,7 @@ BENZINA_PLUGIN_STATIC int   nvdecodeWaitBatchLocked    (NVDECODE_CTX*    ctx,
 }
 
 
-/* Function Definitions */
+/* Plugin Interface Function Definitions */
 
 /**
  * @brief Allocate iterator context from dataset.
@@ -1891,6 +1891,43 @@ BENZINA_PLUGIN_HIDDEN int   nvdecodeRelease            (NVDECODE_CTX* ctx){
 }
 
 /**
+ * @brief Ensure that this iterator context's helper threads are running.
+ * 
+ * This is not actually a very useful function. Technically, even if it returns
+ * success, by the time it returns the threads may have shut down again already.
+ * 
+ * @param [in]  ctx  The iterator context whose helper threads are to be spawned.
+ * @return 0 if successful; !0 otherwise.
+ */
+
+BENZINA_PLUGIN_HIDDEN int   nvdecodeStartHelpers       (NVDECODE_CTX* ctx){
+	int ret;
+	
+	pthread_mutex_lock(&ctx->lock);
+	ret = nvdecodeHelpersStart(ctx);
+	pthread_mutex_unlock(&ctx->lock);
+	
+	return ret;
+}
+
+/**
+ * @brief Ensure that this iterator context's helper threads are stopped.
+ * 
+ * @param [in]  ctx  The iterator context whose helper threads are to be stopped.
+ * @return 0 if successful; !0 otherwise.
+ */
+
+BENZINA_PLUGIN_HIDDEN int   nvdecodeStopHelpers        (NVDECODE_CTX* ctx){
+	int ret;
+	
+	pthread_mutex_lock(&ctx->lock);
+	ret = nvdecodeHelpersStop(ctx);
+	pthread_mutex_unlock(&ctx->lock);
+	
+	return ret;
+}
+
+/**
  * @brief Begin defining a batch of samples.
  * 
  * @param [in]  ctx       The iterator context in which.
@@ -1962,26 +1999,31 @@ BENZINA_PLUGIN_HIDDEN int   nvdecodeWaitBatch               (NVDECODE_CTX* ctx,
 }
 
 /**
- * @brief Pull a token from the pipeline.
+ * @brief Peek at a token from the pipeline.
  * 
- * @param [in]  ctx      The iterator context in which.
+ * @param [in]  ctx      The iterator context in question.
+ * @param [in]  i        The index of the token wanted.
+ * @param [in]  clear    Whether to clear (!0) the token from the buffer or not (0).
  * @param [out] token    User data that was submitted at the corresponding
  *                       pushBatch().
  * @return 0 if successful; !0 otherwise.
  */
 
-BENZINA_PLUGIN_HIDDEN int   nvdecodeWaitToken               (NVDECODE_CTX* ctx, const void** token){
+BENZINA_PLUGIN_HIDDEN int   nvdecodePeekToken               (NVDECODE_CTX* ctx,
+                                                             uint64_t      i,
+                                                             int           clear,
+                                                             const void**  token){
 	NVDECODE_BATCH* batch = NULL;
-	int ret = 0;
+	int ret = -1;
 	
 	pthread_mutex_lock(&ctx->lock);
-	if(ctx->master.pull.token < ctx->master.push.token){
-		nvdecodeMasterThrdGetRetrBt(ctx, &batch);
-		*token = nvdecodeReturnAndClear(&batch->token);
-		if(++ctx->master.pull.token == ctx->master.push.token){
-			ctx->reader.err = 0;
-			ctx->feeder.err = 0;
-			ctx->worker.err = 0;
+	if(i >= ctx->master.pull.token &&
+	   i <  ctx->master.push.token){
+		batch = &ctx->batch[i % ctx->multibuffering];
+		if(clear){
+			*token = nvdecodeReturnAndClear(&batch->token);
+		}else{
+			*token = batch->token;
 		}
 		ret = 0;
 	}else{
@@ -2224,10 +2266,12 @@ BENZINA_PLUGIN_PUBLIC BENZINA_PLUGIN_NVDECODE_VTABLE VTABLE = {
 	.init                     = (void*)nvdecodeInit,
 	.retain                   = (void*)nvdecodeRetain,
 	.release                  = (void*)nvdecodeRelease,
+	.startHelpers             = (void*)nvdecodeStartHelpers,
+	.stopHelpers              = (void*)nvdecodeStopHelpers,
 	.defineBatch              = (void*)nvdecodeDefineBatch,
 	.submitBatch              = (void*)nvdecodeSubmitBatch,
 	.waitBatch                = (void*)nvdecodeWaitBatch,
-	.waitToken                = (void*)nvdecodeWaitToken,
+	.peekToken                = (void*)nvdecodePeekToken,
 	
 	.defineSample             = (void*)nvdecodeDefineSample,
 	.submitSample             = (void*)nvdecodeSubmitSample,
