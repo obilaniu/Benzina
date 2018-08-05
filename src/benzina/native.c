@@ -48,7 +48,8 @@ static const char NATIVE_NOOP_DOC[] =
 
 /* Python Module Definition */
 static PyMethodDef native_module_methods[] = {
-    {"noop", (PyCFunction)noop, 1, NATIVE_NOOP_DOC},
+	{"noop", (PyCFunction)noop, 1, NATIVE_NOOP_DOC},
+	{NULL},  /* Sentinel */
 };
 static PyModuleDef native_module_def = {
 	PyModuleDef_HEAD_INIT,
