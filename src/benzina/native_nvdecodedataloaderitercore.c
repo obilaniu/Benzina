@@ -4,10 +4,8 @@
 #include "structmember.h"
 #include <dlfcn.h>
 #include <stdint.h>
-#include "native.h"
-
-
-/* Defines */
+#include "./native_nvdecodedataloaderitercore.h"
+#include "./native_nvdecodedataloaderitercorebatchcm.h"
 
 
 
@@ -25,7 +23,7 @@
 static PyObject* NvdecodeDataLoaderIterCore_alloc                   (PyTypeObject* type,
                                                                      Py_ssize_t    nitems){
 	(void)nitems;
-	return PyObject_GC_New(NvdecodeDataLoaderIterCore, type);
+	return (PyObject*)PyObject_GC_New(NvdecodeDataLoaderIterCore, type);
 }
 
 /**
@@ -56,7 +54,7 @@ static void      NvdecodeDataLoaderIterCore_dealloc                 (NvdecodeDat
 	 * this object, we abort the deallocation and return.
 	 */
 	
-	if(PyObject_CallFinalizerFromDealloc(self) != 0){
+	if(PyObject_CallFinalizerFromDealloc((PyObject*)self) != 0){
 		return;
 	}
 	
@@ -87,8 +85,8 @@ static void      NvdecodeDataLoaderIterCore_dealloc                 (NvdecodeDat
 	 * function probably came from a temporary variable.
 	 */
 	
-	PyObject_GC_UnTrack(self);
-	Py_TYPE(self)->tp_clear(self);
+	//PyObject_GC_UnTrack(self);
+	Py_TYPE(self)->tp_clear((PyObject*)self);
 	
 	/**
 	 * The tp_clear() is only required to clear Python objects that contribute
@@ -215,12 +213,12 @@ static void      NvdecodeDataLoaderIterCore_finalize                (NvdecodeDat
 	 * Then, set our attributes to None.
 	 */
 	
-	#define Py_CLEAR2NONE(x)          \
-	    do{                           \
-	        PyObject* tmp = (x);      \
-	        Py_INCREF(Py_None);       \
-	        (x) = Py_None;            \
-	        Py_CLEAR(tmp);            \
+	#define Py_CLEAR2NONE(x)                \
+	    do{                                 \
+	        PyObject* tmp = (PyObject*)(x); \
+	        Py_INCREF(Py_None);             \
+	        (x) = (void*)Py_None;           \
+	        Py_CLEAR(tmp);                  \
 	    }while(0)
 	Py_CLEAR2NONE(self->datasetCore);
 	Py_CLEAR2NONE(self->bufferObj);
@@ -264,7 +262,7 @@ static PyObject* NvdecodeDataLoaderIterCore_new                     (PyTypeObjec
 		self->v            = v;
 		self->datasetCore  = NULL;
 		self->ctx          = NULL;
-		PyObject_GC_Track(self);
+		//PyObject_GC_Track(self);
 	}else{
 		dlclose(pluginHandle);
 	}
@@ -363,6 +361,26 @@ static PyObject* NvdecodeDataLoaderIterCore_getMultibuffering       (NvdecodeDat
  * METHODS
  */
 
+static PyObject* NvdecodeDataLoaderIterCore_batch                   (NvdecodeDataLoaderIterCore* self,
+                                                                     PyObject*                   args,
+                                                                     PyObject*                   kwargs){
+	PyObject* token = NULL, *ret;
+	
+	static char *kwargsList[] = {"token", NULL};
+	
+	if(!PyArg_ParseTupleAndKeywords(args, kwargs, "|O", kwargsList,
+	                                &token)){
+		return NULL;
+	}
+	
+	if(token == NULL){
+		token = Py_None;
+	}
+	
+	ret = PyObject_CallFunction((PyObject*)&NvdecodeDataLoaderIterCoreBatchCMType,
+	                            "OO", self, token);
+	return ret;
+}
 static PyObject* NvdecodeDataLoaderIterCore_defineBatch             (NvdecodeDataLoaderIterCore* self){
 	if(self->v->defineBatch(self->ctx) != 0){
 		PyErr_SetString(PyExc_RuntimeError,
@@ -703,6 +721,7 @@ static PyGetSetDef NvdecodeDataLoaderIterCore_getsetters[] = {
  */
 
 static PyMethodDef NvdecodeDataLoaderIterCore_methods[] = {
+    {"batch",                    (PyCFunction)NvdecodeDataLoaderIterCore_batch,                    METH_VARARGS|METH_KEYWORDS, "Create a new batch definition context."},
     {"defineBatch",              (PyCFunction)NvdecodeDataLoaderIterCore_defineBatch,              METH_NOARGS,                "Begin defining a new batch of samples."},
     {"submitBatch",              (PyCFunction)NvdecodeDataLoaderIterCore_submitBatch,              METH_VARARGS|METH_KEYWORDS, "Submit a new batch of samples."},
     {"waitBatch",                (PyCFunction)NvdecodeDataLoaderIterCore_waitBatch,                METH_VARARGS|METH_KEYWORDS, "Wait for a batch of samples to become complete."},
@@ -722,52 +741,52 @@ static PyMethodDef NvdecodeDataLoaderIterCore_methods[] = {
 
 static PyTypeObject NvdecodeDataLoaderIterCoreType = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    "native.NvdecodeDataLoaderIterCore",            /* tp_name */
-    sizeof(NvdecodeDataLoaderIterCore),             /* tp_basicsize */
-    0,                                              /* tp_itemsize */
-    (destructor)NvdecodeDataLoaderIterCore_dealloc, /* tp_dealloc */
-    0,                                              /* tp_print */
-    0,                                              /* tp_getattr */
-    0,                                              /* tp_setattr */
-    0,                                              /* tp_reserved */
-    0,                                              /* tp_repr */
-    0,                                              /* tp_as_number */
-    0,                                              /* tp_as_sequence */
-    0,                                              /* tp_as_mapping */
-    0,                                              /* tp_hash  */
-    0,                                              /* tp_call */
-    0,                                              /* tp_str */
-    0,                                              /* tp_getattro */
-    0,                                              /* tp_setattro */
-    0,                                              /* tp_as_buffer */
+    "benzina.native.NvdecodeDataLoaderIterCore",       /* tp_name */
+    sizeof(NvdecodeDataLoaderIterCore),                /* tp_basicsize */
+    0,                                                 /* tp_itemsize */
+    (destructor)NvdecodeDataLoaderIterCore_dealloc,    /* tp_dealloc */
+    0,                                                 /* tp_print */
+    0,                                                 /* tp_getattr */
+    0,                                                 /* tp_setattr */
+    0,                                                 /* tp_reserved */
+    0,                                                 /* tp_repr */
+    0,                                                 /* tp_as_number */
+    0,                                                 /* tp_as_sequence */
+    0,                                                 /* tp_as_mapping */
+    0,                                                 /* tp_hash  */
+    0,                                                 /* tp_call */
+    0,                                                 /* tp_str */
+    0,                                                 /* tp_getattro */
+    0,                                                 /* tp_setattro */
+    0,                                                 /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_FINALIZE |
-        Py_TPFLAGS_HAVE_GC,                         /* tp_flags */
-    "NvdecodeDataLoaderIterCore objects",           /* tp_doc */
-    NvdecodeDataLoaderIterCore_traverse,            /* tp_traverse */
-    NvdecodeDataLoaderIterCore_clear,               /* tp_clear */
-    0,                                              /* tp_richcompare */
-    0,                                              /* tp_weaklistoffset */
-    0,                                              /* tp_iter */
-    0,                                              /* tp_iternext */
-    NvdecodeDataLoaderIterCore_methods,             /* tp_methods */
-    0,                                              /* tp_members */
-    NvdecodeDataLoaderIterCore_getsetters,          /* tp_getset */
-    0,                                              /* tp_base */
-    0,                                              /* tp_dict */
-    0,                                              /* tp_descr_get */
-    0,                                              /* tp_descr_set */
-    0,                                              /* tp_dictoffset */
-    (initproc)NvdecodeDataLoaderIterCore_init,      /* tp_init */
-    NvdecodeDataLoaderIterCore_alloc,               /* tp_alloc */
-    NvdecodeDataLoaderIterCore_new,                 /* tp_new */
-    PyObject_GC_Del,                                /* tp_free */
-    0,                                              /* tp_is_gc */
-    0,                                              /* tp_bases */
-    0,                                              /* tp_mro */
-    0,                                              /* tp_cache */
-    0,                                              /* tp_subclasses */
-    0,                                              /* tp_weaklist */
-    0,                                              /* tp_del */
-    0,                                              /* tp_version_tag */
-    NvdecodeDataLoaderIterCore_finalize,            /* tp_finalize */
+        Py_TPFLAGS_HAVE_GC,                            /* tp_flags */
+    "NvdecodeDataLoaderIterCore objects",              /* tp_doc */
+    (traverseproc)NvdecodeDataLoaderIterCore_traverse, /* tp_traverse */
+    (inquiry)NvdecodeDataLoaderIterCore_clear,         /* tp_clear */
+    0,                                                 /* tp_richcompare */
+    0,                                                 /* tp_weaklistoffset */
+    0,                                                 /* tp_iter */
+    0,                                                 /* tp_iternext */
+    NvdecodeDataLoaderIterCore_methods,                /* tp_methods */
+    0,                                                 /* tp_members */
+    NvdecodeDataLoaderIterCore_getsetters,             /* tp_getset */
+    0,                                                 /* tp_base */
+    0,                                                 /* tp_dict */
+    0,                                                 /* tp_descr_get */
+    0,                                                 /* tp_descr_set */
+    0,                                                 /* tp_dictoffset */
+    (initproc)NvdecodeDataLoaderIterCore_init,         /* tp_init */
+    0,                                                 /* tp_alloc */
+    NvdecodeDataLoaderIterCore_new,                    /* tp_new */
+    0,                                                 /* tp_free */
+    0,                                                 /* tp_is_gc */
+    0,                                                 /* tp_bases */
+    0,                                                 /* tp_mro */
+    0,                                                 /* tp_cache */
+    0,                                                 /* tp_subclasses */
+    0,                                                 /* tp_weaklist */
+    0,                                                 /* tp_del */
+    0,                                                 /* tp_version_tag */
+    (destructor)NvdecodeDataLoaderIterCore_finalize,   /* tp_finalize */
 };
