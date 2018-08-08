@@ -28,7 +28,6 @@ extern "C" {
 /* Data Structures Forward Declarations and Typedefs */
 typedef struct BENZINA_BUF             BENZINA_BUF;
 typedef struct BENZINA_DATASET         BENZINA_DATASET;
-typedef struct BENZINA_DATALOADER_ITER BENZINA_DATALOADER_ITER;
 
 struct BENZINA_BUF{
 	char*  buf;
