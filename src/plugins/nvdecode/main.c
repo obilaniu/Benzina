@@ -210,62 +210,65 @@ struct NVDECODE_CTX{
 
 
 /* Static Function Prototypes */
-BENZINA_PLUGIN_STATIC const void* nvdecodeReturnAndClear   (const void**  ptr);
-BENZINA_PLUGIN_STATIC int   nvdecodeAbstime                (struct timespec* ts, double dt);
-BENZINA_PLUGIN_STATIC int   nvdecodeSameLifecycle          (NVDECODE_CTX* ctx, uint64_t lifecycle);
-BENZINA_PLUGIN_STATIC int   nvdecodeMasterThrdGetSubmRq    (NVDECODE_CTX* ctx, NVDECODE_RQ**    rqOut);
-BENZINA_PLUGIN_STATIC int   nvdecodeMasterThrdGetSubmBt    (NVDECODE_CTX* ctx, NVDECODE_BATCH** batchOut);
-BENZINA_PLUGIN_STATIC int   nvdecodeMasterThrdGetRetrBt    (NVDECODE_CTX* ctx, NVDECODE_BATCH** batchOut);
-BENZINA_PLUGIN_STATIC int   nvdecodeMasterThrdSetStatus    (NVDECODE_CTX* ctx, NVDECODE_CTX_STATUS status);
-BENZINA_PLUGIN_STATIC int   nvdecodeMasterThrdAwaitShutdown(NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeHelpersStart           (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeHelpersStop            (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeHelpersJoin            (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeHelpersAllStatusIs     (NVDECODE_CTX* ctx, NVDECODE_HLP_THRD_STATUS status);
-BENZINA_PLUGIN_STATIC int   nvdecodeHelpersAnyStatusIs     (NVDECODE_CTX* ctx, NVDECODE_HLP_THRD_STATUS status);
-BENZINA_PLUGIN_STATIC int   nvdecodeHelpersShouldExitNow   (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeHelpersShouldExit      (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdInit         (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdAwaitAll     (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdContinue     (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdHasWork      (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdWait         (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdCore         (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdFillDataRd   (NVDECODE_CTX* ctx,
-                                                            const NVDECODE_RQ*    rq,
-                                                            NVDECODE_READ_PARAMS* rd);
-BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdFillAuxRd    (NVDECODE_CTX* ctx,
-                                                            const NVDECODE_RQ*    rq,
-                                                            NVDECODE_READ_PARAMS* rd);
-BENZINA_PLUGIN_STATIC void* nvdecodeReaderThrdMain         (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdSetStatus    (NVDECODE_CTX* ctx, NVDECODE_HLP_THRD_STATUS status);
-BENZINA_PLUGIN_STATIC int   nvdecodeReaderThrdGetCurrRq    (NVDECODE_CTX* ctx, NVDECODE_RQ** rqOut);
-BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdInit         (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdAwaitAll     (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdContinue     (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdHasWork      (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdWait         (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdCore         (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC void* nvdecodeFeederThrdMain         (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdSetStatus    (NVDECODE_CTX* ctx, NVDECODE_HLP_THRD_STATUS status);
-BENZINA_PLUGIN_STATIC int   nvdecodeFeederThrdGetCurrRq    (NVDECODE_CTX* ctx, NVDECODE_RQ** rqOut);
-BENZINA_PLUGIN_STATIC int   nvdecodeWorkerThrdInit         (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeWorkerThrdAwaitAll     (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeWorkerThrdContinue     (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeWorkerThrdHasWork      (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeWorkerThrdWait         (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeWorkerThrdCore         (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC void* nvdecodeWorkerThrdMain         (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC void  nvdecodeWorkerThrdCallback     (cudaStream_t  stream,
-                                                            cudaError_t   status,
-                                                            NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeWorkerThrdSetStatus    (NVDECODE_CTX* ctx, NVDECODE_HLP_THRD_STATUS status);
-BENZINA_PLUGIN_STATIC int   nvdecodeWorkerThrdGetCurrRq    (NVDECODE_CTX* ctx, NVDECODE_RQ** rqOut);
-BENZINA_PLUGIN_STATIC int   nvdecodeSetDevice              (NVDECODE_CTX* ctx, const char* deviceId);
-BENZINA_PLUGIN_STATIC int   nvdecodeAllocDataOpen          (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeAllocPBParse           (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeAllocThreading         (NVDECODE_CTX* ctx);
-BENZINA_PLUGIN_STATIC int   nvdecodeAllocCleanup           (NVDECODE_CTX* ctx, int ret);
+BENZINA_PLUGIN_STATIC const void* nvdecodeReturnAndClear         (const void**  ptr);
+BENZINA_PLUGIN_STATIC int         nvdecodeTimeMonotonic          (struct timespec* t);
+BENZINA_PLUGIN_STATIC int         nvdecodeTimeAdd                (struct timespec* t, const struct timespec* a, const struct timespec* b);
+BENZINA_PLUGIN_STATIC int         nvdecodeTimeSub                (struct timespec* t, const struct timespec* a, const struct timespec* b);
+BENZINA_PLUGIN_STATIC double      nvdecodeTimeToDouble           (const struct timespec* t);
+BENZINA_PLUGIN_STATIC int         nvdecodeSameLifecycle          (NVDECODE_CTX* ctx, uint64_t lifecycle);
+BENZINA_PLUGIN_STATIC int         nvdecodeMasterThrdGetSubmRq    (NVDECODE_CTX* ctx, NVDECODE_RQ**    rqOut);
+BENZINA_PLUGIN_STATIC int         nvdecodeMasterThrdGetSubmBt    (NVDECODE_CTX* ctx, NVDECODE_BATCH** batchOut);
+BENZINA_PLUGIN_STATIC int         nvdecodeMasterThrdGetRetrBt    (NVDECODE_CTX* ctx, NVDECODE_BATCH** batchOut);
+BENZINA_PLUGIN_STATIC int         nvdecodeMasterThrdSetStatus    (NVDECODE_CTX* ctx, NVDECODE_CTX_STATUS status);
+BENZINA_PLUGIN_STATIC int         nvdecodeMasterThrdAwaitShutdown(NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeHelpersStart           (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeHelpersStop            (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeHelpersJoin            (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeHelpersAllStatusIs     (NVDECODE_CTX* ctx, NVDECODE_HLP_THRD_STATUS status);
+BENZINA_PLUGIN_STATIC int         nvdecodeHelpersAnyStatusIs     (NVDECODE_CTX* ctx, NVDECODE_HLP_THRD_STATUS status);
+BENZINA_PLUGIN_STATIC int         nvdecodeHelpersShouldExitNow   (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeHelpersShouldExit      (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeReaderThrdInit         (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeReaderThrdAwaitAll     (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeReaderThrdContinue     (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeReaderThrdHasWork      (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeReaderThrdWait         (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeReaderThrdCore         (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeReaderThrdFillDataRd   (NVDECODE_CTX* ctx,
+                                                                  const NVDECODE_RQ*    rq,
+                                                                  NVDECODE_READ_PARAMS* rd);
+BENZINA_PLUGIN_STATIC int         nvdecodeReaderThrdFillAuxRd    (NVDECODE_CTX* ctx,
+                                                                  const NVDECODE_RQ*    rq,
+                                                                  NVDECODE_READ_PARAMS* rd);
+BENZINA_PLUGIN_STATIC void*       nvdecodeReaderThrdMain         (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeReaderThrdSetStatus    (NVDECODE_CTX* ctx, NVDECODE_HLP_THRD_STATUS status);
+BENZINA_PLUGIN_STATIC int         nvdecodeReaderThrdGetCurrRq    (NVDECODE_CTX* ctx, NVDECODE_RQ** rqOut);
+BENZINA_PLUGIN_STATIC int         nvdecodeFeederThrdInit         (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeFeederThrdAwaitAll     (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeFeederThrdContinue     (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeFeederThrdHasWork      (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeFeederThrdWait         (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeFeederThrdCore         (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC void*       nvdecodeFeederThrdMain         (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeFeederThrdSetStatus    (NVDECODE_CTX* ctx, NVDECODE_HLP_THRD_STATUS status);
+BENZINA_PLUGIN_STATIC int         nvdecodeFeederThrdGetCurrRq    (NVDECODE_CTX* ctx, NVDECODE_RQ** rqOut);
+BENZINA_PLUGIN_STATIC int         nvdecodeWorkerThrdInit         (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeWorkerThrdAwaitAll     (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeWorkerThrdContinue     (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeWorkerThrdHasWork      (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeWorkerThrdWait         (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeWorkerThrdCore         (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC void*       nvdecodeWorkerThrdMain         (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC void        nvdecodeWorkerThrdCallback     (cudaStream_t  stream,
+                                                                  cudaError_t   status,
+                                                                  NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeWorkerThrdSetStatus    (NVDECODE_CTX* ctx, NVDECODE_HLP_THRD_STATUS status);
+BENZINA_PLUGIN_STATIC int         nvdecodeWorkerThrdGetCurrRq    (NVDECODE_CTX* ctx, NVDECODE_RQ** rqOut);
+BENZINA_PLUGIN_STATIC int         nvdecodeSetDevice              (NVDECODE_CTX* ctx, const char* deviceId);
+BENZINA_PLUGIN_STATIC int         nvdecodeAllocDataOpen          (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeAllocPBParse           (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeAllocThreading         (NVDECODE_CTX* ctx);
+BENZINA_PLUGIN_STATIC int         nvdecodeAllocCleanup           (NVDECODE_CTX* ctx, int ret);
 
 
 
@@ -284,25 +287,144 @@ BENZINA_PLUGIN_STATIC const void* nvdecodeReturnAndClear   (const void**  ptrPtr
 }
 
 /**
- * @brief Compute timespec for the absolute time NOW + dt.
- * @param [out] ts  The computed timespec.
- * @param [in]  dt  The time delta from NOW.
- * @return The return code from clock_gettime(CLOCK_REALTIME, ts).
+ * @brief Get current monotonic time using high-resolution counter.
+ * @param [out] t  The current monotonic time.
+ * @return The return code from clock_gettime(CLOCK_MONOTONIC, t).
  */
 
-BENZINA_PLUGIN_STATIC int   nvdecodeAbstime                (struct timespec* ts, double dt){
-	int    ret;
-	double i=floor(dt), f=dt-i;
+BENZINA_PLUGIN_STATIC int         nvdecodeTimeMonotonic          (struct timespec* t){
+	return clock_gettime(CLOCK_MONOTONIC, t);
+}
+
+/**
+ * @brief Add times a and b together and store sum into t.
+ * 
+ * The output t is normalized such that tv_nsec is always in [0, 1e9), but the
+ * tv_sec field is unconstrained.
+ * 
+ * t,a,b may all alias each other.
+ * 
+ * @param [out] t = a+b
+ * @param [in]  a
+ * @param [in]  b
+ * @return 0
+ */
+
+BENZINA_PLUGIN_STATIC int   nvdecodeTimeAdd                (struct timespec*       t,
+                                                            const struct timespec* a,
+                                                            const struct timespec* b){
+	struct timespec an, bn, d;
+	const int64_t GIGA = (int64_t)1*1000*1000*1000;
 	
-	ret = clock_gettime(CLOCK_REALTIME, ts);
-	ts->tv_nsec += 1000000000*f;
-	if(ts->tv_nsec >= 1000000000){
-		ts->tv_nsec -= 1000000000;
-		ts->tv_sec++;
+	an.tv_sec  = a->tv_nsec/GIGA;
+	bn.tv_sec  = b->tv_nsec/GIGA;
+	an.tv_nsec = a->tv_nsec - an.tv_sec*GIGA;
+	bn.tv_nsec = b->tv_nsec - bn.tv_sec*GIGA;
+	d.tv_sec   = a->tv_sec + an.tv_sec + b->tv_sec + bn.tv_sec;
+	d.tv_nsec  = an.tv_nsec            + bn.tv_nsec;
+	while(d.tv_nsec < 0){
+		d.tv_sec  -=    1;
+		d.tv_nsec += GIGA;
 	}
-	ts->tv_sec += (uint64_t)i;
+	while(d.tv_nsec >= GIGA){
+		d.tv_sec  +=    1;
+		d.tv_nsec -= GIGA;
+	}
+	*t = d;
 	
-	return ret;
+	return 0;
+}
+
+/**
+ * @brief Subtract time b from a and store difference into t.
+ * 
+ * The output t is normalized such that tv_nsec is always in [0, 1e9), but the
+ * tv_sec field is unconstrained.
+ * 
+ * t,a,b may all alias each other.
+ * 
+ * @param [out] t = a-b
+ * @param [in]  a
+ * @param [in]  b
+ * @return 0
+ */
+
+BENZINA_PLUGIN_STATIC int   nvdecodeTimeSub                (struct timespec*       t,
+                                                            const struct timespec* a,
+                                                            const struct timespec* b){
+	struct timespec an, bn, d;
+	const int64_t GIGA = (int64_t)1*1000*1000*1000;
+	
+	an.tv_sec  = a->tv_nsec/GIGA;
+	bn.tv_sec  = b->tv_nsec/GIGA;
+	an.tv_nsec = a->tv_nsec - an.tv_sec*GIGA;
+	bn.tv_nsec = b->tv_nsec - bn.tv_sec*GIGA;
+	d.tv_sec   = a->tv_sec + an.tv_sec - b->tv_sec - bn.tv_sec;
+	d.tv_nsec  = an.tv_nsec            - bn.tv_nsec;
+	while(d.tv_nsec < 0){
+		d.tv_sec  -=    1;
+		d.tv_nsec += GIGA;
+	}
+	while(d.tv_nsec >= GIGA){
+		d.tv_sec  +=    1;
+		d.tv_nsec -= GIGA;
+	}
+	*t = d;
+	
+	return 0;
+}
+
+/**
+ * @brief Convert time to double.
+ * @param [in] t  The time or time-delta to convert.
+ * @return Double-precision floating-point value, in seconds.
+ */
+
+BENZINA_PLUGIN_STATIC double      nvdecodeTimeToDouble           (const struct timespec* t){
+	struct timespec d;
+	const int64_t GIGA = (int64_t)1*1000*1000*1000;
+	
+	d.tv_sec  = t->tv_nsec/GIGA;
+	d.tv_nsec = t->tv_nsec - d.tv_sec*GIGA;
+	d.tv_sec += t->tv_sec;
+	
+	while(d.tv_nsec < 0){
+		d.tv_sec  -=    1;
+		d.tv_nsec += GIGA;
+	}
+	
+	/**
+	 * The following code ensures that positive and negative times of equal magnitude
+	 * render to the same-magnitude but oppositive-sign double-precision floating-point
+	 * number, even after being canonicalized to d.tv_nsec in [0, 1e9). Otherwise,
+	 * unpleasant surprises might occur when comparing such times.
+	 */
+	
+	if(d.tv_sec < 0 && d.tv_nsec != 0){
+		d.tv_nsec = GIGA - d.tv_nsec;
+		d.tv_sec  =   -1 - d.tv_sec;
+		return -d.tv_sec - 1e-9*d.tv_nsec;
+	}else{
+		return +d.tv_sec + 1e-9*d.tv_nsec;
+	}
+}
+
+/**
+ * @brief Convert double to time.
+ * @param [out] t  The output time.
+ * @param [in]  d  The double to convert.
+ */
+
+BENZINA_PLUGIN_STATIC void        nvdecodeDoubleToTime           (struct timespec* t, double d){
+	double i=floor(d), f=d-i;
+	const int64_t GIGA = (int64_t)1*1000*1000*1000;
+	
+	t->tv_nsec = GIGA*f;
+	t->tv_sec  = i;
+	if(t->tv_nsec >= GIGA){
+		t->tv_nsec -= GIGA;
+		t->tv_sec  +=    1;
+	}
 }
 
 /**
@@ -1551,14 +1673,16 @@ BENZINA_PLUGIN_STATIC int   nvdecodeWaitBatchLocked    (NVDECODE_CTX*    ctx,
                                                         int              block,
                                                         double           timeout){
 	NVDECODE_BATCH* batch;
-	struct timespec deadline;
+	struct timespec deadline, now;
 	uint64_t        lifecycle;
 	int             ret = 0;
 	
 	
 	*token = NULL;
 	if(timeout > 0){
-		nvdecodeAbstime(&deadline, timeout);
+		nvdecodeTimeMonotonic(&now);
+		nvdecodeDoubleToTime (&deadline, timeout);
+		nvdecodeTimeAdd      (&deadline, &now, &deadline);
 	}
 	
 	lifecycle = ctx->master.lifecycle;
@@ -1761,20 +1885,29 @@ BENZINA_PLUGIN_STATIC int   nvdecodeAllocPBParse       (NVDECODE_CTX* ctx){
  */
 
 BENZINA_PLUGIN_STATIC int   nvdecodeAllocThreading     (NVDECODE_CTX* ctx){
-	if(pthread_mutex_init(&ctx->lock,        0)){goto fail_lock;}
-	if(pthread_cond_init (&ctx->master.cond, 0)){goto fail_master;}
-	if(pthread_cond_init (&ctx->reader.cond, 0)){goto fail_reader;}
-	if(pthread_cond_init (&ctx->feeder.cond, 0)){goto fail_feeder;}
-	if(pthread_cond_init (&ctx->worker.cond, 0)){goto fail_worker;}
+	pthread_condattr_t condAttr;
+	
+	if(pthread_condattr_init    (&condAttr)                    != 0){goto fail_attr;}
+	if(pthread_condattr_setclock(&condAttr, CLOCK_MONOTONIC)   != 0){goto fail_clock;}
+	if(pthread_mutex_init       (&ctx->lock,                0) != 0){goto fail_lock;}
+	if(pthread_cond_init        (&ctx->master.cond, &condAttr) != 0){goto fail_master;}
+	if(pthread_cond_init        (&ctx->reader.cond, &condAttr) != 0){goto fail_reader;}
+	if(pthread_cond_init        (&ctx->feeder.cond, &condAttr) != 0){goto fail_feeder;}
+	if(pthread_cond_init        (&ctx->worker.cond, &condAttr) != 0){goto fail_worker;}
+	
+	pthread_condattr_destroy(&condAttr);
 	
 	return nvdecodeAllocCleanup(ctx,  0);
 	
-	             pthread_cond_destroy (&ctx->worker.cond);
-	fail_worker: pthread_cond_destroy (&ctx->feeder.cond);
-	fail_feeder: pthread_cond_destroy (&ctx->reader.cond);
-	fail_reader: pthread_cond_destroy (&ctx->master.cond);
-	fail_master: pthread_mutex_destroy(&ctx->lock);
-	fail_lock:
+	
+	             pthread_cond_destroy    (&ctx->worker.cond);
+	fail_worker: pthread_cond_destroy    (&ctx->feeder.cond);
+	fail_feeder: pthread_cond_destroy    (&ctx->reader.cond);
+	fail_reader: pthread_cond_destroy    (&ctx->master.cond);
+	fail_master: pthread_mutex_destroy   (&ctx->lock);
+	fail_lock:   
+	fail_clock:  pthread_condattr_destroy(&condAttr);
+	fail_attr:
 	
 	return nvdecodeAllocCleanup(ctx, -1);
 }
