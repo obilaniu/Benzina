@@ -1,6 +1,6 @@
 project('Benzina', 'c', 'cpp',
         version:                 '0.0.3',
-        meson_version:           '>=0.46',
+        meson_version:           '>=0.48',
         license:                 'MIT',
         default_options:         [
             'c_std=gnu99',
@@ -34,10 +34,12 @@ if BUILDINGPYPKG
   bindir     = join_paths('benzina', 'libs')
   libdir     = join_paths('benzina', 'libs')
   includedir = join_paths('benzina', 'include')
+  tooldir    = join_paths(bindir, 'tools')
 else
   bindir     = get_option('bindir')
   libdir     = get_option('libdir')
   includedir = get_option('includedir')
+  tooldir    = join_paths(bindir, 'tools')
 endif
 
 
@@ -52,11 +54,12 @@ threadsDep  = dependency('threads')
 libm        = cc.find_library('m',    required: false)
 libdl       = cc.find_library('dl',   required: true)
 librt       = cc.find_library('rt',   required: true)
-
 # Relax a bit the warning flags on GCC & Clang. -Wpedantic is very noisy.
 if cc.get_id() == 'gcc' or cc.get_id() == 'clang'
-  add_project_arguments('-Wno-pedantic', language: 'c')
-  add_project_arguments('-Wno-pedantic', language: 'cpp')
+  add_project_arguments(['-Wno-pedantic',
+                         '-Wno-implicit-fallthrough'], language: 'c')
+  add_project_arguments(['-Wno-pedantic',
+                         '-Wno-implicit-fallthrough'], language: 'cpp')
 endif
 
 
@@ -83,25 +86,6 @@ libnvcuvid    = cc.find_library('nvcuvid',       required: true, dirs: driverLib
 nvcc          = find_program(nvccPath, 'nvcc', required: true)
 
 #
-# NVDECODE/Video Codec SDK feature detection
-#
-if   cc.has_function('cuvidReconfigureDecoder', dependencies: [libnvcuvid])
-  message('Found Video Codec SDK >= 8.2')
-  message('Note: Video Codec SDK 8.2 requires NVIDIA Driver >= 396.24 and mandatory CUDA Toolkit >= 8.0')
-  nvcuvidCDefs = ['-DNVDECODE=8002']
-elif cc.has_function('cuvidGetDecoderCaps',     dependencies: [libnvcuvid])
-  message('Found Video Codec SDK == 8.0 or 8.1')
-  message('Note: Video Codec SDK 8.1 requires NVIDIA Driver >= 390.25 and mandatory CUDA Toolkit >= 8.0')
-  message('Note: Video Codec SDK 8.0 requires NVIDIA Driver >= 378.13 and optional  CUDA Toolkit >= 8.0')
-  nvcuvidCDefs = ['-DNVDECODE=8000']
-else
-  message('Found Video Codec SDK <  8.0')
-  message('Note: Video Codec SDK 7.1 requires NVIDIA Driver >= 375.20 and optional CUDA Toolkit >= 7.5')
-  message('Note: Video Codec SDK 7.0 requires NVIDIA Driver >= 367.35 and optional CUDA Toolkit >= 7.5')
-  nvcuvidCDefs = ['-DNVDECODE=7000']
-endif
-
-#
 # GPU presence detection and architecture selection
 #
 CUDA_ARCH    = get_option('cuda_arch')
@@ -115,6 +99,69 @@ if detectGPU.returncode() != 0
 else
   message(detectGPU.stderr())
   cudaGenCodeFlags = detectGPU.stdout().split()
+endif
+if(get_option('buildtype') == 'debugoptimized' or
+   get_option('buildtype') == 'debug')
+  cudaGenCodeFlags += ['-g']
+else
+  cudaGenCodeFlags += ['-O3']
+endif
+
+#
+# Compile generator.
+#
+nvccCompGen   = generator(nvcc,
+    arguments: cudaGenCodeFlags+['-x', 'cu', '@EXTRA_ARGS@', '@INPUT@',
+                                 '-c', '-o', '@OUTPUT@'],
+    output:    ['@BASENAME@.o'],
+)
+
+#
+# NVDECODE/Video Codec SDK feature detection
+#
+if   cc.has_function('cuvidReconfigureDecoder', dependencies: [libnvcuvid])
+  message('Found Video Codec SDK >= 8.2')
+  message('Info: Video Codec SDK 8.2 requires NVIDIA Driver >= 396.24 and mandatory CUDA Toolkit >= 8.0')
+  nvcuvidCDefs = ['-DNVDECODE=8002']
+elif cc.has_function('cuvidGetDecoderCaps',     dependencies: [libnvcuvid])
+  message('Found Video Codec SDK == 8.0 or 8.1')
+  message('Info: Video Codec SDK 8.1 requires NVIDIA Driver >= 390.25 and mandatory CUDA Toolkit >= 8.0')
+  message('Info: Video Codec SDK 8.0 requires NVIDIA Driver >= 378.13 and optional  CUDA Toolkit >= 8.0')
+  nvcuvidCDefs = ['-DNVDECODE=8000']
+else
+  message('Found Video Codec SDK <  8.0')
+  message('Info: Video Codec SDK 7.1 requires NVIDIA Driver >= 375.20 and optional CUDA Toolkit >= 7.5')
+  message('Info: Video Codec SDK 7.0 requires NVIDIA Driver >= 367.35 and optional CUDA Toolkit >= 7.5')
+  nvcuvidCDefs = ['-DNVDECODE=7000']
+endif
+
+
+#
+# FFmpeg
+#
+libavcodec  = dependency('libavcodec',   version: '>=58',  required: false)
+libavformat = dependency('libavformat',  version: '>=58',  required: false)
+libavfilter = dependency('libavfilter',  version: '>=7',   required: false)
+libavutil   = dependency('libavutil',    version: '>=56',  required: false)
+libswscale  = dependency('libswscale',   version: '>=5',   required: false)
+HAVE_FFMPEG = (libavcodec.found()   and
+               libavformat.found()  and
+               libavfilter.found()  and
+               libavutil.found()    and
+               libswscale.found())
+if HAVE_FFMPEG
+  message('Enabling build with FFmpeg')
+else
+  message('Disabling build with FFmpeg')
+endif
+
+
+#
+# Enable linking against GPL software?
+#
+ENABLE_GPL = get_option('enable_gpl')
+if ENABLE_GPL
+  message('Enabling GPL build.')
 endif
 
 

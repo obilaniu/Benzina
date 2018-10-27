@@ -81,7 +81,7 @@ setup(
     ],
     python_requires      = '>=3.5',
     setup_requires       = [
-        "meson>=0.45",
+        "meson>=0.48",
     ],
     install_requires     = [
         "nauka>=0.0.8",
@@ -101,8 +101,9 @@ setup(
                   libraries=["benzina"],)
     ],
     cmdclass={
-        "build_ext": utils.build_ext,
-        "clean":     utils.clean,
+        "build_configure": utils.build_configure,
+        "build_ext":       utils.build_ext,
+        "clean":           utils.clean,
     },
     zip_safe             = False,
 )

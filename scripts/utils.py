@@ -26,7 +26,17 @@ def get_meson_build_root(build_temp):
 	                              "meson"+mesonBuildRoot[4:])
 	return mesonBuildRoot
 
-class build_ext(setuptools.command.build_ext.build_ext):
+
+class build_configure(setuptools.command.build_ext.build_ext):
+	description  = "Configure Meson build system."
+	user_options = [
+		('reconfigure', 'r', 'Whether to forcibly reconfigure or not')
+	]
+	
+	def initialize_options(self):
+		super().initialize_options()
+		self.reconfigure = 0
+	
 	def run(self):
 		mesonBuildRoot = get_meson_build_root(self.build_temp)
 		absSrcRoot     = git.getSrcRoot()
@@ -40,17 +50,27 @@ class build_ext(setuptools.command.build_ext.build_ext):
 		
 		if not os.path.isfile(os.path.join(mesonBuildRoot,
 		                                   "meson-private",
-		                                   "coredata.dat")):
-			subprocess.check_call(["meson",    srcRoot,
-			                       "--prefix", libRoot,
-			                       "-Dbuildtype="+os.environ.get("BUILD_TYPE", "release"),
-			                       "-Dbuilding_py_pkg=true",
-			                       "-Dcuda_runtime=static",
-			                       "-Dpy_interpreter="+sys.executable,
-			                       "-Dcuda_arch="+os.environ.get("CUDA_ARCH", "Auto"),
-			                       "-Dcuda_home="+os.environ.get("CUDA_HOME", "/usr/local/cuda")],
-			                      stdin  = subprocess.DEVNULL,
-			                      cwd    = mesonBuildRoot)
+		                                   "coredata.dat")) or self.reconfigure:
+			cmd  = ["meson",            srcRoot,
+			        "--prefix",         libRoot,
+			        "-Dbuildtype="      +os.environ.get("BUILD_TYPE", "release"),
+			        "-Dbuilding_py_pkg="+"true",
+			        "-Dcuda_runtime="   +"static",
+			        "-Denable_gpl="     +os.environ.get("ENABLE_GPL", "false"),
+			        "-Dpy_interpreter=" +sys.executable,
+			        "-Dcuda_arch="      +os.environ.get("CUDA_ARCH", "Auto"),
+			        "-Dcuda_home="      +os.environ.get("CUDA_HOME", "/usr/local/cuda")]
+			if self.reconfigure: cmd.append("--reconfigure")
+			subprocess.check_call(cmd,
+			                      stdin = subprocess.DEVNULL,
+			                      cwd   = mesonBuildRoot)
+
+
+class build_ext(setuptools.command.build_ext.build_ext):
+	def run(self):
+		self.get_finalized_command("build_configure")
+		
+		mesonBuildRoot = get_meson_build_root(self.build_temp)
 		subprocess.check_call(["ninja"],
 		                      stdin  = subprocess.DEVNULL,
 		                      cwd    = mesonBuildRoot)
@@ -123,7 +143,7 @@ class clean(distutils.command.clean.clean):
 		return super().run()
 
 
-def cuda_ver_cmp(a,b):
+def two_digit_cmp(a,b):
 	aM, am = a.split(".")[:2]
 	aM, am = int(aM), int(am)
 	
@@ -134,6 +154,8 @@ def cuda_ver_cmp(a,b):
 		return aM-bM
 	else:
 		return am-bm
+def cuda_arch_cmp(a,b): return two_digit_cmp(a,b)
+def cuda_ver_cmp(a,b):  return two_digit_cmp(a,b)
 
 
 def cuda_detect_cuda_version(nvcc):
@@ -244,11 +266,20 @@ def cuda_select_nvcc_arch_flags(cuda_version, cuda_arch_list="Auto", detected=""
 	
 	if cuda_ver_cmp(cuda_version, "9.0") >= 0:
 		cuda_known_gpu_architectures  += ["Volta"]
-		cuda_common_gpu_architectures += ["7.0", "7.0+PTX"]
+		cuda_common_gpu_architectures += ["7.0"]
+		cuda_all_gpu_architectures    += ["7.0", "7.2"]
 		
 		if cuda_ver_cmp(cuda_version, "10.0") < 0:
-			cuda_limit_gpu_architecture    = "8.0"
+			cuda_common_gpu_architectures += ["7.0+PTX"]
+			cuda_limit_gpu_architecture    = "7.5"
 	
+	if cuda_ver_cmp(cuda_version, "10.0") >= 0:
+		cuda_known_gpu_architectures  += ["Turing"]
+		cuda_common_gpu_architectures += ["7.5", "7.5+PTX"]
+		cuda_all_gpu_architectures    += ["7.5"]
+		
+		if cuda_ver_cmp(cuda_version, "11.0") < 0:
+			cuda_limit_gpu_architecture    = "8.0"
 	
 	if not cuda_arch_list:
 		cuda_arch_list = "Auto"
@@ -268,7 +299,7 @@ def cuda_select_nvcc_arch_flags(cuda_version, cuda_arch_list="Auto", detected=""
 				filtered_cuda_arch_list = []
 				for arch in cuda_arch_list:
 					if arch:
-						if cuda_ver_cmp(arch, cuda_limit_gpu_architecture) >= 0:
+						if cuda_arch_cmp(arch, cuda_limit_gpu_architecture) >= 0:
 							filtered_cuda_arch_list.append(cuda_common_gpu_architectures[-1])
 						else:
 							filtered_cuda_arch_list.append(arch)
@@ -302,7 +333,8 @@ def cuda_select_nvcc_arch_flags(cuda_version, cuda_arch_list="Auto", detected=""
 			elif arch_name == "Maxwell+Tegra": arch_bin=["5.3"]
 			elif arch_name == "Maxwell":       arch_bin=["5.0", "5.2"]; arch_ptx=["5.2"]
 			elif arch_name == "Pascal":        arch_bin=["6.0", "6.1"]; arch_ptx=["6.1"]
-			elif arch_name == "Pascal":        arch_bin=["7.0", "7.0"]; arch_ptx=["7.0"]
+			elif arch_name == "Volta":         arch_bin=["7.0"];        arch_ptx=["7.0"]
+			elif arch_name == "Turing":        arch_bin=["7.5"];        arch_ptx=["7.5"]
 			else: raise ValueError("Unknown CUDA Architecture Name "+arch_name+
 			                       " in cuda_select_nvcc_arch_flags()!")
 		
