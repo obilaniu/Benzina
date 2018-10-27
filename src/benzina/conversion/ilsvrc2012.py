@@ -174,16 +174,6 @@ def doCompressAtCRF(img, a, crf=17):
 	#         chroma_loc_info_present_flag        = 1
 	#         chroma_sample_loc_type_top_field    = 1 (center sample)
 	#         chroma_sample_loc_type_bottom_field = 1 (center sample)
-	#     Given that the colorspace is that of Rec. ITU-R BT.601-6 625 (PAL), a
-	#     reasonable guess is that the transfer characteristics and primaries are
-	#     also of that standard, even though they are unspecified in ImageNet:
-	#         colour_primaries                    = 5 (Rec. ITU-R BT.601-6 625)
-	#         transfer_characteristics            = 1 (Rec. ITU-R BT.601-6 625 is
-	#                                                  labelled "6", but "1", which
-	#                                                  corresponds to BT.709-5, is
-	#                                                  functionally equivalent and
-	#                                                  explicitly preferred by the
-	#                                                  H264 standard)
 	#
 	
 	try:
