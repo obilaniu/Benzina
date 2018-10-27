@@ -1,12 +1,12 @@
 /* Include Guard */
-#ifndef SRC_TOOLS_IMG2VID_IMG2VID_KERNELS_H
-#define SRC_TOOLS_IMG2VID_IMG2VID_KERNELS_H
+#ifndef SRC_TOOLS_IMG2VID_KERNELS_H
+#define SRC_TOOLS_IMG2VID_KERNELS_H
 
 /**
  * Includes
  */
 
-#include "img2vid.h"
+#include "main.h"
 
 
 

@@ -18,7 +18,7 @@
 #include <cuda_runtime.h>
 #include <math.h>
 #include <stdint.h>
-#include "img2vid_kernels.h"
+#include "kernels.h"
 
 
 

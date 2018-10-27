@@ -1,6 +1,6 @@
 /* Includes */
-#include "img2vid.h"
-#include "img2vid_kernels.h"
+#include "main.h"
+#include "kernels.h"
 
 
 /**

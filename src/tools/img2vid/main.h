@@ -1,6 +1,6 @@
 /* Include Guard */
-#ifndef SRC_TOOLS_IMG2VID_IMG2VID_H
-#define SRC_TOOLS_IMG2VID_IMG2VID_H
+#ifndef SRC_TOOLS_IMG2VID_MAIN_H
+#define SRC_TOOLS_IMG2VID_MAIN_H
 
 
 /* Extern "C" Guard */

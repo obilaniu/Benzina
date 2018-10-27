@@ -13,7 +13,7 @@ endif
 
 
 ### CUDA code compilation
-benzina_img2vidCudaSrcs = files('img2vid_kernels.cpp')
+benzina_img2vidCudaSrcs = files('kernels.cpp')
 benzina_img2vidCudaObjs = nvccCompGen.process(benzina_img2vidCudaSrcs, extra_args: [
     '-Xptxas', '--warn-on-double-precision-use,-O3',
     '-I',  libavutil.get_pkgconfig_variable('includedir', default: '/usr/include/ffmpeg'),
@@ -31,7 +31,7 @@ benzina_img2vidCudaSta  = static_library('post-dlink', benzina_img2vidCudaObjs,
 
 
 ### C code compilation
-benzina_img2vidSrcs     = files('img2vid.c')
+benzina_img2vidSrcs     = files('main.c')
 benzina_img2vidDeps     = [libavcodec, libavformat, libavfilter, libavutil, libswscale,
                            threadsDep, libm, libdl, librt,
                            libcuda, libcudart, libcudadevrt]
