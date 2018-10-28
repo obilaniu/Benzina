@@ -161,7 +161,7 @@ endif
 #
 ENABLE_GPL = get_option('enable_gpl')
 if ENABLE_GPL
-  message('Enabling GPL build.')
+  message('Enabling build with GPL license.')
 endif
 
 
