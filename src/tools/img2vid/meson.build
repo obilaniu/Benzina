@@ -6,8 +6,8 @@
 #
 
 
-### License check
-if not ENABLE_GPL
+### License & Dependency Check
+if not ENABLE_GPL or not HAVE_FFMPEG
   subdir_done()
 endif
 
