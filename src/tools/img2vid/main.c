@@ -978,8 +978,8 @@ static int  i2vMain             (UNIVERSE* u){
 	u->out.codecCtx->thread_count           = 1;
 	u->out.codecCtx->slices                 = 1;
 	snprintf(x264params, sizeof(x264params),
-	         "ref=1:chromaloc=1:slices=1:fullrange=on:log=-1:colorprim=%s:"
-	         "transfer=%s:colormatrix=%s%s%s",
+	         "ref=1:chromaloc=1:log=-1:slices-max=32:fullrange=on:"
+	         "colorprim=%s:transfer=%s:colormatrix=%s%s%s",
 	         colorprimStr, transferStr, colormatrixStr,
 	         *u->args.x264params?":":"", u->args.x264params);
 	if(u->args.crf > 0){
