@@ -147,11 +147,11 @@ static __host__ __device__ float  fwXfrFn (float  L, unsigned fn){
 			b = 0.0031308f;
 			return L > b ? a*powf(L, 1.f/2.4f) - (a-1.f) : 12.92f*L;
 		case TRC_BT2100PQ:
-			c1 =  107.f/ 128.f;
-			c2 = 2413.f/ 128.f;
-			c3 = 2392.f/ 128.f;
-			m  = 2523.f/  32.f;
-			n  =  653.f/4096.f;
+			c1 =  107.f/  128.f;
+			c2 = 2413.f/  128.f;
+			c3 = 2392.f/  128.f;
+			m  = 2523.f/   32.f;
+			n  = 2610.f/16384.f;
 			p  = powf(fmaxf(L, 0.f), n);
 			return powf((c1+c2*p)/(1.f+c3*p), m);
 		case TRC_SMPTE_ST428_1: return powf(48.f*fmaxf(L, 0.f)/52.37f, 1.f/2.6f);
