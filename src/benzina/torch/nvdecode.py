@@ -108,7 +108,7 @@ class NvdecodeDataLoader(torch.utils.data.DataLoader):
 			oob_transform   = NvdecodeConstantOOBTransform  (oob_transform)
 		if not isinstance(scale_transform, NvdecodeScaleTransform):
 			scale_transform = NvdecodeConstantScaleTransform(scale_transform)
-		if not isinstance(bias_transform,  NvdecodeWarpTransform):
+		if not isinstance(bias_transform,  NvdecodeBiasTransform):
 			bias_transform  = NvdecodeConstantBiasTransform (bias_transform)
 		
 		self.device_id       = device_id
