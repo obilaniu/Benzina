@@ -12,6 +12,51 @@ from   contextlib                  import suppress
 
 
 class NvdecodeDataLoader(torch.utils.data.DataLoader):
+	"""
+	Loads images from a benzina.torch.dataset.Dataset. Encapsulates a sampler
+	and data processing transformations.
+
+	Arguments
+	---------
+	dataset (benzina.torch.dataset.Dataset):
+		dataset from which to load the data.
+	batch_size : int, optional
+		how many samples per batch to load (default: ``1``).
+	shuffle (bool, optional): set to ``True`` to have the data reshuffled at every
+		epoch (default: ``False``).
+	sampler (Sampler, optional): defines the strategy to draw samples from the
+		dataset. If specified, ``shuffle`` must be False.
+	batch_sampler (Sampler, optional): like sampler, but returns a batch of indices
+		at a time. Mutually exclusive with :attr:`batch_size`, :attr:`shuffle`,
+		:attr:`sampler`, and :attr:`drop_last`.
+	collate_fn (callable, optional): merges a list of samples to form a mini-batch.
+	drop_last (bool, optional): set to ``True`` to drop the last incomplete batch,
+		if the dataset size is not divisible by the batch size. If ``False`` and
+		the size of dataset is not divisible by the batch size, then the last batch
+		will be smaller. (default: ``False``)
+	timeout (numeric, optional): if positive, the timeout value for collecting a
+		batch. Should always be non-negative. (default: ``0``)
+	shape (int or tuple of ints, optional): set the shape of the samples. Note
+		that this does not imply a resize of the image but merely set the shape
+		of the tensor in which the data will be copied.
+	multibuffering (int, optional): set the size of the multibuffering buffer.
+		(default: ``3``).
+	seed (int, optional): set the seed for the random transformations.
+	warp_transform (NvdecodeWarpTransform or iterable of float, optional):
+		set the warp transformation or use as the arguments to initialize a
+		NvdecodeWarpTransform.
+	oob_transform (NvdecodeOOBTransform or float or iterable of float, optional):
+		set the out of bounds transformation. Values of a pixel's channels when
+		it is out of bound. Note that this transformation is not affected by
+		:attr:`scale_transform` or :attr:`bias_transform`.
+	color_transform (NvdecodeColorTransform or int, optional): set the color
+		transformation.
+	scale_transform (NvdecodeScaleTransform or float or iterable of float, optional):
+		set the scale transformation. Values to multiply a pixel's channels with.
+		Note that this transformation is applied after :attr:`bias_transform`.
+	bias_transform (NvdecodeBiasTransform or float, optional):
+		set the bias transformation. Values to substract a pixel's channels with.
+	"""
 	def __init__(self,
 	             dataset,
 	             batch_size      = 1,
@@ -248,35 +293,155 @@ class NvdecodeDataLoaderIter:
 
 
 class NvdecodeWarpTransform:
+	"""
+	Interface class that represents a warp transformation (rotation, offset,
+	scale, skew).
+	"""
 	def __init__(self, *args, **kwargs):
 		pass
+	"""
+	__call__ needs to be implemented in subclasses
+
+	Arguments
+	---------
+
+	Returns
+	-------
+	out (tuple):
+		a flatten 3 x 3 matrix returned in a tuple of numerics. It should be in
+		row-major order.
+	"""
 	def __call__(self, dataloaderiter, i):
 		return (1.0, 0.0, 0.0,
 		        0.0, 1.0, 0.0,
 		        0.0, 0.0, 1.0)
 class NvdecodeOOBTransform:
+	"""
+	Interface class that represents an out of bounds transformation.
+	"""
 	def __init__(self, *args, **kwargs):
 		pass
+	"""
+	__call__ needs to be implemented in subclasses
+
+	Arguments
+	---------
+
+	Returns
+	-------
+	out (tuple):
+		a tuple of numerics containing the RGB color to use when no data is available.
+		It should be in RGB order.
+	"""
 	def __call__(self, dataloaderiter, i):
 		return (0.0, 0.0, 0.0)
 class NvdecodeColorTransform:
+	"""
+	Interface class that represents a color transformation from YCbCr to RGB as
+	defined in Benzina's kernel.
+
+	0: ITU-R BT.601-6-625 recommentation
+			Kr = 0.299
+			Kg = 0.587
+			Kb = 0.114
+		but full scale
+			Y,Cb,Cr in [0, 255]
+
+	1: ITU-R BT.601-6-625 recommentation
+			Kr = 0.299
+			Kg = 0.587
+			Kb = 0.114
+		with head/footroom
+			Y       in [16,235]
+			Cb,Cr   in [16,240]
+
+	2: ITU-R BT.709 recommentation
+			Kr = 0.2126
+			Kg = 0.7152
+			Kb = 0.0722
+		with head/footroom
+			Y       in [16,235]
+			Cb,Cr   in [16,240]
+
+	3: ITU-R BT.2020 recommentation
+			Kr = 0.2627
+			Kg = 0.6780
+			Kb = 0.0593
+		with head/footroom
+			Y       in [16,235]
+			Cb,Cr   in [16,240]
+	"""
 	def __init__(self, *args, **kwargs):
 		pass
+	"""
+	__call__ needs to be implemented in subclasses
+
+	Arguments
+	---------
+
+	Returns
+	-------
+	out (tuple):
+		a tuple containing a single int indicating which method to use when
+		converting from YCbCr to RGB.
+	"""
 	def __call__(self, dataloaderiter, i):
 		return (0,)
 class NvdecodeScaleTransform:
+	"""
+	Interface class that represents a scale transformation.
+	"""
 	def __init__(self, *args, **kwargs):
 		pass
+	"""
+	__call__ needs to be implemented in subclasses
+
+	Arguments
+	---------
+
+	Returns
+	-------
+	out (tuple):
+		a tuple of numerics containing the scale of a sample's RGB channels. It
+		should be in RGB order. Components will be multiplied to the respective
+		channels of a sample.
+	"""
 	def __call__(self, dataloaderiter, i):
 		return (1.0, 1.0, 1.0)
 class NvdecodeBiasTransform:
+	"""
+	Interface class that represents a bias transformation (rotation, translation,
+	scale, skew).
+	"""
 	def __init__(self, *args, **kwargs):
 		pass
+	"""
+	__call__ needs to be implemented in subclasses
+
+	Arguments
+	---------
+
+	Returns
+	-------
+	out (tuple):
+		a tuple containing a single numeric indicating the bias of pixels RGB channels.
+		It should be in RGB order. Components will be substracted to the respective
+		channels of a sample.
+	"""
 	def __call__(self, dataloaderiter, i):
 		return (0.0, 0.0, 0.0)
 
 
 class NvdecodeConstantWarpTransform (NvdecodeWarpTransform):
+	"""
+	Represents a warp transformation to be applied on each sample of a batch
+	independently of its index.
+
+	Arguments
+	---------
+	warp (iterable of numerics, optional): a flatten, row-major 3 x 3 warp matrix
+		(default: flatten identity matrix).
+	"""
 	def __init__(self, warp=None):
 		if warp is None:
 			warp = (1.0, 0.0, 0.0,
@@ -288,6 +453,16 @@ class NvdecodeConstantWarpTransform (NvdecodeWarpTransform):
 
 
 class NvdecodeConstantOOBTransform  (NvdecodeOOBTransform):
+	"""
+	Represents an out of bounds transformation to be applied on each sample of
+	a batch independently of its index.
+
+	Arguments
+	---------
+	oob (numeric or iterable of numerics, optional): an iterable in RGB order
+		containing the RGB color to use when no data is available (default:
+		``(0.0, 0.0, 0.0)``).
+	"""
 	def __init__(self, oob=None):
 		if   oob is None:
 			oob = (0.0, 0.0, 0.0)
@@ -299,6 +474,15 @@ class NvdecodeConstantOOBTransform  (NvdecodeOOBTransform):
 
 
 class NvdecodeConstantColorTransform(NvdecodeColorTransform):
+	"""
+	Represents a color transformation to be applied on each sample of a batch
+	independently of its index.
+
+	Arguments
+	---------
+	color (int, optional): the index of the method to use when converting
+		from YCbCr to RGB (default: ``0``).
+	"""
 	def __init__(self, color=None):
 		if   color is None:
 			color = (0,)
@@ -310,6 +494,16 @@ class NvdecodeConstantColorTransform(NvdecodeColorTransform):
 
 
 class NvdecodeConstantScaleTransform(NvdecodeScaleTransform):
+	"""
+	Represents a scale transformation to be applied on each sample of a batch
+	independently of its index.
+
+	Arguments
+	---------
+	scale (numeric or iterable of numerics, optional): an iterable in RGB order
+		containing the scale of a sample's RGB channels. Components will be multiplied
+		to the respective channels of a sample (default: ``(1.0, 1.0, 1.0)``).
+	"""
 	def __init__(self, scale=None):
 		if   scale is None:
 			scale = (1.0, 1.0, 1.0)
@@ -321,6 +515,16 @@ class NvdecodeConstantScaleTransform(NvdecodeScaleTransform):
 
 
 class NvdecodeConstantBiasTransform (NvdecodeBiasTransform):
+	"""
+	Represents a bias transformation to be applied on each sample of a batch
+	independently of its index.
+
+	Arguments
+	---------
+	bias (numeric or iterable of numerics, optional): the bias of pixels RGB channels.
+	Components will be substracted to the respective channels of a sample
+	(default: ``(0.0, 0.0, 0.0)``).
+	"""
 	def __init__(self, bias=None):
 		if   bias is None:
 			bias = (0.0, 0.0, 0.0)
@@ -332,6 +536,28 @@ class NvdecodeConstantBiasTransform (NvdecodeBiasTransform):
 
 
 class NvdecodeSimilarityTransform   (NvdecodeWarpTransform):
+	"""
+	Represents a random similarity warp transformation to be applied on each
+	sample of a batch.
+
+	Arguments
+	---------
+	s (iterable of numerics, optional): the scale range to draw a random value from
+		(default: ``(+1,+1)``).
+	r (iterable of numerics, optional): the rotation range in radian to draw a random
+		value from (default: ``(-0,+0)``).
+	tx (iterable of numerics, optional): the translation on the x axis range to draw
+		a random value from (default: ``(-0,+0)``).
+	ty (iterable of numerics, optional): the translation on the y axis range to draw
+		a random value from (default: ``(-0,+0)``).
+	reflecth (iterable of numerics, optional): the horizontal reflection probability
+		range. Valid values are between 0 and 1 (default: ``(0.0)``).
+	reflectv (iterable of numerics, optional): the vertical reflection probability
+		range. Valid values are between 0 and 1 (default: ``(0.0)``).
+	autoscale (bool, optional): If ``True``, the sample will be automatically scaled
+		to the output shape before applying the other transformations (default:
+		``False``).
+	"""
 	def __init__(self, s=(+1,+1), r=(-0,+0), tx=(-0,+0), ty=(-0,+0),
 	    reflecth=0.0, reflectv=0.0, autoscale=False):
 		if isinstance(s, (int, float)):
