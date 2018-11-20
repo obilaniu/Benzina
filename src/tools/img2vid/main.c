@@ -982,12 +982,9 @@ static int  i2vMain             (UNIVERSE* u){
 	         "colorprim=%s:transfer=%s:colormatrix=%s%s%s",
 	         colorprimStr, transferStr, colormatrixStr,
 	         *u->args.x264params?":":"", u->args.x264params);
-	if(u->args.crf > 0){
-		av_dict_set    (&u->out.codecCtxOpt, "profile",     "high",       0);
-	}
+	av_dict_set    (&u->out.codecCtxOpt, "profile",     "high444",    0);
 	av_dict_set    (&u->out.codecCtxOpt, "preset",      "placebo",    0);
 	av_dict_set    (&u->out.codecCtxOpt, "tune",        "stillimage", 0);
-	av_dict_set    (&u->out.codecCtxOpt, "level",       "4.1",        0);
 	av_dict_set_int(&u->out.codecCtxOpt, "forced-idr",  1,            0);
 	av_dict_set_int(&u->out.codecCtxOpt, "crf",         u->args.crf,  0);
 	av_dict_set    (&u->out.codecCtxOpt, "x264-params", x264params,   0);
