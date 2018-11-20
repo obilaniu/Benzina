@@ -450,7 +450,9 @@ class NvdecodeConstantWarpTransform (NvdecodeWarpTransform):
 	warp (iterable of numerics, optional): a flatten, row-major 3 x 3 warp matrix
 		(default: flatten identity matrix).
 	"""
-	def __init__(self, warp=None):
+	def __init__(self, warp=(1.0, 0.0, 0.0,
+	                         0.0, 1.0, 0.0,
+	                         0.0, 0.0, 1.0)):
 		if warp is None:
 			warp = (1.0, 0.0, 0.0,
 			        0.0, 1.0, 0.0,
@@ -471,7 +473,7 @@ class NvdecodeConstantOOBTransform  (NvdecodeOOBTransform):
 		containing the RGB color to use when no data is available (default:
 		(0.0, 0.0, 0.0)).
 	"""
-	def __init__(self, oob=None):
+	def __init__(self, oob=(0.0, 0.0, 0.0)):
 		if   oob is None:
 			oob = (0.0, 0.0, 0.0)
 		elif isinstance(oob, (int, float)):
@@ -491,7 +493,7 @@ class NvdecodeConstantColorTransform(NvdecodeColorTransform):
 	color (int, optional): the index of the method to use when converting
 		a sample's YCbCr value to RGB (default: 0).
 	"""
-	def __init__(self, color=None):
+	def __init__(self, color=0):
 		if   color is None:
 			color = (0,)
 		elif isinstance(color, (int)):
@@ -512,7 +514,7 @@ class NvdecodeConstantScaleTransform(NvdecodeScaleTransform):
 		containing the scale of a sample's RGB channels. Components will be multiplied
 		to the respective channels of a sample (default: (1.0, 1.0, 1.0)).
 	"""
-	def __init__(self, scale=None):
+	def __init__(self, scale=(1.0, 1.0, 1.0)):
 		if   scale is None:
 			scale = (1.0, 1.0, 1.0)
 		elif isinstance(scale, (int, float)):
@@ -533,7 +535,7 @@ class NvdecodeConstantBiasTransform (NvdecodeBiasTransform):
 		containing the bias of a sample's RGB channels. Components will be
 		substracted to the respective channels of a sample (default: (0.0, 0.0, 0.0)).
 	"""
-	def __init__(self, bias=None):
+	def __init__(self, bias=(0.0, 0.0, 0.0)):
 		if   bias is None:
 			bias = (0.0, 0.0, 0.0)
 		elif isinstance(bias, (int, float)):
@@ -552,10 +554,10 @@ class NvdecodeSimilarityTransform   (NvdecodeWarpTransform):
 	---------
 	s (numeric or iterable of numerics, optional): the scale range to draw a random
 		value from. If a single numeric, the value and it's inverse will be used
-		to define the range (default: (+1,+1)).
+		to define the range (default: (+1.0,+1.0)).
 	r (iterable of numerics, optional): the rotation range in radian to draw a random
 		value from. If a single numeric, the value and it's inverse will be used
-		to define the range (default: (-0,+0)).
+		to define the range (default: (-0.0,+0.0)).
 	tx (iterable of numerics, optional): the translation on the x axis range to draw
 		a random value from. If a single numeric, the value and it's inverse will
 		be used to define the range (default: (-0,+0)).
@@ -570,8 +572,8 @@ class NvdecodeSimilarityTransform   (NvdecodeWarpTransform):
 		to the output shape before applying the other transformations (default:
 		False).
 	"""
-	def __init__(self, s=(+1,+1), r=(-0,+0), tx=(-0,+0), ty=(-0,+0),
-	    reflecth=0.0, reflectv=0.0, autoscale=False):
+	def __init__(self, s=(+1.0,+1.0), r=(-0.0,+0.0), tx=(-0,+0), ty=(-0,+0),
+	             reflecth=0.0, reflectv=0.0, autoscale=False):
 		if isinstance(s, (int, float)):
 			s = float(s)
 			s = min(s, 1/s)
