@@ -490,17 +490,17 @@ class NvdecodeConstantColorTransform(NvdecodeColorTransform):
 
 	Arguments
 	---------
-	color (int, optional): the index of the method to use when converting
+	index (int, optional): the index of the method to use when converting
 		a sample's YCbCr value to RGB (default: 0).
 	"""
-	def __init__(self, color=0):
-		if   color is None:
-			color = (0,)
-		elif isinstance(color, (int)):
-			color = (int(color),)
-		self.color = tuple(color)
+	def __init__(self, index=0):
+		if   index is None:
+			index = (0,)
+		elif isinstance(index, (int)):
+			index = (int(index),)
+		self.index = tuple(index)
 	def __call__(self, dataloaderiter, i):
-		return self.color
+		return self.index
 
 
 class NvdecodeConstantScaleTransform(NvdecodeScaleTransform):
