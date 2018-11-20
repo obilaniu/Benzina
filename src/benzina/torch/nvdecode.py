@@ -244,15 +244,16 @@ class NvdecodeDataLoaderIter:
 		ptrs    = [int(buffer[n].data_ptr()) for n in range(len(indices))]
 		auxd    = [self.dataset[i]           for i in indices]
 		token   = (buffer, *self.collate_fn(auxd))
+		t_args  = (self.dataset.shape, self.shape, self.RNG)
 		
 		with self.core.batch(token) as batch:
 			for i,ptr in zip(indices, ptrs):
 				with batch.sample(i, ptr):
-					self.core.setHomography    (*self.warp_transform (self, i))
-					self.core.selectColorMatrix(*self.color_transform(self, i))
-					self.core.setBias          (*self.bias_transform (self, i))
-					self.core.setScale         (*self.scale_transform(self, i))
-					self.core.setOOBColor      (*self.oob_transform  (self, i))
+					self.core.setHomography    (*self.warp_transform (i, *t_args))
+					self.core.selectColorMatrix(*self.color_transform(i, *t_args))
+					self.core.setBias          (*self.bias_transform (i, *t_args))
+					self.core.setScale         (*self.scale_transform(i, *t_args))
+					self.core.setOOBColor      (*self.oob_transform  (i, *t_args))
 	
 	def pull(self):
 		if self.core.pulls >= self.core.pushes:
@@ -294,15 +295,17 @@ class NvdecodeWarpTransform:
 
 	Arguments
 	---------
-	dataloaderiter (NvdecodeDataLoaderIter): the NvdecodeDataLoader iterator
-	i (int): the index of the sample in the dataset
+	index (int): the index of the sample in the dataset
+	in_shape (tuple of ints): the shape of the input sample
+	out_shape (tuple of ints): the shape of the output sample
+	rng (numpy.random.RandomState): a random number generator seeded by the dataloader
 
 	Returns
 	-------
 	out (tuple of numerics): a flatten, row-major 3 x 3 warp matrix returned in
 		a tuple of numerics.
 	"""
-	def __call__(self, dataloaderiter, i):
+	def __call__(self, index, in_shape, out_shape, rng):
 		return NotImplementedError('__call__ needs to be implemented in subclasses')
 class NvdecodeOOBTransform:
 	"""
@@ -316,15 +319,17 @@ class NvdecodeOOBTransform:
 
 	Arguments
 	---------
-	dataloaderiter (NvdecodeDataLoaderIter): the NvdecodeDataLoader iterator
-	i (int): the index of the sample in the dataset
+	index (int): the index of the sample in the dataset
+	in_shape (tuple of ints): the shape of the input sample
+	out_shape (tuple of ints): the shape of the output sample
+	rng (numpy.random.RandomState): a random number generator seeded by the dataloader
 
 	Returns
 	-------
 	out (tuple of numerics): a tuple in RGB order containing the RGB color to
 		use when no data is available. It should be in RGB order.
 	"""
-	def __call__(self, dataloaderiter, i):
+	def __call__(self, index, in_shape, out_shape, rng):
 		return NotImplementedError('__call__ needs to be implemented in subclasses')
 class NvdecodeColorTransform:
 	"""
@@ -370,15 +375,17 @@ class NvdecodeColorTransform:
 
 	Arguments
 	---------
-	dataloaderiter (NvdecodeDataLoaderIter): the NvdecodeDataLoader iterator
-	i (int): the index of the sample in the dataset
+	index (int): the index of the sample in the dataset
+	in_shape (tuple of ints): the shape of the input sample
+	out_shape (tuple of ints): the shape of the output sample
+	rng (numpy.random.RandomState): a random number generator seeded by the dataloader
 
 	Returns
 	-------
 	out (tuple of numerics): a tuple containing a single int indicating which
 		method to use when converting a sample's YCbCr value to RGB.
 	"""
-	def __call__(self, dataloaderiter, i):
+	def __call__(self, index, in_shape, out_shape, rng):
 		return NotImplementedError('__call__ needs to be implemented in subclasses')
 class NvdecodeScaleTransform:
 	"""
@@ -392,8 +399,10 @@ class NvdecodeScaleTransform:
 
 	Arguments
 	---------
-	dataloaderiter (NvdecodeDataLoaderIter): the NvdecodeDataLoader iterator
-	i (int): the index of the sample in the dataset
+	index (int): the index of the sample in the dataset
+	in_shape (tuple of ints): the shape of the input sample
+	out_shape (tuple of ints): the shape of the output sample
+	rng (numpy.random.RandomState): a random number generator seeded by the dataloader
 
 	Returns
 	-------
@@ -401,7 +410,7 @@ class NvdecodeScaleTransform:
 		sample's RGB channels. Components will be multiplied to the respective
 		channels of a sample.
 	"""
-	def __call__(self, dataloaderiter, i):
+	def __call__(self, index, in_shape, out_shape, rng):
 		return NotImplementedError('__call__ needs to be implemented in subclasses')
 class NvdecodeBiasTransform:
 	"""
@@ -415,8 +424,10 @@ class NvdecodeBiasTransform:
 
 	Arguments
 	---------
-	dataloaderiter (NvdecodeDataLoaderIter): the NvdecodeDataLoader iterator
-	i (int): the index of the sample in the dataset
+	index (int): the index of the sample in the dataset
+	in_shape (tuple of ints): the shape of the input sample
+	out_shape (tuple of ints): the shape of the output sample
+	rng (numpy.random.RandomState): a random number generator seeded by the dataloader
 
 	Returns
 	-------
@@ -424,7 +435,7 @@ class NvdecodeBiasTransform:
 		sample's RGB channels. Components will be substracted to the respective
 		channels of a sample.
 	"""
-	def __call__(self, dataloaderiter, i):
+	def __call__(self, index, in_shape, out_shape, rng):
 		return NotImplementedError('__call__ needs to be implemented in subclasses')
 
 
@@ -446,7 +457,7 @@ class NvdecodeConstantWarpTransform (NvdecodeWarpTransform):
 			        0.0, 1.0, 0.0,
 			        0.0, 0.0, 1.0)
 		self.warp = tuple(warp)
-	def __call__(self, dataloaderiter, i):
+	def __call__(self, index, in_shape, out_shape, rng):
 		return self.warp
 
 
@@ -467,7 +478,7 @@ class NvdecodeConstantOOBTransform  (NvdecodeOOBTransform):
 		elif isinstance(oob, (int, float)):
 			oob = (float(oob),)*3
 		self.oob = tuple(oob)
-	def __call__(self, dataloaderiter, i):
+	def __call__(self, index, in_shape, out_shape, rng):
 		return self.oob
 
 
@@ -487,7 +498,7 @@ class NvdecodeConstantColorTransform(NvdecodeColorTransform):
 		elif isinstance(index, (int)):
 			index = (int(index),)
 		self.index = tuple(index)
-	def __call__(self, dataloaderiter, i):
+	def __call__(self, index, in_shape, out_shape, rng):
 		return self.index
 
 
@@ -508,7 +519,7 @@ class NvdecodeConstantScaleTransform(NvdecodeScaleTransform):
 		elif isinstance(scale, (int, float)):
 			scale = (float(scale),)*3
 		self.scale = tuple(scale)
-	def __call__(self, dataloaderiter, i):
+	def __call__(self, index, in_shape, out_shape, rng):
 		return self.scale
 
 
@@ -529,7 +540,7 @@ class NvdecodeConstantBiasTransform (NvdecodeBiasTransform):
 		elif isinstance(bias, (int, float)):
 			bias = (float(bias),)*3
 		self.bias = tuple(bias)
-	def __call__(self, dataloaderiter, i):
+	def __call__(self, index, in_shape, out_shape, rng):
 		return self.bias
 
 
@@ -592,39 +603,36 @@ class NvdecodeSimilarityTransform   (NvdecodeWarpTransform):
 		self.reflectv  = float(reflectv)
 		self.autoscale = autoscale
 	
-	def __call__(self, dataloaderiter, i):
+	def __call__(self, index, in_shape, out_shape, rng):
 		"""Return a random similarity transformation."""
-		RNG      = dataloaderiter.RNG
-		outshape = dataloaderiter.shape
-		inshape  = dataloaderiter.dataset.shape
-		s        = np.exp    (RNG.uniform(low = np.log(self.s [0]), high = np.log(self.s [1])))
-		r        = np.deg2rad(RNG.uniform(low =        self.r [0],  high =        self.r [1]))
-		tx       =            RNG.uniform(low =        self.tx[0],  high =        self.tx[1])
-		ty       =            RNG.uniform(low =        self.ty[0],  high =        self.ty[1])
-		reflecth = 1-2*(RNG.uniform() < self.reflecth)
-		reflectv = 1-2*(RNG.uniform() < self.reflectv)
+		s        = np.exp    (rng.uniform(low = np.log(self.s [0]), high = np.log(self.s [1])))
+		r        = np.deg2rad(rng.uniform(low =        self.r [0],  high =        self.r [1]))
+		tx       =            rng.uniform(low =        self.tx[0],  high =        self.tx[1])
+		ty       =            rng.uniform(low =        self.ty[0],  high =        self.ty[1])
+		reflecth = 1-2*(rng.uniform() < self.reflecth)
+		reflectv = 1-2*(rng.uniform() < self.reflectv)
 		
 		#
 		# H = T_inshape*T*R*S*T_outshape
 		#
-		T_o_y = (outshape[0]-1)/2
-		T_o_x = (outshape[1]-1)/2
+		T_o_y = (out_shape[0]-1)/2
+		T_o_x = (out_shape[1]-1)/2
 		T_outshape = np.asarray([[1, 0, -T_o_x],
 		                         [0, 1, -T_o_y],
 		                         [0, 0,    1  ]])
 		S_y = reflectv/s
 		S_x = reflecth/s
 		if self.autoscale:
-			S_y *= inshape[0]/outshape[0]
-			S_x *= inshape[1]/outshape[1]
+			S_y *= in_shape[0]/out_shape[0]
+			S_x *= in_shape[1]/out_shape[1]
 		S          = np.asarray([[S_x,  0,   0],
 		                         [ 0,  S_y,  0],
 		                         [ 0,   0,   1]])
 		R          = np.asarray([[+np.cos(r), +np.sin(r),   0],
 		                         [-np.sin(r), +np.cos(r),   0],
 		                         [    0,           0,       1]])
-		T_i_y = (inshape[0]-1)/2
-		T_i_x = (inshape[1]-1)/2
+		T_i_y = (in_shape[0]-1)/2
+		T_i_x = (in_shape[1]-1)/2
 		T_inshapeT = np.asarray([[1, 0, tx+T_i_x],
 		                         [0, 1, ty+T_i_y],
 		                         [0, 0,    1  ]])
