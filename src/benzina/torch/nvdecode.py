@@ -45,12 +45,6 @@ class NvdecodeDataLoader(torch.utils.data.DataLoader):
 	warp_transform (NvdecodeWarpTransform or iterable of float, optional): set the
 		warp transformation or use as the arguments to initialize a
 		NvdecodeWarpTransform.
-	oob_transform (NvdecodeOOBTransform or float or iterable of float, optional):
-		set the out of bounds transformation. Values of a pixel's channels when
-		it is out of bound. Note that this transformation is not affected by
-		:attr:`scale_transform` or :attr:`bias_transform`.
-	color_transform (NvdecodeColorTransform or int, optional): set the color
-		transformation.
 	scale_transform (NvdecodeScaleTransform or float or iterable of float, optional):
 		set the scale transformation. Values to multiply a pixel's channels with.
 		Note that this transformation is applied after bias_transform.
@@ -72,8 +66,6 @@ class NvdecodeDataLoader(torch.utils.data.DataLoader):
 	             multibuffering  = 3,
 	             seed            = None,
 	             warp_transform  = None,
-	             oob_transform   = None,
-	             color_transform = None,
 	             scale_transform = None,
 	             bias_transform  = None):
 		super().__init__(dataset,
@@ -103,10 +95,6 @@ class NvdecodeDataLoader(torch.utils.data.DataLoader):
 		
 		if not isinstance(warp_transform,  NvdecodeWarpTransform):
 			warp_transform  = NvdecodeConstantWarpTransform (warp_transform)
-		if not isinstance(color_transform, NvdecodeColorTransform):
-			color_transform = NvdecodeConstantColorTransform(color_transform)
-		if not isinstance(oob_transform,   NvdecodeOOBTransform):
-			oob_transform   = NvdecodeConstantOOBTransform  (oob_transform)
 		if not isinstance(scale_transform, NvdecodeScaleTransform):
 			scale_transform = NvdecodeConstantScaleTransform(scale_transform)
 		if not isinstance(bias_transform,  NvdecodeBiasTransform):
@@ -117,8 +105,8 @@ class NvdecodeDataLoader(torch.utils.data.DataLoader):
 		self.shape           = shape
 		self.RNG             = np.random.RandomState(seed)
 		self.warp_transform  = warp_transform
-		self.color_transform = color_transform
-		self.oob_transform   = oob_transform
+		self.color_transform = NvdecodeConstantColorTransform()
+		self.oob_transform   = NvdecodeConstantOOBTransform()
 		self.scale_transform = scale_transform
 		self.bias_transform  = bias_transform
 	
