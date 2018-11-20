@@ -37,8 +37,8 @@ class NvdecodeDataLoader(torch.utils.data.DataLoader):
 	shape (int or tuple of ints, optional): set the shape of the samples. Note
 		that this does not imply a resize of the image but merely set the shape
 		of the tensor in which the data will be copied.
-	device_id (torch.device, optional): set the device to use. Note that only
-		CUDA devices are supported for the moment. (default: None)
+	device (torch.device, optional): set the device to use. Note that only CUDA
+		devices are supported for the moment. (default: None)
 	multibuffering (int, optional): set the size of the multibuffering buffer.
 		(default: 3).
 	seed (int, optional): set the seed for the random transformations.
@@ -68,7 +68,7 @@ class NvdecodeDataLoader(torch.utils.data.DataLoader):
 	             drop_last       = False,
 	             timeout         = 0,
 	             shape           = None,
-	             device_id       = None,
+	             device          = None,
 	             multibuffering  = 3,
 	             seed            = None,
 	             warp_transform  = None,
@@ -112,7 +112,7 @@ class NvdecodeDataLoader(torch.utils.data.DataLoader):
 		if not isinstance(bias_transform,  NvdecodeBiasTransform):
 			bias_transform  = NvdecodeConstantBiasTransform (bias_transform)
 		
-		self.device_id       = device_id
+		self.device          = device
 		self.multibuffering  = multibuffering
 		self.shape           = shape
 		self.RNG             = np.random.RandomState(seed)
@@ -138,12 +138,12 @@ class NvdecodeDataLoaderIter:
 		self.collate_fn      = loader.collate_fn
 		self.drop_last       = loader.drop_last
 		self.timeout         = loader.timeout
-		if   loader.device_id is None or loader.device_id == "cuda":
-			self.device_id = torch.device(torch.cuda.current_device())
-		elif isinstance(loader.device_id, (str, int)):
-			self.device_id = torch.device(loader.device_id)
+		if   loader.device is None or loader.device == "cuda":
+			self.device = torch.device(torch.cuda.current_device())
+		elif isinstance(loader.device, (str, int)):
+			self.device = torch.device(loader.device)
 		else:
-			self.device_id = loader.device_id
+			self.device = loader.device
 		self.RNG             = np.random.RandomState(loader.RNG.randint(2**32))
 		self.warp_transform  = loader.warp_transform
 		self.color_transform = loader.color_transform
@@ -230,10 +230,10 @@ class NvdecodeDataLoaderIter:
 		                                self.shape[0],
 		                                self.shape[1]],
 		                               dtype  = torch.float32,
-		                               device = self.device_id)
+		                               device = self.device)
 		self.core        = benzina.native.NvdecodeDataLoaderIterCore(
 		                       self.dataset._core,
-		                       str(self.device_id),
+		                       str(self.device),
 		                       self.multibuffer,
 		                       self.multibuffer.data_ptr(),
 		                       self.batch_size,
