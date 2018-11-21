@@ -1,4 +1,4 @@
 # -*- coding: utf-8 -*-
-from .         import dataset, nvdecode
-from .dataset  import Dataset, ImageNet
-from .nvdecode import DataLoader
+from .           import dataset, dataloader
+from .dataset    import Dataset, ImageNet
+from .dataloader import DataLoader
