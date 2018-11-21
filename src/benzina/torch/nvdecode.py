@@ -45,12 +45,12 @@ class NvdecodeDataLoader(torch.utils.data.DataLoader):
 	warp_transform (NvdecodeWarpTransform or iterable of float, optional): set the
 		warp transformation or use as the arguments to initialize a
 		NvdecodeWarpTransform.
-	scale_transform (NvdecodeScaleTransform or float or iterable of float, optional):
-		set the scale transformation. Values to multiply a pixel's channels with.
-		Note that this transformation is applied after bias_transform.
+	norm_transform (NvdecodeNormTransform or float or iterable of float, optional):
+		set the normalization transformation. Values to multiply a pixel's channels
+		with. Note that this transformation is applied after bias_transform.
 	bias_transform (NvdecodeBiasTransform or float, optional): set the bias
 		transformation. Values to substract a pixel's channels with. Note that this
-		transformation is applied after scale_transform.
+		transformation is applied after norm_transform.
 	"""
 	def __init__(self,
 	             dataset,
@@ -66,7 +66,7 @@ class NvdecodeDataLoader(torch.utils.data.DataLoader):
 	             multibuffering  = 3,
 	             seed            = None,
 	             warp_transform  = None,
-	             scale_transform = None,
+	             norm_transform  = None,
 	             bias_transform  = None):
 		super().__init__(dataset,
 		                 batch_size     = batch_size,
@@ -93,12 +93,12 @@ class NvdecodeDataLoader(torch.utils.data.DataLoader):
 			                     device = "cpu")
 			seed = int(seed)
 		
-		if not isinstance(warp_transform,  NvdecodeWarpTransform):
-			warp_transform  = NvdecodeConstantWarpTransform (warp_transform)
-		if not isinstance(scale_transform, NvdecodeScaleTransform):
-			scale_transform = NvdecodeConstantScaleTransform(scale_transform)
-		if not isinstance(bias_transform,  NvdecodeBiasTransform):
-			bias_transform  = NvdecodeConstantBiasTransform (bias_transform)
+		if not isinstance(warp_transform, NvdecodeWarpTransform):
+			warp_transform = NvdecodeConstantWarpTransform(warp_transform)
+		if not isinstance(norm_transform, NvdecodeNormTransform):
+			norm_transform = NvdecodeConstantNormTransform(norm_transform)
+		if not isinstance(bias_transform, NvdecodeBiasTransform):
+			bias_transform = NvdecodeConstantBiasTransform(bias_transform)
 		
 		self.device          = device
 		self.multibuffering  = multibuffering
@@ -107,7 +107,7 @@ class NvdecodeDataLoader(torch.utils.data.DataLoader):
 		self.warp_transform  = warp_transform
 		self.color_transform = NvdecodeConstantColorTransform()
 		self.oob_transform   = NvdecodeConstantOOBTransform()
-		self.scale_transform = scale_transform
+		self.norm_transform  = norm_transform
 		self.bias_transform  = bias_transform
 	
 	def __iter__(self):
@@ -136,7 +136,7 @@ class NvdecodeDataLoaderIter:
 		self.warp_transform  = loader.warp_transform
 		self.color_transform = loader.color_transform
 		self.oob_transform   = loader.oob_transform
-		self.scale_transform = loader.scale_transform
+		self.norm_transform  = loader.norm_transform
 		self.bias_transform  = loader.bias_transform
 		self.multibuffer     = None
 		self.core            = None
@@ -252,7 +252,7 @@ class NvdecodeDataLoaderIter:
 					self.core.setHomography    (*self.warp_transform (i, *t_args))
 					self.core.selectColorMatrix(*self.color_transform(i, *t_args))
 					self.core.setBias          (*self.bias_transform (i, *t_args))
-					self.core.setScale         (*self.scale_transform(i, *t_args))
+					self.core.setScale         (*self.norm_transform (i, *t_args))
 					self.core.setOOBColor      (*self.oob_transform  (i, *t_args))
 	
 	def pull(self):
@@ -387,9 +387,9 @@ class NvdecodeColorTransform:
 	"""
 	def __call__(self, index, in_shape, out_shape, rng):
 		return NotImplementedError('__call__ needs to be implemented in subclasses')
-class NvdecodeScaleTransform:
+class NvdecodeNormTransform:
 	"""
-	Interface class that represents a scale transformation. The transformation
+	Interface class that represents a normalization transformation. The transformation
 	is called for each sample of a batch.
 	"""
 	def __init__(self):
@@ -406,9 +406,9 @@ class NvdecodeScaleTransform:
 
 	Returns
 	-------
-	out (tuple of numerics): a tuple in RGB order containing the scale of a
-		sample's RGB channels. Components will be multiplied to the respective
-		channels of a sample.
+	out (tuple of numerics): a tuple in RGB order containing the normalization
+		constant of a sample's RGB channels. Components will be multiplied to the
+		respective channels of a sample.
 	"""
 	def __call__(self, index, in_shape, out_shape, rng):
 		return NotImplementedError('__call__ needs to be implemented in subclasses')
@@ -502,25 +502,26 @@ class NvdecodeConstantColorTransform(NvdecodeColorTransform):
 		return self.index
 
 
-class NvdecodeConstantScaleTransform(NvdecodeScaleTransform):
+class NvdecodeConstantNormTransform(NvdecodeNormTransform):
 	"""
-	Represents a constant scale transformation to be applied on each sample of a
+	Represents a constant norm transformation to be applied on each sample of a
 	batch independently of its index.
 
 	Arguments
 	---------
-	scale (numeric or iterable of numerics, optional): an iterable in RGB order
-		containing the scale of a sample's RGB channels. Components will be multiplied
-		to the respective channels of a sample (default: (1.0, 1.0, 1.0)).
+	norm (numeric or iterable of numerics, optional): an iterable in RGB order
+		containing the normalization constant of a sample's RGB channels. Components
+		will be multiplied to the respective channels of a sample
+		(default: (1.0, 1.0, 1.0)).
 	"""
-	def __init__(self, scale=(1.0, 1.0, 1.0)):
-		if   scale is None:
-			scale = (1.0, 1.0, 1.0)
-		elif isinstance(scale, (int, float)):
-			scale = (float(scale),)*3
-		self.scale = tuple(scale)
+	def __init__(self, norm=(1.0, 1.0, 1.0)):
+		if   norm is None:
+			norm = (1.0, 1.0, 1.0)
+		elif isinstance(norm, (int, float)):
+			norm = (float(norm),)*3
+		self.norm = tuple(norm)
 	def __call__(self, index, in_shape, out_shape, rng):
-		return self.scale
+		return self.norm
 
 
 class NvdecodeConstantBiasTransform (NvdecodeBiasTransform):
