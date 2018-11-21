@@ -11,7 +11,7 @@ from   contextlib                  import suppress
 
 
 
-class NvdecodeDataLoader(torch.utils.data.DataLoader):
+class DataLoader(torch.utils.data.DataLoader):
 	"""
 	Loads images from a benzina.torch.dataset.Dataset. Encapsulates a sampler
 	and data processing transformations.
@@ -42,15 +42,14 @@ class NvdecodeDataLoader(torch.utils.data.DataLoader):
 	multibuffering (int, optional): set the size of the multibuffering buffer.
 		(default: 3).
 	seed (int, optional): set the seed for the random transformations.
-	warp_transform (NvdecodeWarpTransform or iterable of float, optional): set the
-		warp transformation or use as the arguments to initialize a
-		NvdecodeWarpTransform.
-	norm_transform (NvdecodeNormTransform or float or iterable of float, optional):
-		set the normalization transformation. Values to multiply a pixel's channels
+	warp_transform (WarpTransform or iterable of float, optional): set the warp
+		transformation or use as the arguments to initialize a WarpTransform.
+	norm_transform (NormTransform or float or iterable of float, optional): set
+		the normalization transformation. Values to multiply a pixel's channels
 		with. Note that this transformation is applied after bias_transform.
-	bias_transform (NvdecodeBiasTransform or float, optional): set the bias
-		transformation. Values to substract a pixel's channels with. Note that this
-		transformation is applied after norm_transform.
+	bias_transform (BiasTransform or float, optional): set the bias transformation.
+		Values to substract a pixel's channels with. Note that this transformation
+		is applied after norm_transform.
 	"""
 	def __init__(self,
 	             dataset,
@@ -93,28 +92,28 @@ class NvdecodeDataLoader(torch.utils.data.DataLoader):
 			                     device = "cpu")
 			seed = int(seed)
 		
-		if not isinstance(warp_transform, NvdecodeWarpTransform):
-			warp_transform = NvdecodeConstantWarpTransform(warp_transform)
-		if not isinstance(norm_transform, NvdecodeNormTransform):
-			norm_transform = NvdecodeConstantNormTransform(norm_transform)
-		if not isinstance(bias_transform, NvdecodeBiasTransform):
-			bias_transform = NvdecodeConstantBiasTransform(bias_transform)
+		if not isinstance(warp_transform, WarpTransform):
+			warp_transform = ConstantWarpTransform(warp_transform)
+		if not isinstance(norm_transform, NormTransform):
+			norm_transform = ConstantNormTransform(norm_transform)
+		if not isinstance(bias_transform, BiasTransform):
+			bias_transform = ConstantBiasTransform(bias_transform)
 		
 		self.device          = device
 		self.multibuffering  = multibuffering
 		self.shape           = shape
 		self.RNG             = np.random.RandomState(seed)
 		self.warp_transform  = warp_transform
-		self.color_transform = NvdecodeConstantColorTransform()
-		self.oob_transform   = NvdecodeConstantOOBTransform()
+		self.color_transform = ConstantColorTransform()
+		self.oob_transform   = ConstantOOBTransform()
 		self.norm_transform  = norm_transform
 		self.bias_transform  = bias_transform
 	
 	def __iter__(self):
-		return _NvdecodeDataLoaderIter(self)
+		return _DataLoaderIter(self)
 
 
-class _NvdecodeDataLoaderIter:
+class _DataLoaderIter:
 	def __init__(self, loader):
 		assert(loader.multibuffering >= 1)
 		self.length          = len(loader)
@@ -282,7 +281,7 @@ class _NvdecodeDataLoaderIter:
 		torch.cuda.empty_cache()
 
 
-class NvdecodeWarpTransform:
+class WarpTransform:
 	"""
 	Interface class that represents a warp transformation as a combined rotation,
 	scale, skew and translation 3 x 3 matrix. The transformation is called for each
@@ -307,7 +306,7 @@ class NvdecodeWarpTransform:
 	"""
 	def __call__(self, index, in_shape, out_shape, rng):
 		return NotImplementedError('__call__ needs to be implemented in subclasses')
-class NvdecodeOOBTransform:
+class OOBTransform:
 	"""
 	Interface class that represents an out of bounds transformation. The
 	transformation is called for each sample of a batch.
@@ -331,7 +330,7 @@ class NvdecodeOOBTransform:
 	"""
 	def __call__(self, index, in_shape, out_shape, rng):
 		return NotImplementedError('__call__ needs to be implemented in subclasses')
-class NvdecodeColorTransform:
+class ColorTransform:
 	"""
 	Interface class that represents a color transformation from YCbCr to RGB as
 	defined in Benzina's kernel. The transformation is called for each sample of
@@ -387,7 +386,7 @@ class NvdecodeColorTransform:
 	"""
 	def __call__(self, index, in_shape, out_shape, rng):
 		return NotImplementedError('__call__ needs to be implemented in subclasses')
-class NvdecodeNormTransform:
+class NormTransform:
 	"""
 	Interface class that represents a normalization transformation. The transformation
 	is called for each sample of a batch.
@@ -412,7 +411,7 @@ class NvdecodeNormTransform:
 	"""
 	def __call__(self, index, in_shape, out_shape, rng):
 		return NotImplementedError('__call__ needs to be implemented in subclasses')
-class NvdecodeBiasTransform:
+class BiasTransform:
 	"""
 	Interface class that represents a bias transformation. The transformation
 	is called for each sample of a batch.
@@ -439,7 +438,7 @@ class NvdecodeBiasTransform:
 		return NotImplementedError('__call__ needs to be implemented in subclasses')
 
 
-class NvdecodeConstantWarpTransform (NvdecodeWarpTransform):
+class ConstantWarpTransform (WarpTransform):
 	"""
 	Represents a constant warp transformation to be applied on each sample of a
 	batch independently of its index.
@@ -461,7 +460,7 @@ class NvdecodeConstantWarpTransform (NvdecodeWarpTransform):
 		return self.warp
 
 
-class NvdecodeConstantOOBTransform  (NvdecodeOOBTransform):
+class ConstantOOBTransform  (OOBTransform):
 	"""
 	Represents a constant out of bounds transformation to be applied on each
 	sample of a batch independently of its index.
@@ -482,7 +481,7 @@ class NvdecodeConstantOOBTransform  (NvdecodeOOBTransform):
 		return self.oob
 
 
-class NvdecodeConstantColorTransform(NvdecodeColorTransform):
+class ConstantColorTransform(ColorTransform):
 	"""
 	Represents a constant color transformation to be applied on each sample of a
 	batch independently of its index.
@@ -502,7 +501,7 @@ class NvdecodeConstantColorTransform(NvdecodeColorTransform):
 		return self.index
 
 
-class NvdecodeConstantNormTransform(NvdecodeNormTransform):
+class ConstantNormTransform(NormTransform):
 	"""
 	Represents a constant norm transformation to be applied on each sample of a
 	batch independently of its index.
@@ -524,7 +523,7 @@ class NvdecodeConstantNormTransform(NvdecodeNormTransform):
 		return self.norm
 
 
-class NvdecodeConstantBiasTransform (NvdecodeBiasTransform):
+class ConstantBiasTransform (BiasTransform):
 	"""
 	Represents a constant bias transformation to be applied on each sample of a
 	batch independently of its index.
@@ -545,7 +544,7 @@ class NvdecodeConstantBiasTransform (NvdecodeBiasTransform):
 		return self.bias
 
 
-class NvdecodeSimilarityTransform   (NvdecodeWarpTransform):
+class SimilarityTransform   (WarpTransform):
 	"""
 	Represents a random similarity warp transformation to be applied on each
 	sample of a batch.
