@@ -111,10 +111,10 @@ class NvdecodeDataLoader(torch.utils.data.DataLoader):
 		self.bias_transform  = bias_transform
 	
 	def __iter__(self):
-		return NvdecodeDataLoaderIter(self)
+		return _NvdecodeDataLoaderIter(self)
 
 
-class NvdecodeDataLoaderIter:
+class _NvdecodeDataLoaderIter:
 	def __init__(self, loader):
 		assert(loader.multibuffering >= 1)
 		self.length          = len(loader)
