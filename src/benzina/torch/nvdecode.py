@@ -552,56 +552,62 @@ class NvdecodeSimilarityTransform   (NvdecodeWarpTransform):
 
 	Arguments
 	---------
-	s (numeric or iterable of numerics, optional): the scale range to draw a random
-		value from. If a single numeric, the value and it's inverse will be used
-		to define the range (default: (+1.0,+1.0)).
-	r (iterable of numerics, optional): the rotation range in radian to draw a random
-		value from. If a single numeric, the value and it's inverse will be used
-		to define the range (default: (-0.0,+0.0)).
-	tx (iterable of numerics, optional): the translation on the x axis range to draw
-		a random value from. If a single numeric, the value and it's inverse will
-		be used to define the range (default: (-0,+0)).
-	ty (iterable of numerics, optional): the translation on the y axis range to draw
-		a random value from. If a single numeric, the value and it's inverse will
-		be used to define the range (default: (-0,+0)).
-	reflecth (iterable of numerics, optional): the horizontal reflection probability
-		range. Valid values are between 0 and 1 (default: (0.0)).
-	reflectv (iterable of numerics, optional): the vertical reflection probability
-		range. Valid values are between 0 and 1 (default: (0.0)).
+	scale (numeric or iterable of numerics, optional): the scale range to draw a
+		random value from. If a single numeric, the value and it's inverse will
+		be used to define the range (default: (+1.0,+1.0)).
+	rotation (iterable of numerics, optional): the rotation range in radian to
+		draw a random value from. If a single numeric, the value and it's inverse
+		will be used to define the range (default: (-0.0,+0.0)).
+	translation_x (iterable of numerics, optional): the translation on the x axis
+		range to draw a random value from. If a single numeric, the value and it's
+		inverse will be used to define the range (default: (-0,+0)).
+	translation_y (iterable of numerics, optional): the translation on the y axis
+		range to draw a random value from. If a single numeric, the value and it's
+		inverse will be used to define the range (default: (-0,+0)).
+	flip_h (iterable of numerics, optional): the horizontal flip probability range.
+		Valid values are between 0 and 1 (default: (0.0)).
+	flip_v (iterable of numerics, optional): the vertical flip probability range.
+		Valid values are between 0 and 1 (default: (0.0)).
 	autoscale (bool, optional): If ``True``, the sample will be automatically scaled
 		to the output shape before applying the other transformations (default:
 		False).
 	"""
-	def __init__(self, s=(+1.0,+1.0), r=(-0.0,+0.0), tx=(-0,+0), ty=(-0,+0),
-	             reflecth=0.0, reflectv=0.0, autoscale=False):
-		if isinstance(s, (int, float)):
-			s = float(s)
-			s = min(s, 1/s)
-			s = (s, 1/s)
+	def __init__(self,
+	             scale         = (+1.0,+1.0),
+	             rotation      = (-0.0,+0.0),
+	             translation_x = (-0,+0),
+	             translation_y = (-0,+0),
+	             flip_h        = 0.0,
+	             flip_v        = 0.0,
+	             autoscale     = False):
+		if isinstance(scale, (int, float)):
+			scale = float(scale)
+			scale = min(scale, 1/scale)
+			scale = (scale, 1/scale)
 		
-		if isinstance(r, (int, float)):
-			r = float(r)
-			r = max(r, -r)
-			r = (-r, r)
+		if isinstance(rotation, (int, float)):
+			rotation = float(rotation)
+			rotation = max(rotation, -rotation)
+			rotation = (-rotation, rotation)
 		
-		if isinstance(tx, (int, float)):
-			tx = float(tx)
-			tx = max(tx, -tx)
-			tx = (-tx, tx)
+		if isinstance(translation_x, (int, float)):
+			translation_x = float(translation_x)
+			translation_x = max(translation_x, -translation_x)
+			translation_x = (-translation_x, translation_x)
 		
-		if isinstance(ty, (int, float)):
-			ty = float(ty)
-			ty = max(ty, -ty)
-			ty = (-ty, ty)
+		if isinstance(translation_y, (int, float)):
+			translation_y = float(translation_y)
+			translation_y = max(translation_y, -translation_y)
+			translation_y = (-translation_y, translation_y)
 		
-		assert(s[0] > 0 and s[1] > 0)
+		assert(scale[0] > 0 and scale[1] > 0)
 		
-		self.s         = s
-		self.r         = r
-		self.tx        = tx
-		self.ty        = ty
-		self.reflecth  = float(reflecth)
-		self.reflectv  = float(reflectv)
+		self.s         = scale
+		self.r         = rotation
+		self.tx        = translation_x
+		self.ty        = translation_y
+		self.fh        = float(flip_h)
+		self.fv        = float(flip_v)
 		self.autoscale = autoscale
 	
 	def __call__(self, index, in_shape, out_shape, rng):
@@ -610,8 +616,8 @@ class NvdecodeSimilarityTransform   (NvdecodeWarpTransform):
 		r        = np.deg2rad(rng.uniform(low =        self.r [0],  high =        self.r [1]))
 		tx       =            rng.uniform(low =        self.tx[0],  high =        self.tx[1])
 		ty       =            rng.uniform(low =        self.ty[0],  high =        self.ty[1])
-		reflecth = 1-2*(rng.uniform() < self.reflecth)
-		reflectv = 1-2*(rng.uniform() < self.reflectv)
+		fh       = 1-2*(rng.uniform() < self.fh)
+		fv       = 1-2*(rng.uniform() < self.fv)
 		
 		#
 		# H = T_inshape*T*R*S*T_outshape
@@ -621,8 +627,8 @@ class NvdecodeSimilarityTransform   (NvdecodeWarpTransform):
 		T_outshape = np.asarray([[1, 0, -T_o_x],
 		                         [0, 1, -T_o_y],
 		                         [0, 0,    1  ]])
-		S_y = reflectv/s
-		S_x = reflecth/s
+		S_y = fv/s
+		S_x = fh/s
 		if self.autoscale:
 			S_y *= in_shape[0]/out_shape[0]
 			S_x *= in_shape[1]/out_shape[1]
