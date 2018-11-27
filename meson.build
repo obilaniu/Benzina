@@ -31,8 +31,8 @@ endif
 BUILDINGPYPKG = get_option('building_py_pkg')
 if BUILDINGPYPKG
   message('Entering special Python-package build mode. Overriding bindir, libdir & includedir.')
-  bindir     = join_paths('benzina', 'libs')
-  libdir     = join_paths('benzina', 'libs')
+  bindir     = join_paths('benzina', 'lib')
+  libdir     = join_paths('benzina', 'lib')
   includedir = join_paths('benzina', 'include')
   tooldir    = join_paths(bindir, 'tools')
 else
@@ -64,26 +64,37 @@ endif
 
 
 #
-# NVIDIA
+# FFmpeg
 #
-# CUDA Toolkit
-#
-CUDA_HOME    = get_option('cuda_home')
-if get_option('cuda_runtime') == 'static'
-  CUDA_RUNTIME = 'cudart_static'
+libavcodec  = dependency('libavcodec',   version: '>=57',  required: false)
+libavformat = dependency('libavformat',  version: '>=57',  required: false)
+libavfilter = dependency('libavfilter',  version: '>=6',   required: false)
+libavutil   = dependency('libavutil',    version: '>=55',  required: false)
+libswscale  = dependency('libswscale',   version: '>=4',   required: false)
+HAVE_FFMPEG = (libavcodec.found()   and
+               libavformat.found()  and
+               libavfilter.found()  and
+               libavutil.found()    and
+               libswscale.found())
+if HAVE_FFMPEG
+  message('Enabling build with FFmpeg')
+  ffmpegIncDir = libavutil.get_pkgconfig_variable('includedir',
+                                                  default: '/usr/include/ffmpeg')
 else
-  CUDA_RUNTIME = 'cudart'
+  message('Disabling build with FFmpeg')
+  ffmpegIncDir = '/usr/include/ffmpeg'
 endif
-nvccPath      = join_paths(CUDA_HOME, 'bin', 'nvcc')
-toolkitLibDir = join_paths(CUDA_HOME, 'lib64')
-toolkitIncDir = join_paths(CUDA_HOME, 'include')
-driverLibDirs = [toolkitLibDir, '/usr/lib64', '/usr/lib64/nvidia']
-cudaIncs      = include_directories(toolkitIncDir)
-libcuda       = cc.find_library('cuda',          required: true, dirs: driverLibDirs)
-libcudart     = cc.find_library(CUDA_RUNTIME,    required: true, dirs: toolkitLibDir)
-libcudadevrt  = cc.find_library('cudadevrt',     required: true, dirs: toolkitLibDir)
-libnvcuvid    = cc.find_library('nvcuvid',       required: true, dirs: driverLibDirs)
-nvcc          = find_program(nvccPath, 'nvcc', required: true)
+ENABLE_GPL = get_option('enable_gpl')
+if ENABLE_GPL
+  message('Enabling build with GPL license.')
+endif
+
+
+#
+# Third-party libraries.
+#
+subdir('thirdparty')
+
 
 #
 # GPU presence detection and architecture selection
@@ -102,71 +113,25 @@ else
 endif
 if(get_option('buildtype') == 'debugoptimized' or
    get_option('buildtype') == 'debug')
-  cudaGenCodeFlags += ['-g']
+  cudaGenCodeFlags += ['-g', '-lineinfo']
 else
   cudaGenCodeFlags += ['-O3']
 endif
+
 
 #
 # Compile generator.
 #
 nvccCompGen   = generator(nvcc,
     arguments: cudaGenCodeFlags+['-x', 'cu', '@EXTRA_ARGS@', '@INPUT@',
+                                 '-I', nvcuvidIncDir,
                                  '-c', '-o', '@OUTPUT@'],
     output:    ['@BASENAME@.o'],
 )
-
-#
-# NVDECODE/Video Codec SDK feature detection
-#
-if   cc.has_function('cuvidReconfigureDecoder', dependencies: [libnvcuvid])
-  message('Found Video Codec SDK >= 8.2')
-  message('Info: Video Codec SDK 8.2 requires NVIDIA Driver >= 396.24 and mandatory CUDA Toolkit >= 8.0')
-  nvcuvidCDefs = ['-DNVDECODE=8002']
-elif cc.has_function('cuvidGetDecoderCaps',     dependencies: [libnvcuvid])
-  message('Found Video Codec SDK == 8.0 or 8.1')
-  message('Info: Video Codec SDK 8.1 requires NVIDIA Driver >= 390.25 and mandatory CUDA Toolkit >= 8.0')
-  message('Info: Video Codec SDK 8.0 requires NVIDIA Driver >= 378.13 and optional  CUDA Toolkit >= 8.0')
-  nvcuvidCDefs = ['-DNVDECODE=8000']
-else
-  message('Found Video Codec SDK <  8.0')
-  message('Info: Video Codec SDK 7.1 requires NVIDIA Driver >= 375.20 and optional CUDA Toolkit >= 7.5')
-  message('Info: Video Codec SDK 7.0 requires NVIDIA Driver >= 367.35 and optional CUDA Toolkit >= 7.5')
-  nvcuvidCDefs = ['-DNVDECODE=7000']
-endif
-
-
-#
-# FFmpeg
-#
-libavcodec  = dependency('libavcodec',   version: '>=58',  required: false)
-libavformat = dependency('libavformat',  version: '>=58',  required: false)
-libavfilter = dependency('libavfilter',  version: '>=7',   required: false)
-libavutil   = dependency('libavutil',    version: '>=56',  required: false)
-libswscale  = dependency('libswscale',   version: '>=5',   required: false)
-HAVE_FFMPEG = (libavcodec.found()   and
-               libavformat.found()  and
-               libavfilter.found()  and
-               libavutil.found()    and
-               libswscale.found())
-if HAVE_FFMPEG
-  message('Enabling build with FFmpeg')
-else
-  message('Disabling build with FFmpeg')
-endif
-
-
-#
-# Enable linking against GPL software?
-#
-ENABLE_GPL = get_option('enable_gpl')
-if ENABLE_GPL
-  message('Enabling build with GPL license.')
-endif
-
 
 #
 # Subdirectories.
 #
 subdir('include')
 subdir('src')
+subdir('doc')

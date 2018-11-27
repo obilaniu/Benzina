@@ -1,0 +1,5 @@
+#
+# Git binary files attributes
+#
+
+*.so binary

@@ -43,10 +43,7 @@ class build_configure(setuptools.command.build_ext.build_ext):
 		srcRoot        = os.path.relpath(absSrcRoot, mesonBuildRoot)
 		libRoot        = os.path.abspath(self.build_lib)
 		
-		try:    os.mkdir(os.path.dirname(mesonBuildRoot))
-		except: pass
-		try:    os.mkdir(mesonBuildRoot)
-		except: pass
+		os.makedirs(mesonBuildRoot, exist_ok=True)
 		
 		if not os.path.isfile(os.path.join(mesonBuildRoot,
 		                                   "meson-private",
@@ -68,7 +65,7 @@ class build_configure(setuptools.command.build_ext.build_ext):
 
 class build_ext(setuptools.command.build_ext.build_ext):
 	def run(self):
-		self.get_finalized_command("build_configure")
+		self.get_finalized_command("build_configure").run()
 		
 		mesonBuildRoot = get_meson_build_root(self.build_temp)
 		subprocess.check_call(["ninja"],

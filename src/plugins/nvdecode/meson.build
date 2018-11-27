@@ -23,8 +23,8 @@ libbenzina_plugin_nvdecodeCudaSrcs = files('kernels.cpp')
 libbenzina_plugin_nvdecodeCudaObjs = nvccCompGen.process(libbenzina_plugin_nvdecodeCudaSrcs, extra_args: [
     '-Xcompiler', '-fPIC',
     '-Xptxas', '--warn-on-double-precision-use,-O3',
-     '--use_fast_math', '-O3',
-    '-I'+benzinaIncsDir,
+    '--use_fast_math', '-O3',
+    '-I', benzinaIncDir,
 ])
 libbenzina_plugin_nvdecodeCudaSta  = static_library('pre-dlink', libbenzina_plugin_nvdecodeCudaObjs)
 libbenzina_plugin_nvdecodeCudaObjs = custom_target ('libbenzina_plugin_nvdecodeCuda-dlink',
@@ -55,27 +55,4 @@ libbenzina_plugin_nvdecode         = shared_library('benzina_plugin_nvdecode',
                                                     install_rpath        : '$ORIGIN',
                                                     install              : true,
                                                     install_dir          : libdir)
-
-
-
-#
-# Executable: benzina_nvdecode_gen
-#
-# An executable that takes data.bin and data.lengths files and generates the
-# corresponding data.nvdecode file.
-#
-
-benzina_nvdecode_genSrcs  = files('nvdecodegen.c')
-benzina_nvdecode_genDeps  = [threadsDep, libm, libdl, libcuda, libnvcuvid]
-benzina_nvdecode_genIncs  = [cudaIncs, benzinaIncs]
-benzina_nvdecode_genCArgs = [cudaIncs, benzinaIncs]
-benzina_nvdecode_gen      = executable('benzina_nvdecode_gen', benzina_nvdecode_genSrcs,
-                                       include_directories: benzina_nvdecode_genIncs,
-                                       dependencies       : benzina_nvdecode_genDeps,
-                                       c_args             : nvcuvidCDefs,
-                                       install            : true,
-                                       install_dir        : bindir)
-
-
-
 

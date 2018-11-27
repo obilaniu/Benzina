@@ -29,7 +29,7 @@ from . import git, versioning, utils
 #
 with open(os.path.join(git.getSrcRoot(),
                        "scripts",
-                       "LONG_DESCRIPTION.txt"), "r") as f:
+                       "LONG_DESCRIPTION.txt"), "r", encoding="utf-8") as f:
 	long_description = f.read()
 
 
@@ -81,10 +81,10 @@ setup(
     ],
     python_requires      = '>=3.5',
     setup_requires       = [
-        "meson>=0.48",
+        "meson>=0.48.2",
     ],
     install_requires     = [
-        "nauka>=0.0.8",
+        "nauka>=0.0.11",
         "numpy>=1.10",
     ],
     packages             = find_packages("src"),
@@ -96,8 +96,8 @@ setup(
                   library_dirs=[os.path.join(git.getSrcRoot(),
                                              utils.get_build_platlib(),
                                              "benzina",
-                                             "libs")],
-                  runtime_library_dirs=[os.path.join("$ORIGIN", "libs")],
+                                             "lib")],
+                  runtime_library_dirs=[os.path.join("$ORIGIN", "lib")],
                   libraries=["benzina"],)
     ],
     cmdclass={

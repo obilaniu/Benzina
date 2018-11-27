@@ -3,12 +3,14 @@
 include setup.* *.md
 
 # Grab all of the source code and build scripts:
+graft doc
 graft include
 graft src
 graft scripts
+graft thirdparty
 global-include meson.build meson_options.txt
 
 # But exclude binaries, installed headers and other junk:
 prune src/benzina/include
-prune src/benzina/libs
-global-exclude __pycache__ *.py[cod] *.so *.exe .DS_Store
+prune src/benzina/lib
+global-exclude __pycache__ *.py[cod] *.exe .DS_Store

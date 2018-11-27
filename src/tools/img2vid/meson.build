@@ -15,8 +15,7 @@ endif
 ### CUDA code compilation
 benzina_img2vidCudaSrcs = files('kernels.cpp')
 benzina_img2vidCudaObjs = nvccCompGen.process(benzina_img2vidCudaSrcs, extra_args: [
-    '-Xptxas', '--warn-on-double-precision-use,-O3',
-    '-I',  libavutil.get_pkgconfig_variable('includedir', default: '/usr/include/ffmpeg'),
+    '-Xptxas', '--warn-on-double-precision-use,-O3', '-I', benzinaIncDir, '-I', ffmpegIncDir,
 ])
 benzina_img2vidCudaSta  = static_library('pre-dlink', benzina_img2vidCudaObjs)
 benzina_img2vidCudaObjs = custom_target ('benzina_img2vidCuda-dlink',

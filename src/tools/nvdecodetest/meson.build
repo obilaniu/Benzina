@@ -17,7 +17,7 @@ benzina_nvdecodetest      = executable('benzina_nvdecodetest',
                                        dependencies       : benzina_nvdecodetestDeps,
                                        c_args             : nvcuvidCDefs,
                                        install            : true,
-                                       install_dir        : bindir)
+                                       install_dir        : tooldir)
 
 
 
