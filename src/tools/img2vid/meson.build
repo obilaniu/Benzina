@@ -33,15 +33,10 @@ benzina_img2vidCudaSta  = static_library('post-dlink', benzina_img2vidCudaObjs,
 benzina_img2vidSrcs     = files('main.c')
 benzina_img2vidDeps     = [libavcodec, libavformat, libavfilter, libavutil, libswscale,
                            threadsDep, libm, libdl, librt,
-                           libcuda, libcudart, libcudadevrt]
-benzina_img2vidIncs     = [cudaIncs]
-benzina_img2vidCArgs    = []
+                           libcuda, libcudart, libcudadevrt,
+                           libbenzina, libbenzinacuda]
 benzina_img2vid         = executable('benzina-img2vid',   benzina_img2vidSrcs,
-                                     include_directories: benzina_img2vidIncs,
                                      dependencies       : benzina_img2vidDeps,
-                                     c_args             : benzina_img2vidCArgs,
-                                     link_with          : [libbenzinaSha,
-                                                           libbenzinacudaSha],
                                      link_whole         : [benzina_img2vidCudaSta],
                                      build_rpath        : toolrpath,
                                      install_rpath      : toolrpath,

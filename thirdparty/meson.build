@@ -16,7 +16,8 @@ toolkitIncDir = join_paths(CUDA_HOME,  'include')
 nvcuvidIncDir = join_paths(currSrcDir, 'include')
 driverLibDirs = [toolkitLibDir, '/usr/lib64', '/usr/lib64/nvidia']
 stubLibDirs   = [join_paths(currSrcDir, 'lib', host_machine.cpu_family())] + driverLibDirs
-cudaIncs      = include_directories('include', toolkitIncDir)
+nvcuvidIncs   = include_directories('include')
+cudaIncs      = include_directories(toolkitIncDir)
 libcuda       = cc.find_library('cuda',          required: true, dirs: driverLibDirs)
 libcudart     = cc.find_library(CUDA_RUNTIME,    required: true, dirs: toolkitLibDir)
 libcudadevrt  = cc.find_library('cudadevrt',     required: true, dirs: toolkitLibDir)
@@ -27,11 +28,11 @@ nvcc          = find_program(nvccPath, 'nvcc', required: true)
 #
 # NVDECODE/Video Codec SDK feature detection
 #
-if   cc.has_function('cuvidReconfigureDecoder', dependencies: [libnvcuvid])
+if   cc.has_function('cuvidReconfigureDecoder', dependencies: libnvcuvid)
   message('Found Video Codec SDK >= 8.2')
   message('Info: Video Codec SDK 8.2 requires NVIDIA Driver >= 396.24 and mandatory CUDA Toolkit >= 8.0')
   nvcuvidCDefs = ['-DNVDECODE=8002']
-elif cc.has_function('cuvidGetDecoderCaps',     dependencies: [libnvcuvid])
+elif cc.has_function('cuvidGetDecoderCaps',     dependencies: libnvcuvid)
   message('Found Video Codec SDK == 8.0 or 8.1')
   message('Info: Video Codec SDK 8.1 requires NVIDIA Driver >= 390.25 and mandatory CUDA Toolkit >= 8.0')
   message('Info: Video Codec SDK 8.0 requires NVIDIA Driver >= 378.13 and optional  CUDA Toolkit >= 8.0')
@@ -75,4 +76,20 @@ nvccCompGen   = generator(nvcc,
                                  '-c', '-o', '@OUTPUT@'],
     output:    ['@BASENAME@.o'],
 )
+
+
+#
+# Construct convenient build-internal dependencies for use by remaining build
+# artifacts. Reduces the need to carry around include directories and custom
+# compile flags.
+#
+libcuda       = declare_dependency(include_directories: cudaIncs,
+                                   dependencies       : libcuda)
+libcudart     = declare_dependency(include_directories: cudaIncs,
+                                   dependencies       : libcudart)
+libcudadevrt  = declare_dependency(include_directories: cudaIncs,
+                                   dependencies       : libcudart)
+libnvcuvid    = declare_dependency(include_directories: nvcuvidIncs,
+                                   compile_args       : nvcuvidCDefs,
+                                   dependencies       : libnvcuvid)
 

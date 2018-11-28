@@ -33,18 +33,18 @@ libbenzinacudaCudaDep  = declare_dependency(dependencies: libbenzinacudaCudaDep,
 libbenzinacudaSrcs  = []
 libbenzinacudaDeps  = [threadsDep, libm, libdl, librt,
                        libcuda, libcudart, libcudadevrt,
-                       libbenzinacudaCudaDep]
-libbenzinacudaIncs  = [cudaIncs, benzinaIncs]
-libbenzinacudaCArgs = ['-DBENZINA_CUDA_IS_BUILDING=1',
-                       '-DBENZINA_CUDA_IS_SHARED=1',
-                       '-DBENZINA_IS_SHARED=1',]
+                       libbenzina, libbenzinacudaCudaDep,]
+libbenzinacudaCDefs = ['-DBENZINA_CUDA_IS_SHARED=1']
 libbenzinacudaSha   = shared_library('benzina-cuda',        libbenzinacudaSrcs,
-                                     include_directories  : libbenzinacudaIncs,
                                      dependencies         : libbenzinacudaDeps,
-                                     c_args               : libbenzinacudaCArgs,
-                                     link_with            : [libbenzinaSha],
+                                     c_args               : libbenzinacudaCDefs + ['-DBENZINA_CUDA_IS_BUILDING=1'],
                                      gnu_symbol_visibility: 'hidden',
                                      build_rpath          : librpath,
                                      install_rpath        : librpath,
                                      install              : true,
                                      install_dir          : libdir)
+libbenzinacuda      = declare_dependency(include_directories: benzinaIncs,
+                                         compile_args       : libbenzinacudaCDefs,
+                                         link_with          : libbenzinacudaSha,
+                                         dependencies       : libbenzina.partial_dependency(compile_args: true))
+
