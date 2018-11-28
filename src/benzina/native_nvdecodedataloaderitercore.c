@@ -243,15 +243,15 @@ static PyObject* NvdecodeDataLoaderIterCore_new                     (PyTypeObjec
 	
 	void* pluginHandle, *v;
 	
-	pluginHandle = dlopen("libbenzina_plugin_nvdecode.so", RTLD_LAZY);
+	pluginHandle = dlopen("libbenzina-plugin-nvdecode.so", RTLD_LAZY);
 	if(!pluginHandle){
-		PyErr_SetString(PyExc_ImportError, "Could not load libbenzina_plugin_nvdecode.so!");
+		PyErr_SetString(PyExc_ImportError, "Could not load libbenzina-plugin-nvdecode.so!");
 		return NULL;
 	}
 	v = dlsym(pluginHandle, "VTABLE");
 	if(!v){
 		dlclose(pluginHandle);
-		PyErr_SetString(PyExc_ImportError, "Incompatible libbenzina_plugin_nvdecode.so found!");
+		PyErr_SetString(PyExc_ImportError, "Incompatible libbenzina-plugin-nvdecode.so found!");
 		return NULL;
 	}
 	

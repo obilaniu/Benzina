@@ -1,5 +1,5 @@
 #
-# Plugin: libbenzina_plugin_nvdecode
+# Plugin: libbenzina-plugin-nvdecode
 #
 # A dynamically-loaded plugin implementing within itself the logic required to
 # load images and transform them. The true workhorse. Reads:
@@ -25,7 +25,7 @@ libbenzina_plugin_nvdecodeCudaObjs = nvccCompGen.process(libbenzina_plugin_nvdec
     '-Xptxas', '--warn-on-double-precision-use,-O3',
     '--use_fast_math', '-O3',
     '-I', benzinaIncDir,
-])
+]+pluginCDefs)
 libbenzina_plugin_nvdecodeCudaSta  = static_library('pre-dlink', libbenzina_plugin_nvdecodeCudaObjs)
 libbenzina_plugin_nvdecodeCudaObjs = custom_target ('libbenzina_plugin_nvdecodeCuda-dlink',
     command         : [nvcc, '@INPUT@', '-dlink', '-o', '@OUTPUT@'],
@@ -43,16 +43,16 @@ libbenzina_plugin_nvdecodeSrcs     = files('main.c')
 libbenzina_plugin_nvdecodeDeps     = [threadsDep, libm, libdl, librt, libcuda, libcudart, libcudadevrt, libnvcuvid]
 libbenzina_plugin_nvdecodeIncs     = [cudaIncs, benzinaIncs]
 libbenzina_plugin_nvdecodeCArgs    = pluginCArgs+nvcuvidCDefs
-libbenzina_plugin_nvdecode         = shared_library('benzina_plugin_nvdecode',
+libbenzina_plugin_nvdecode         = shared_library('benzina-plugin-nvdecode',
                                                     libbenzina_plugin_nvdecodeSrcs,
                                                     include_directories  : libbenzina_plugin_nvdecodeIncs,
                                                     dependencies         : libbenzina_plugin_nvdecodeDeps,
                                                     c_args               : libbenzina_plugin_nvdecodeCArgs,
                                                     gnu_symbol_visibility: 'hidden',
-                                                    link_with            : [libbenzinaSha],
+                                                    link_with            : [libbenzinaSha, libbenzinacudaSha],
                                                     link_whole           : [libbenzina_plugin_nvdecodeCudaSta],
-                                                    build_rpath          : '$ORIGIN',
-                                                    install_rpath        : '$ORIGIN',
+                                                    build_rpath          : librpath,
+                                                    install_rpath        : librpath,
                                                     install              : true,
                                                     install_dir          : libdir)
 

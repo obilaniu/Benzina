@@ -4,7 +4,8 @@
 
 pluginCDefs = ['-DBENZINA_PLUGIN_IS_BUILDING=1',
                '-DBENZINA_PLUGIN_IS_SHARED=1',
-               '-DBENZINA_IS_SHARED=1']
+               '-DBENZINA_IS_SHARED=1',
+               '-DBENZINA_CUDA_IS_SHARED=1',]
 pluginCArgs = pluginCDefs
 
 

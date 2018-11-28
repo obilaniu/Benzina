@@ -10,40 +10,6 @@ project('Benzina', 'c', 'cpp',
 
 
 #
-# Import Meson Modules
-#
-pymodule = import('python')
-
-
-#
-# Python
-#
-# If building a Python package, we override the default install directories
-# bindir, libdir and includedir.
-#
-PYINTERPRETER = get_option('py_interpreter')
-if PYINTERPRETER == ''
-  python = pymodule.find_installation()
-else
-  python = pymodule.find_installation(PYINTERPRETER)
-endif
-
-BUILDINGPYPKG = get_option('building_py_pkg')
-if BUILDINGPYPKG
-  message('Entering special Python-package build mode. Overriding bindir, libdir & includedir.')
-  bindir     = join_paths('benzina', 'lib')
-  libdir     = join_paths('benzina', 'lib')
-  includedir = join_paths('benzina', 'include')
-  tooldir    = join_paths(bindir, 'tools')
-else
-  bindir     = get_option('bindir')
-  libdir     = get_option('libdir')
-  includedir = get_option('includedir')
-  tooldir    = join_paths(bindir, 'tools')
-endif
-
-
-#
 # Compiler, Dependencies & Libraries
 #
 # Library and Include Search Paths
@@ -91,47 +57,11 @@ endif
 
 
 #
-# Third-party libraries.
+# Perform setup work for Python and other third-party libraries.
+# Then, build project's main artifacts: libraries, executables, documentation, ...
 #
+subdir('scripts')
 subdir('thirdparty')
-
-
-#
-# GPU presence detection and architecture selection
-#
-CUDA_ARCH    = get_option('cuda_arch')
-detectGPUpy  = files(join_paths('scripts', 'detectgpus.py'))
-detectGPU    = run_command(python, [detectGPUpy, nvcc, CUDA_ARCH])
-if detectGPU.returncode() != 0
-  warning('GPU detection failed:')
-  warning(detectGPU.stdout())
-  warning(detectGPU.stderr())
-  cudaGenCodeFlags = []
-else
-  message(detectGPU.stderr())
-  cudaGenCodeFlags = detectGPU.stdout().split()
-endif
-if(get_option('buildtype') == 'debugoptimized' or
-   get_option('buildtype') == 'debug')
-  cudaGenCodeFlags += ['-g', '-lineinfo']
-else
-  cudaGenCodeFlags += ['-O3']
-endif
-
-
-#
-# Compile generator.
-#
-nvccCompGen   = generator(nvcc,
-    arguments: cudaGenCodeFlags+['-x', 'cu', '@EXTRA_ARGS@', '@INPUT@',
-                                 '-I', nvcuvidIncDir,
-                                 '-c', '-o', '@OUTPUT@'],
-    output:    ['@BASENAME@.o'],
-)
-
-#
-# Subdirectories.
-#
 subdir('include')
 subdir('src')
 subdir('doc')

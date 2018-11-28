@@ -1,5 +1,5 @@
 #
-# Executable: benzina_img2vid
+# Executable: benzina-img2vid
 #
 # An executable that takes an image and produces a 1-frame H.264 video clip in
 # Datum format.
@@ -36,11 +36,15 @@ benzina_img2vidDeps     = [libavcodec, libavformat, libavfilter, libavutil, libs
                            libcuda, libcudart, libcudadevrt]
 benzina_img2vidIncs     = [cudaIncs]
 benzina_img2vidCArgs    = []
-benzina_img2vid         = executable('benzina_img2vid',   benzina_img2vidSrcs,
+benzina_img2vid         = executable('benzina-img2vid',   benzina_img2vidSrcs,
                                      include_directories: benzina_img2vidIncs,
                                      dependencies       : benzina_img2vidDeps,
                                      c_args             : benzina_img2vidCArgs,
+                                     link_with          : [libbenzinaSha,
+                                                           libbenzinacudaSha],
                                      link_whole         : [benzina_img2vidCudaSta],
+                                     build_rpath        : toolrpath,
+                                     install_rpath      : toolrpath,
                                      install            : true,
                                      install_dir        : tooldir)
 

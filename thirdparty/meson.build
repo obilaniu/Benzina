@@ -44,3 +44,35 @@ else
 endif
 
 
+#
+# GPU presence detection and architecture selection
+#
+CUDA_ARCH = get_option('cuda_arch')
+detectGPU = run_command(python, [detectGPUpy, nvcc, CUDA_ARCH])
+if detectGPU.returncode() != 0
+  warning('GPU detection failed:')
+  warning(detectGPU.stdout())
+  warning(detectGPU.stderr())
+  cudaGenCodeFlags = []
+else
+  message(detectGPU.stderr())
+  cudaGenCodeFlags = detectGPU.stdout().split()
+endif
+if(get_option('buildtype') == 'debugoptimized' or
+   get_option('buildtype') == 'debug')
+  cudaGenCodeFlags += ['-g', '-lineinfo']
+else
+  cudaGenCodeFlags += ['-O3']
+endif
+
+
+#
+# Compile generator.
+#
+nvccCompGen   = generator(nvcc,
+    arguments: cudaGenCodeFlags+['-x', 'cu', '@EXTRA_ARGS@', '@INPUT@',
+                                 '-I', nvcuvidIncDir,
+                                 '-c', '-o', '@OUTPUT@'],
+    output:    ['@BASENAME@.o'],
+)
+
