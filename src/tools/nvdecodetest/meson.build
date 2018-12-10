@@ -7,7 +7,7 @@
 #
 
 benzina_nvdecodetestSrcs  = files('main.c')
-benzina_nvdecodetestDeps  = [threadsDep, libm, libdl, librt,
+benzina_nvdecodetestDeps  = [threadsDep, libm, libdl,
                              libcuda, libcudart, libnvcuvid,
                              libbenzina]
 benzina_nvdecodetest      = executable('benzina-nvdecodetest',

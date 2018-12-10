@@ -40,7 +40,7 @@ libbenzina_plugin_nvdecodeCudaSta  = static_library('post-dlink', libbenzina_plu
 
 ### C code compilation
 libbenzina_plugin_nvdecodeSrcs     = files('main.c')
-libbenzina_plugin_nvdecodeDeps     = [threadsDep, libm, libdl, librt,
+libbenzina_plugin_nvdecodeDeps     = [threadsDep, libm, libdl,
                                       libcuda, libcudart, libcudadevrt, libnvcuvid,
                                       libbenzina, libbenzinacuda, pluginDep]
 libbenzina_plugin_nvdecodeSha      = shared_library('benzina-plugin-nvdecode',

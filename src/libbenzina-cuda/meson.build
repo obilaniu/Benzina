@@ -31,7 +31,7 @@ libbenzinacudaCudaDep  = declare_dependency(dependencies: libbenzinacudaCudaDep,
 
 ### C code compilation
 libbenzinacudaSrcs  = []
-libbenzinacudaDeps  = [threadsDep, libm, libdl, librt,
+libbenzinacudaDeps  = [threadsDep, libm, libdl,
                        libcuda, libcudart, libcudadevrt,
                        libbenzina, libbenzinacudaCudaDep,]
 libbenzinacudaCDefs = ['-DBENZINA_CUDA_IS_SHARED=1']

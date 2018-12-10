@@ -32,7 +32,7 @@ benzina_img2vidCudaSta  = static_library('post-dlink', benzina_img2vidCudaObjs,
 ### C code compilation
 benzina_img2vidSrcs     = files('main.c')
 benzina_img2vidDeps     = [libavcodec, libavformat, libavfilter, libavutil, libswscale,
-                           threadsDep, libm, libdl, librt,
+                           threadsDep, libm, libdl,
                            libcuda, libcudart, libcudadevrt,
                            libbenzina, libbenzinacuda]
 benzina_img2vid         = executable('benzina-img2vid',   benzina_img2vidSrcs,

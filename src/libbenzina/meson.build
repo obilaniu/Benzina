@@ -6,7 +6,7 @@
 #
 
 libbenzinaSrcs  = files('benzina.c', 'benzinaproto.c')
-libbenzinaDeps  = [threadsDep, libm, libdl, librt]
+libbenzinaDeps  = [threadsDep, libm, libdl]
 libbenzinaIncs  = [benzinaIncs]
 libbenzinaCDefs = ['-DBENZINA_IS_SHARED=1']
 libbenzinaSha   = shared_library('benzina',             libbenzinaSrcs,

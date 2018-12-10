@@ -18,6 +18,8 @@ driverLibDirs = [toolkitLibDir, '/usr/lib64', '/usr/lib64/nvidia']
 stubLibDirs   = [join_paths(currSrcDir, 'lib', host_machine.cpu_family())] + driverLibDirs
 nvcuvidIncs   = include_directories('include')
 cudaIncs      = include_directories(toolkitIncDir)
+libRtRequired = (CUDA_RUNTIME == 'cudart_static') and IS_HOST_LINUX
+librt         = cc.find_library('rt',            required: libRtRequired)
 libcuda       = cc.find_library('cuda',          required: true, dirs: driverLibDirs)
 libcudart     = cc.find_library(CUDA_RUNTIME,    required: true, dirs: toolkitLibDir)
 libcudadevrt  = cc.find_library('cudadevrt',     required: true, dirs: toolkitLibDir)
@@ -86,7 +88,7 @@ nvccCompGen   = generator(nvcc,
 libcuda       = declare_dependency(include_directories: cudaIncs,
                                    dependencies       : libcuda)
 libcudart     = declare_dependency(include_directories: cudaIncs,
-                                   dependencies       : libcudart)
+                                   dependencies       : [libcudart, librt])
 libcudadevrt  = declare_dependency(include_directories: cudaIncs,
                                    dependencies       : libcudart)
 libnvcuvid    = declare_dependency(include_directories: nvcuvidIncs,

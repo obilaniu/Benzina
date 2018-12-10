@@ -6,7 +6,7 @@
 
 benzina_skeletonSrcs  = files('main.c')
 benzina_skeletonDeps  = [libavcodec, libavformat, libavfilter, libavutil, libswscale,
-                         threadsDep, libm, libdl, librt,
+                         threadsDep, libm, libdl,
                          libcuda, libcudart, libnvcuvid,
                          libbenzina, libbenzinacuda]
 benzina_skeleton      = executable('benzina-skeleton',
