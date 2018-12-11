@@ -18,6 +18,13 @@
 #      "source code" for a Meson shared_library().
 #
 
+
+### Dependency Check
+if not nvcc.found()
+  subdir_done()
+endif
+
+
 ### CUDA code compilation
 libbenzina_plugin_nvdecodeCudaSrcs = files('kernels.cpp')
 libbenzina_plugin_nvdecodeCudaObjs = nvccCompGen.process(libbenzina_plugin_nvdecodeCudaSrcs, extra_args: [
@@ -27,29 +34,31 @@ libbenzina_plugin_nvdecodeCudaObjs = nvccCompGen.process(libbenzina_plugin_nvdec
     '-I', benzinaIncDir,
 ]+pluginCDefs)
 libbenzina_plugin_nvdecodeCudaSta  = static_library('pre-dlink', libbenzina_plugin_nvdecodeCudaObjs)
+libbenzina_plugin_nvdecodeCudaDep  = declare_dependency(link_whole: libbenzina_plugin_nvdecodeCudaSta)
 libbenzina_plugin_nvdecodeCudaObjs = custom_target ('libbenzina_plugin_nvdecodeCuda-dlink',
-    command         : [nvcc, '@INPUT@', '-dlink', '-o', '@OUTPUT@'],
+    command         : [nvcc, '@INPUT@', '-shared', '-dlink', '-o', '@OUTPUT@'],
     input           : libbenzina_plugin_nvdecodeCudaSta,
     output          : ['@BASENAME@-dlink.o'],
     build_by_default: true,
     install         : false
 )
-libbenzina_plugin_nvdecodeCudaSta  = static_library('post-dlink', libbenzina_plugin_nvdecodeCudaObjs,
-                                                    link_whole:   libbenzina_plugin_nvdecodeCudaSta)
+libbenzina_plugin_nvdecodeCudaSta  = static_library('dlink', libbenzina_plugin_nvdecodeCudaObjs)
+libbenzina_plugin_nvdecodeCudaDep  = declare_dependency(dependencies: libbenzina_plugin_nvdecodeCudaDep,
+                                                        link_whole:   libbenzina_plugin_nvdecodeCudaSta)
 
 
 ### C code compilation
-libbenzina_plugin_nvdecodeSrcs     = files('main.c')
-libbenzina_plugin_nvdecodeDeps     = [threadsDep, libm, libdl,
-                                      libcuda, libcudart, libcudadevrt, libnvcuvid,
-                                      libbenzina, libbenzinacuda, pluginDep]
-libbenzina_plugin_nvdecodeSha      = shared_library('benzina-plugin-nvdecode',
-                                                    libbenzina_plugin_nvdecodeSrcs,
-                                                    dependencies         : libbenzina_plugin_nvdecodeDeps,
-                                                    gnu_symbol_visibility: 'hidden',
-                                                    link_whole           : [libbenzina_plugin_nvdecodeCudaSta],
-                                                    build_rpath          : librpath,
-                                                    install_rpath        : librpath,
-                                                    install              : true,
-                                                    install_dir          : libdir)
+libbenzina_plugin_nvdecodeSrcs = files('main.c')
+libbenzina_plugin_nvdecodeDeps = [threadsDep, libm, libdl,
+                                  libcuda, libcudart, libcudadevrt, libnvcuvid,
+                                  libbenzina, libbenzinacuda, pluginDep,
+                                  libbenzina_plugin_nvdecodeCudaDep]
+libbenzina_plugin_nvdecodeSha  = shared_library('benzina-plugin-nvdecode',
+                                                libbenzina_plugin_nvdecodeSrcs,
+                                                dependencies         : libbenzina_plugin_nvdecodeDeps,
+                                                gnu_symbol_visibility: 'hidden',
+                                                build_rpath          : librpath,
+                                                install_rpath        : librpath,
+                                                install              : true,
+                                                install_dir          : libdir)
 

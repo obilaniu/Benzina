@@ -52,7 +52,7 @@ class build_configure(setuptools.command.build_ext.build_ext):
 			        "--prefix",         libRoot,
 			        "-Dbuildtype="      +os.environ.get("BUILD_TYPE", "release"),
 			        "-Dbuilding_py_pkg="+"true",
-			        "-Dcuda_runtime="   +"static",
+			        "-Dcuda_runtime="   +os.environ.get("CUDA_RUNTIME", "static"),
 			        "-Denable_gpl="     +os.environ.get("ENABLE_GPL", "false"),
 			        "-Dpy_interpreter=" +sys.executable,
 			        "-Dcuda_arch="      +os.environ.get("CUDA_ARCH", "Auto"),

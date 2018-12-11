@@ -5,6 +5,13 @@
 #
 
 
+### Dependency Check
+if not true
+  subdir_done()
+endif
+
+
+### C code compilation
 libbenzina_plugin_skeletonSrcs = files('main.c')
 libbenzina_plugin_skeletonDeps = [threadsDep, libm, libdl,
                                   libcuda, libcudart, libcudadevrt, libnvcuvid,

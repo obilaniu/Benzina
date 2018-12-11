@@ -7,7 +7,7 @@
 
 
 ### License & Dependency Check
-if not ENABLE_GPL or not HAVE_FFMPEG
+if not ENABLE_GPL or not HAVE_FFMPEG or not nvcc.found()
   subdir_done()
 endif
 
@@ -19,7 +19,7 @@ benzina_img2vidCudaObjs = nvccCompGen.process(benzina_img2vidCudaSrcs, extra_arg
 ])
 benzina_img2vidCudaSta  = static_library('pre-dlink', benzina_img2vidCudaObjs)
 benzina_img2vidCudaObjs = custom_target ('benzina_img2vidCuda-dlink',
-    command         : [nvcc, '@INPUT@', '-dlink', '-o', '@OUTPUT@'],
+    command         : [nvcc, '@INPUT@', '-shared', '-dlink', '-o', '@OUTPUT@'],
     input           : benzina_img2vidCudaSta,
     output          : ['@BASENAME@-dlink.o'],
     build_by_default: true,

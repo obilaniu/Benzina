@@ -4,6 +4,14 @@
 # A skeleton for a Benzina tool. Meant to be copy-pasted and used as a template.
 #
 
+
+### Dependency Check
+if not true
+  subdir_done()
+endif
+
+
+### C code compilation
 benzina_skeletonSrcs  = files('main.c')
 benzina_skeletonDeps  = [libavcodec, libavformat, libavfilter, libavutil, libswscale,
                          threadsDep, libm, libdl,

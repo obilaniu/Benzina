@@ -5,6 +5,13 @@
 #
 
 
+### Dependency Check
+if not nvcc.found()
+  libbenzinacuda = disabler()
+  subdir_done()
+endif
+
+
 ### CUDA code compilation
 libbenzinacudaCudaSrcs = files('kernels.cpp')
 libbenzinacudaCudaObjs = nvccCompGen.process(libbenzinacudaCudaSrcs, extra_args: [
@@ -18,7 +25,7 @@ libbenzinacudaCudaObjs = nvccCompGen.process(libbenzinacudaCudaSrcs, extra_args:
 libbenzinacudaCudaSta  = static_library('pre-dlink', libbenzinacudaCudaObjs)
 libbenzinacudaCudaDep  = declare_dependency(link_whole: libbenzinacudaCudaSta)
 libbenzinacudaCudaObjs = custom_target ('libbenzinacudaCuda-dlink',
-    command         : [nvcc, '@INPUT@', '-dlink', '-o', '@OUTPUT@'],
+    command         : [nvcc, '@INPUT@', '-shared', '-dlink', '-o', '@OUTPUT@'],
     input           : libbenzinacudaCudaSta,
     output          : ['@BASENAME@-dlink.o'],
     build_by_default: true,

@@ -12,21 +12,32 @@ project('Benzina', 'c', 'cpp',
 #
 # System check
 #
-IS_HOST_LINUX   = host_machine.system() == 'linux'
-IS_HOST_DARWIN  = host_machine.system() == 'darwin'
-IS_HOST_WINDOWS = host_machine.system() == 'windows'
+IS_HOST_LE      = host_machine.endian()     == 'little'
+IS_HOST_X86_64  = host_machine.cpu_family() == 'x86_64'
+IS_HOST_AARCH64 = host_machine.cpu_family() == 'aarch64'
+IS_HOST_PPC64   = host_machine.cpu_family() == 'ppc64'
+IS_HOST_PPC64LE = IS_HOST_PPC64 and IS_HOST_LE
+IS_HOST_LINUX   = host_machine.system()     == 'linux'
+IS_HOST_DARWIN  = host_machine.system()     == 'darwin'
+IS_HOST_WINDOWS = host_machine.system()     == 'windows'
+if   not IS_HOST_X86_64 and not IS_HOST_PPC64LE and not IS_HOST_AARCH64
+  warning('The CUDA Toolkit is not built for architectures other than x64_64, '+
+          'ppc64le and aarch64. No CUDA acceleration of any kind whatsoever is '+
+          'therefore possible, which defeats the point of Benzina. A pure CPU '+
+          'fallback could be implemented in principle, but it would be very '+
+          'slow, except on massively-multithreaded machines.')
+endif
 if   IS_HOST_DARWIN
-  error('Benzina is unsupported on Mac OS X/macOS/iOS because NVIDIA does not '+
-        'provide required libraries (nvcuvid) on Apple platforms. Apple '+
-        'instead mandates the use of its own mystery APIs. As a result, this '+
-        'build is extremely likely to fail even if this check were disabled, '+
-        'unless someone were to contribute Mac OS X-specific enablement code. '+
-        'Aborting the build.')
+  warning('Benzina is unsupported on Mac OS X/macOS/iOS because NVIDIA does not '+
+          'provide required libraries (nvcuvid) on Apple platforms. Apple '+
+          'instead mandates the use of its own mystery APIs. As a result, this '+
+          'build is extremely likely to fail even if this check were disabled, '+
+          'unless someone were to contribute Mac OS X-specific enablement code.')
 elif IS_HOST_WINDOWS
   warning('Benzina is extremely unlikely to build or run on Windows due to '+
           'widespread use of Linuxisms and low-level system calls, but '+
           'Windows equivalents or approximations do exist and Benzina could '+
-          'in principle be ported to that OS. Proceeding with the build.')
+          'in principle be ported to that OS.')
 endif
 
 
@@ -39,6 +50,7 @@ endif
 cc          = meson.get_compiler('c')
 libm        = cc.find_library('m',    required: IS_HOST_LINUX)
 libdl       = cc.find_library('dl',   required: IS_HOST_LINUX)
+librt       = cc.find_library('rt',   required: IS_HOST_LINUX)
 threadsDep  = dependency('threads')
 # Relax a bit the warning flags on GCC & Clang. -Wpedantic is very noisy.
 if cc.get_id() == 'gcc' or cc.get_id() == 'clang'
