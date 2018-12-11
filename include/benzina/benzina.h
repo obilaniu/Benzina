@@ -9,12 +9,13 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include "benzina/bits.h"
+#include "benzina/geometry.h"
 #include "benzina/visibility.h"
 
 
 
 /* Defines */
-
 
 
 
@@ -30,10 +31,10 @@ typedef struct BENZINA_BUF             BENZINA_BUF;
 typedef struct BENZINA_DATASET         BENZINA_DATASET;
 
 struct BENZINA_BUF{
-	char*  buf;
-	size_t off;
-	size_t len;
-	size_t maxLen;
+    char*  buf;
+    size_t off;
+    size_t len;
+    size_t maxLen;
 };
 
 
