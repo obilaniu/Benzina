@@ -8,6 +8,7 @@
 
 benzina_nvdecodetestSrcs  = files('main.c')
 benzina_nvdecodetestDeps  = [threadsDep, libm, libdl,
+                             libavcodec, libavutil,
                              libcuda, libcudart, libnvcuvid,
                              libbenzina]
 benzina_nvdecodetest      = executable('benzina-nvdecodetest',
