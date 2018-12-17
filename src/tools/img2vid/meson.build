@@ -7,16 +7,23 @@
 
 
 ### License & Dependency Check
-if not ENABLE_GPL or not HAVE_FFMPEG or not nvcc.found()
+if(not ENABLE_GPL          or
+   not nvcc.found()        or
+   not libavcodec.found()  or
+   not libavformat.found() or
+   not libavfilter.found() or
+   not libavutil.found()   or
+   not libswscale.found())
   subdir_done()
 endif
 
 
 ### CUDA code compilation
 benzina_img2vidCudaSrcs = files('kernels.cpp')
-benzina_img2vidCudaObjs = nvccCompGen.process(benzina_img2vidCudaSrcs, extra_args: [
-    '-Xptxas', '--warn-on-double-precision-use,-O3', '-I', benzinaIncDir, '-I', ffmpegIncDir,
-])
+benzina_img2vidCudaObjs = nvccCompGen.process(benzina_img2vidCudaSrcs,
+    extra_args: ['-Xptxas', '--warn-on-double-precision-use,-O3'] +
+                benzinaIFlags + ffmpegIFlags,
+)
 benzina_img2vidCudaSta  = static_library('pre-dlink', benzina_img2vidCudaObjs)
 benzina_img2vidCudaObjs = custom_target ('benzina_img2vidCuda-dlink',
     command         : [nvcc, '@INPUT@', '-shared', '-dlink', '-o', '@OUTPUT@'],

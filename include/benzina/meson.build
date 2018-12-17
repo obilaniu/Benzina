@@ -3,6 +3,6 @@ install_headers('benzina.h',
                 'bits.h',
                 'geometry.h',
                 'visibility.h',
-                install_dir: join_paths(includedir, 'benzina'))
+                install_dir: includedir/'benzina')
 
 subdir('plugins')

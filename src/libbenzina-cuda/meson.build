@@ -13,15 +13,13 @@ endif
 
 
 ### CUDA code compilation
+libbenzinacudaCDefs    = ['-DBENZINA_CUDA_IS_SHARED=1']
 libbenzinacudaCudaSrcs = files('kernels.cpp')
 libbenzinacudaCudaObjs = nvccCompGen.process(libbenzinacudaCudaSrcs, extra_args: [
     '-Xcompiler', '-fPIC',
     '-Xptxas', '--warn-on-double-precision-use,-O3',
-    '-I', benzinaIncDir,
     '-DBENZINA_CUDA_IS_BUILDING=1',
-    '-DBENZINA_CUDA_IS_SHARED=1',
-    '-DBENZINA_IS_SHARED=1',
-])
+] + libbenzinacudaCDefs + libbenzinaCDefs + benzinaIFlags)
 libbenzinacudaCudaSta  = static_library('pre-dlink', libbenzinacudaCudaObjs)
 libbenzinacudaCudaDep  = declare_dependency(link_whole: libbenzinacudaCudaSta)
 libbenzinacudaCudaObjs = custom_target ('libbenzinacudaCuda-dlink',
@@ -41,7 +39,6 @@ libbenzinacudaSrcs  = []
 libbenzinacudaDeps  = [threadsDep, libm, libdl,
                        libcuda, libcudart, libcudadevrt,
                        libbenzina, libbenzinacudaCudaDep,]
-libbenzinacudaCDefs = ['-DBENZINA_CUDA_IS_SHARED=1']
 libbenzinacudaSha   = shared_library('benzina-cuda',        libbenzinacudaSrcs,
                                      dependencies         : libbenzinacudaDeps,
                                      c_args               : libbenzinacudaCDefs + ['-DBENZINA_CUDA_IS_BUILDING=1'],

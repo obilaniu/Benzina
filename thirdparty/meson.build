@@ -7,31 +7,26 @@ CUDA_ARCH         = get_option('cuda_arch')
 CUDA_HOME         = get_option('cuda_home')
 CUDA_RUNTIME      = get_option('cuda_runtime') == 'static' ? 'cudart_static' : 'cudart'
 currSrcDir        = meson.current_source_dir()
-nvccPath          = join_paths(CUDA_HOME,  'bin',   'nvcc')
-toolkitIncDir     = join_paths(CUDA_HOME,  'include')
-toolkitLibDir     = join_paths(CUDA_HOME,  'lib64')
-toolkitStubLibDir = join_paths(CUDA_HOME,  'lib64', 'stubs')
-nvcuvidIncDir     = join_paths(currSrcDir, 'include')
-stubLibDir        = join_paths(currSrcDir, 'lib',   host_machine.cpu_family())
+nvccPath          = CUDA_HOME  / 'bin' / 'nvcc'
+toolkitIncDir     = CUDA_HOME  / 'include'
+toolkitLibDir     = CUDA_HOME  / 'lib64'
+toolkitStubLibDir = CUDA_HOME  / 'lib64' / 'stubs'
+nvcuvidIncDir     = currSrcDir / 'include'
+stubLibDir        = currSrcDir / 'lib' / host_machine.cpu_family()
 driverLibDirs     = ['/usr/lib64/nvidia',            # Fedora alternate
                      '/usr/lib64/x86_64-linux-gnu',  # Debian multi-arch
                      toolkitStubLibDir]              # CUDA stub libraries
 stubLibDirs       = driverLibDirs + [stubLibDir]
 nvcuvidIncs       = include_directories('include')
 cudaIncs          = include_directories(toolkitIncDir)
+nvcuvidIFlags     = ['-I'+nvcuvidIncDir]
 nvcuvidCDefs      = []
 cudaGenCodeFlags  = []
-nvcc              = find_program(nvccPath, 'nvcc', required: false)
-libcuda           = cc.find_library('cuda',        required: false, dirs: driverLibDirs)
-libcudart         = cc.find_library(CUDA_RUNTIME,  required: false, dirs: toolkitLibDir)
-libcudadevrt      = cc.find_library('cudadevrt',   required: false, dirs: toolkitLibDir)
-libnvcuvid        = cc.find_library('nvcuvid',     required: false, dirs: stubLibDirs)
-nvcc              = nvcc.found()         ? nvcc         : disabler()
-libcuda           = libcuda.found()      ? libcuda      : disabler()
-libcudart         = libcudart.found()    ? libcudart    : disabler()
-libcudadevrt      = libcudadevrt.found() ? libcudadevrt : disabler()
-libnvcuvid        = libnvcuvid.found()   ? libnvcuvid   : disabler()
-
+nvcc              = find_program(nvccPath, 'nvcc', required: false, disabler: true)
+libcuda           = cc.find_library('cuda',        required: false, disabler: true, dirs: driverLibDirs)
+libcudart         = cc.find_library(CUDA_RUNTIME,  required: false, disabler: true, dirs: toolkitLibDir)
+libcudadevrt      = cc.find_library('cudadevrt',   required: false, disabler: true, dirs: toolkitLibDir)
+libnvcuvid        = cc.find_library('nvcuvid',     required: false, disabler: true, dirs: stubLibDirs)
 
 
 #
@@ -85,9 +80,8 @@ endif
 # Compile generator.
 #
 nvccCompGen   = generator(nvcc,
-    arguments: cudaGenCodeFlags+['-x', 'cu', '@EXTRA_ARGS@', '@INPUT@',
-                                 '-I', nvcuvidIncDir,
-                                 '-c', '-o', '@OUTPUT@'],
+    arguments: cudaGenCodeFlags + nvcuvidIFlags + 
+               ['-x', 'cu', '@EXTRA_ARGS@', '@INPUT@', '-c', '-o', '@OUTPUT@'],
     output:    ['@BASENAME@.o'],
 )
 

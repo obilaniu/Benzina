@@ -81,7 +81,7 @@ setup(
     ],
     python_requires      = '>=3.5',
     setup_requires       = [
-        "meson>=0.48.2",
+        "meson>=0.49.0",
     ],
     install_requires     = [
         "nauka>=0.0.11",

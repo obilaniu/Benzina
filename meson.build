@@ -1,6 +1,6 @@
 project('Benzina', 'c', 'cpp',
         version:                 '0.0.3',
-        meson_version:           '>=0.48',
+        meson_version:           '>=0.49.0',
         license:                 'MIT',
         default_options:         [
             'c_std=gnu99',
@@ -48,12 +48,12 @@ endif
 # More configurable defaults could surely be provided.
 #
 cc          = meson.get_compiler('c')
-libm        = cc.find_library('m',    required: IS_HOST_LINUX)
-libdl       = cc.find_library('dl',   required: IS_HOST_LINUX)
-librt       = cc.find_library('rt',   required: IS_HOST_LINUX)
+libm        = cc.find_library('m',  required: IS_HOST_LINUX)
+libdl       = cc.find_library('dl', required: IS_HOST_LINUX)
+librt       = cc.find_library('rt', required: IS_HOST_LINUX)
 threadsDep  = dependency('threads')
 # Relax a bit the warning flags on GCC & Clang. -Wpedantic is very noisy.
-if cc.get_id() == 'gcc' or cc.get_id() == 'clang'
+if cc.get_argument_syntax() == 'gcc'
   add_project_arguments(['-Wno-pedantic',
                          '-Wno-implicit-fallthrough'], language: 'c')
   add_project_arguments(['-Wno-pedantic',
@@ -64,23 +64,32 @@ endif
 #
 # FFmpeg
 #
-libavcodec  = dependency('libavcodec',   version: '>=57',  required: false)
-libavformat = dependency('libavformat',  version: '>=57',  required: false)
-libavfilter = dependency('libavfilter',  version: '>=6',   required: false)
-libavutil   = dependency('libavutil',    version: '>=55',  required: false)
-libswscale  = dependency('libswscale',   version: '>=4',   required: false)
-HAVE_FFMPEG = (libavcodec.found()   and
-               libavformat.found()  and
-               libavfilter.found()  and
-               libavutil.found()    and
-               libswscale.found())
-if HAVE_FFMPEG
-  message('Enabling build with FFmpeg')
-  ffmpegIncDir = libavutil.get_pkgconfig_variable('includedir',
-                                                  default: '/usr/include/ffmpeg')
+libavcodec   = dependency('libavcodec',   version: '>=57',  required: false, disabler: true)
+libavformat  = dependency('libavformat',  version: '>=57',  required: false, disabler: true)
+libavfilter  = dependency('libavfilter',  version: '>=6',   required: false, disabler: true)
+libavutil    = dependency('libavutil',    version: '>=55',  required: false, disabler: true)
+libswscale   = dependency('libswscale',   version: '>=4',   required: false, disabler: true)
+ffmpegIncDir = []
+ffmpegIFlags = []
+ffmpegNames  = []
+foreach L : [libavcodec, libavformat, libavfilter, libavutil, libswscale]
+  if L.found()
+    ffmpegNames += [L.name() + L.version().split('.')[0]]
+    if L.type_name() == 'pkgconfig'
+      foreach D : L.get_pkgconfig_variable('includedir',
+                                           default: '/usr/include/ffmpeg').split(':')
+        ffmpegIncDir += D in ffmpegIncDir ? [] : [D]
+      endforeach
+    endif
+  endif
+endforeach
+foreach D : ffmpegIncDir
+  ffmpegIFlags += ['-I'+D]
+endforeach
+if ffmpegNames.length() > 0
+  message('Enabling build with FFmpeg (@0@)'.format(', '.join(ffmpegNames)))
 else
   message('Disabling build with FFmpeg')
-  ffmpegIncDir = '/usr/include/ffmpeg'
 endif
 ENABLE_GPL = get_option('enable_gpl')
 if ENABLE_GPL

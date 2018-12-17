@@ -1,2 +1,2 @@
 install_headers('nvdecode.h',
-                install_dir: join_paths(includedir, 'benzina', 'plugins'))
+                install_dir: includedir/'benzina'/'plugins')
