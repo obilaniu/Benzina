@@ -35,7 +35,7 @@ libbenzina_plugin_nvdecodeCudaObjs = nvccCompGen.process(libbenzina_plugin_nvdec
 libbenzina_plugin_nvdecodeCudaSta  = static_library('pre-dlink', libbenzina_plugin_nvdecodeCudaObjs)
 libbenzina_plugin_nvdecodeCudaDep  = declare_dependency(link_whole: libbenzina_plugin_nvdecodeCudaSta)
 libbenzina_plugin_nvdecodeCudaObjs = custom_target ('libbenzina_plugin_nvdecodeCuda-dlink',
-    command         : [nvcc, '@INPUT@', '-shared', '-dlink', '-o', '@OUTPUT@'],
+    command         : [nvcc, '-shared'] + nvccLinkArgs + ['@INPUT@', '-o', '@OUTPUT@'],
     input           : libbenzina_plugin_nvdecodeCudaSta,
     output          : ['@BASENAME@-dlink.o'],
     build_by_default: true,

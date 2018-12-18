@@ -23,7 +23,7 @@ libbenzinacudaCudaObjs = nvccCompGen.process(libbenzinacudaCudaSrcs, extra_args:
 libbenzinacudaCudaSta  = static_library('pre-dlink', libbenzinacudaCudaObjs)
 libbenzinacudaCudaDep  = declare_dependency(link_whole: libbenzinacudaCudaSta)
 libbenzinacudaCudaObjs = custom_target ('libbenzinacudaCuda-dlink',
-    command         : [nvcc, '@INPUT@', '-shared', '-dlink', '-o', '@OUTPUT@'],
+    command         : [nvcc, '-shared'] + nvccLinkArgs + ['@INPUT@', '-o', '@OUTPUT@'],
     input           : libbenzinacudaCudaSta,
     output          : ['@BASENAME@-dlink.o'],
     build_by_default: true,

@@ -21,7 +21,7 @@ nvcuvidIncs       = include_directories('include')
 cudaIncs          = include_directories(toolkitIncDir)
 nvcuvidIFlags     = ['-I'+nvcuvidIncDir]
 nvcuvidCDefs      = []
-cudaGenCodeFlags  = []
+nvccGenCodeFlags  = []
 nvcc              = find_program(nvccPath, 'nvcc', required: false, disabler: true)
 libcuda           = cc.find_library('cuda',        required: false, disabler: true, dirs: driverLibDirs)
 libcudart         = cc.find_library(CUDA_RUNTIME,  required: false, disabler: true, dirs: toolkitLibDir)
@@ -68,26 +68,28 @@ if nvcc.found()
     warning(detectGPU.stderr())
   else
     message(detectGPU.stderr())
-    cudaGenCodeFlags += detectGPU.stdout().split()
+    nvccGenCodeFlags += detectGPU.stdout().split()
   endif
-  cudaGenCodeFlags += ['-cudart', get_option('cuda_runtime')]
+  nvccGenCodeFlags += ['-cudart', get_option('cuda_runtime')]
   if(get_option('buildtype') == 'debugoptimized' or
      get_option('buildtype') == 'debug')
-    cudaGenCodeFlags += ['-g', '-lineinfo']
+    nvccGenCodeFlags += ['-g', '-lineinfo']
   else
-    cudaGenCodeFlags += ['-O3']
+    nvccGenCodeFlags += ['-O3']
   endif
 endif
 
 
 #
-# Compile generator.
+# Compile generator and linker args.
 #
+nvccCcBinFlag = ['-ccbin', cxx.cmd_array()[0]]
 nvccCompGen   = generator(nvcc,
-    arguments: cudaGenCodeFlags + nvcuvidIFlags + 
+    arguments: nvccGenCodeFlags + nvcuvidIFlags + nvccCcBinFlag +
                ['-x', 'cu', '@EXTRA_ARGS@', '@INPUT@', '-c', '-o', '@OUTPUT@'],
     output:    ['@BASENAME@.o'],
 )
+nvccLinkArgs  = ['-dlink'] + nvccCcBinFlag
 
 
 #

@@ -48,12 +48,18 @@ endif
 # More configurable defaults could surely be provided.
 #
 cc          = meson.get_compiler('c')
+cxx         = meson.get_compiler('cpp')
 # Relax a bit the warning flags on GCC & Clang. -Wpedantic is very noisy.
-if cc.get_argument_syntax() == 'gcc'
-  relaxWarnings = ['-Wno-pedantic', '-Wno-implicit-fallthrough']
-  relaxWarnings = cc.get_supported_arguments(relaxWarnings)
-  add_project_arguments(relaxWarnings, language: 'c')
-  add_project_arguments(relaxWarnings, language: 'cpp')
+if cc.get_argument_syntax() == 'gcc' or cxx.get_argument_syntax() == 'gcc'
+  relaxWarnings = ['-Wno-pedantic',
+                   '-Wno-implicit-fallthrough',
+                   '-Wno-missing-field-initializers',
+                   '-Wno-missing-braces',
+                   '-Wno-unused-function']
+  relaxWarningsC   = cc .get_supported_arguments(relaxWarnings)
+  relaxWarningsCxx = cxx.get_supported_arguments(relaxWarnings)
+  add_project_arguments(relaxWarningsC,   language: 'c')
+  add_project_arguments(relaxWarningsCxx, language: 'cpp')
 endif
 libm        = cc.find_library('m',  required: IS_HOST_LINUX)
 libdl       = cc.find_library('dl', required: IS_HOST_LINUX)

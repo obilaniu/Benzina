@@ -26,7 +26,7 @@ benzina_img2vidCudaObjs = nvccCompGen.process(benzina_img2vidCudaSrcs,
 )
 benzina_img2vidCudaSta  = static_library('pre-dlink', benzina_img2vidCudaObjs)
 benzina_img2vidCudaObjs = custom_target ('benzina_img2vidCuda-dlink',
-    command         : [nvcc, '@INPUT@', '-shared', '-dlink', '-o', '@OUTPUT@'],
+    command         : [nvcc, '-shared'] + nvccLinkArgs + ['@INPUT@', '-o', '@OUTPUT@'],
     input           : benzina_img2vidCudaSta,
     output          : ['@BASENAME@-dlink.o'],
     build_by_default: true,
