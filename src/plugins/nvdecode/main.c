@@ -206,7 +206,9 @@ struct NVDECODE_CTX{
 	CUvideodecoder           decoder;
 	uint32_t                 decoderInited;
 	uint32_t                 decoderRefCnt;
+#if NVDECODE >= 8000
 	CUVIDDECODECAPS          decoderCaps;
+#endif
 	CUVIDDECODECREATEINFO    decoderInfo;
 	CUVIDPICPARAMS*          picParams;
 	uint64_t                 picParamTruncLen;
@@ -1472,7 +1474,9 @@ BENZINA_PLUGIN_STATIC int         nvdecodeWorkerThrdCore          (NVDECODE_CTX*
 	procParams.second_field      = 0;
 	procParams.top_field_first   = 0;
 	procParams.unpaired_field    = 0;
+#if NVDECODE >= 8000
 	procParams.output_stream     = ctx->worker.cudaStream;
+#endif
 	picIdx = ctx->worker.cnt % ctx->decoderInfo.ulNumDecodeSurfaces;
 	
 	/**
@@ -1860,8 +1864,10 @@ BENZINA_PLUGIN_STATIC int         nvdecodeAllocPBParse            (NVDECODE_CTX*
 			TAGCASE(33554434, ctx->decoderInfo.ulNumDecodeSurfaces);
 			TAGCASE(33554435, ctx->decoderInfo.CodecType);
 			TAGCASE(33554436, ctx->decoderInfo.ChromaFormat);
+#if NVDECODE >= 8000
 			TAGCASE(33554438, ctx->decoderInfo.bitDepthMinus8);
 			TAGCASE(33554439, ctx->decoderInfo.ulIntraDecodeOnly);
+#endif
 			TAGCASE(33554443, ctx->decoderInfo.display_area.left);
 			TAGCASE(33554444, ctx->decoderInfo.display_area.top);
 			TAGCASE(33554445, ctx->decoderInfo.display_area.right);
