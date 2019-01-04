@@ -52,11 +52,12 @@ class build_configure(setuptools.command.build_ext.build_ext):
 			        "--prefix",         libRoot,
 			        "-Dbuildtype="      +os.environ.get("BUILD_TYPE", "release"),
 			        "-Dbuilding_py_pkg="+"true",
-			        "-Dcuda_runtime="   +os.environ.get("CUDA_RUNTIME", "static"),
 			        "-Denable_gpl="     +os.environ.get("ENABLE_GPL", "false"),
 			        "-Dpy_interpreter=" +sys.executable,
+			        "-Dcuda_runtime="   +os.environ.get("CUDA_RUNTIME", "static"),
 			        "-Dcuda_arch="      +os.environ.get("CUDA_ARCH", "Auto"),
-			        "-Dcuda_home="      +os.environ.get("CUDA_HOME", "/usr/local/cuda")]
+			        "-Dcuda_home="      +os.environ.get("CUDA_HOME", "/usr/local/cuda"),
+			        "-Dnvidia_driver="  +os.environ.get("NVIDIA_DRIVER", "Auto")]
 			if self.reconfigure: cmd.append("--reconfigure")
 			subprocess.check_call(cmd,
 			                      stdin = subprocess.DEVNULL,

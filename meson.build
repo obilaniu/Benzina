@@ -12,6 +12,8 @@ project('Benzina', 'c', 'cpp',
 #
 # System check
 #
+IS_CROSS        = meson.is_cross_build()
+IS_NATIVE       = not IS_CROSS
 IS_HOST_LE      = host_machine.endian()     == 'little'
 IS_HOST_X86_64  = host_machine.cpu_family() == 'x86_64'
 IS_HOST_AARCH64 = host_machine.cpu_family() == 'aarch64'
@@ -70,11 +72,11 @@ threadsDep  = dependency('threads')
 #
 # FFmpeg
 #
-libavcodec   = dependency('libavcodec',   version: '>=57',  required: false, disabler: true)
-libavformat  = dependency('libavformat',  version: '>=57',  required: false, disabler: true)
-libavfilter  = dependency('libavfilter',  version: '>=6',   required: false, disabler: true)
-libavutil    = dependency('libavutil',    version: '>=55',  required: false, disabler: true)
-libswscale   = dependency('libswscale',   version: '>=4',   required: false, disabler: true)
+libavcodec   = dependency('libavcodec',  version: '>=57', required: false, disabler: true)
+libavformat  = dependency('libavformat', version: '>=57', required: false, disabler: true)
+libavfilter  = dependency('libavfilter', version: '>=6',  required: false, disabler: true)
+libavutil    = dependency('libavutil',   version: '>=55', required: false, disabler: true)
+libswscale   = dependency('libswscale',  version: '>=4',  required: false, disabler: true)
 ffmpegIncDir = []
 ffmpegIFlags = []
 ffmpegNames  = []
