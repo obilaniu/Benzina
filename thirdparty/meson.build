@@ -147,13 +147,18 @@ if NVIDIA_DRIVER == 'auto' and libnvcuvid.found()
   endif
 endif
 #
-# If NVIDIA driver version is still unknown, default it to the maximum possible
-# version.
+# If NVIDIA driver version is still unknown, default it to the minimum (oldest)
+# possible version.
 #
 if NVIDIA_DRIVER == 'auto'
-  NVIDIA_DRIVER = NVIDIA_DRIVER_MAX
-  message('Guessed  NVIDIA Driver: '+NVIDIA_DRIVER+', upper-bounded')
+  NVIDIA_DRIVER = NVIDIA_DRIVER_MIN
+  message('Guessed  NVIDIA Driver: '+NVIDIA_DRIVER+', lower-bounded')
 endif
+
+
+#
+# Emit warning if CUDA Toolkit version is incompatible with NVIDIA driver version.
+#
 if NVCC_VERSION != 'unknown' and not NVIDIA_DRIVER.version_compare('>='+NVIDIA_DRIVER_MIN)
   warning('CUDA Toolkit '+NVCC_VERSION+' requires driver >= '+NVIDIA_DRIVER_MIN+
           ', but found '+NVIDIA_DRIVER+'!')
