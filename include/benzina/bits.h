@@ -45,8 +45,8 @@
  * (Electro-Optical Transfer Function). There are certain points to be taken
  * into account, however:
  * 
- *   - 1,6,14,15: ITU-R standards have defined reference OETFs, but never explicitly defined a reference OETF.
- *                To solve this, ITU-R BT.1886-0 defined a possible reference EOTF.
+ *   - 1,6,14,15: ITU-R standards have defined reference OETFs, but never explicitly defined a reference EOTF for CRTs.
+ *                To solve this, ITU-R BT.1886-0 defined a possible reference EOTF power law for CRTs.
  *   - 4:         No explicit OETF, but EOTF assumed to be L = pow(V, 2.2)
  *   - 5:         No explicit OETF, but EOTF assumed to be L = pow(V, 2.8)
  *   - 16:        ITU-R BT.2100 PQ  defines a reference EOTF, but it is not the same as the inverse OETF.
@@ -181,6 +181,29 @@
 #define BENZINA_CHROMALOC_TOP           3  //| Top, between top-most luma samples.
 #define BENZINA_CHROMALOC_BOTTOMLEFT    4  //| Bottom-left, co-sited with left-most luma sample of second row. Extremely rare.
 #define BENZINA_CHROMALOC_BOTTOM        5  //| Bottom, between left-most luma samples of second row. Extremely rare.
+
+
+
+/**
+ * Color Range/Swing
+ * 
+ * YCbCr data can be coded with a "restricted" range that includes headroom and footroom
+ * above, or in "full" range.
+ * 
+ * Restricted range was once upon a time necessary to give analog filters head/footroom
+ * to avoid clipping, but it results in a small loss that is completely unnecessary in
+ * digital systems.
+ * 
+ *                                    Code   | Notes...
+ */
+#define BENZINA_SWING_REDUCED           0  //| Reduced-range:
+#define BENZINA_SWING_MPEG              0  //|   0..2^n-1
+#define BENZINA_SWING_TV                0  //| where n is the bit-depth.
+#define BENZINA_SWING_ANALOG            0  //|
+#define BENZINA_SWING_FULL              1  //| Full-range:
+#define BENZINA_SWING_JPEG              1  //|   0..219*2^(n-8)
+#define BENZINA_SWING_PC                1  //| where n is the bit-depth.
+#define BENZINA_SWING_DIGITAL           1  //|
 
 
 
