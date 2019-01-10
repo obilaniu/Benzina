@@ -10,7 +10,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "benzina/bits.h"
-#include "benzina/geometry.h"
 #include "benzina/visibility.h"
 
 
