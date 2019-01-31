@@ -264,17 +264,16 @@ def cuda_select_nvcc_arch_flags(cuda_version, cuda_arch_list="Auto", detected=""
 	
 	if cuda_ver_cmp(cuda_version, "9.0") >= 0:
 		cuda_known_gpu_architectures  += ["Volta"]
-		cuda_common_gpu_architectures += ["7.0"]
-		cuda_all_gpu_architectures    += ["7.0", "7.2"]
+		cuda_common_gpu_architectures += ["7.0", "7.0+PTX"]
+		cuda_all_gpu_architectures    += ["7.0", "7.0+PTX", "7.2", "7.2+PTX"]
 		
 		if cuda_ver_cmp(cuda_version, "10.0") < 0:
-			cuda_common_gpu_architectures += ["7.0+PTX"]
 			cuda_limit_gpu_architecture    = "7.5"
 	
 	if cuda_ver_cmp(cuda_version, "10.0") >= 0:
 		cuda_known_gpu_architectures  += ["Turing"]
 		cuda_common_gpu_architectures += ["7.5", "7.5+PTX"]
-		cuda_all_gpu_architectures    += ["7.5"]
+		cuda_all_gpu_architectures    += ["7.5", "7.5+PTX"]
 		
 		if cuda_ver_cmp(cuda_version, "11.0") < 0:
 			cuda_limit_gpu_architecture    = "8.0"
@@ -291,21 +290,23 @@ def cuda_select_nvcc_arch_flags(cuda_version, cuda_arch_list="Auto", detected=""
 			if isinstance(detected, list):
 				cuda_arch_list = detected
 			else:
-				cuda_arch_list = re.sub("[ \t]+", ";", detected).split(";")
+				cuda_arch_list = re.sub("[ \t,;]+", ";", detected)
+				cuda_arch_list = cuda_arch_list.strip(";").split(";")
 			
 			if cuda_limit_gpu_architecture:
 				filtered_cuda_arch_list = []
 				for arch in cuda_arch_list:
 					if arch:
 						if cuda_arch_cmp(arch, cuda_limit_gpu_architecture) >= 0:
-							filtered_cuda_arch_list.append(cuda_common_gpu_architectures[-1])
-						else:
+							arch = cuda_common_gpu_architectures[-1]
+						if arch not in filtered_cuda_arch_list:
 							filtered_cuda_arch_list.append(arch)
 				cuda_arch_list = filtered_cuda_arch_list
 		else:
 			cuda_arch_list = cuda_common_gpu_architectures
 	elif isinstance(cuda_arch_list, str):
-		cuda_arch_list = re.sub("[ \t]+", ";", cuda_arch_list).split(";")
+		cuda_arch_list = re.sub("[ \t,;]+", ";", cuda_arch_list)
+		cuda_arch_list = cuda_arch_list.strip(";").split(";")
 	
 	cuda_arch_list = sorted([x for x in set(cuda_arch_list) if x])
 	
@@ -314,13 +315,11 @@ def cuda_select_nvcc_arch_flags(cuda_version, cuda_arch_list="Auto", detected=""
 	for arch_name in cuda_arch_list:
 		arch_bin = []
 		arch_ptx = []
-		add_ptx  = False
-		
-		if arch_name.endswith("+PTX"):
-			add_ptx   = True
+		add_ptx  = arch_name.endswith("+PTX")
+		if add_ptx:
 			arch_name = arch_name[:-len("+PTX")]
 		
-		if re.fullmatch("""[0-9]+\.[0-9](\([0-9]+\.[0-9]\))?""", arch_name):
+		if re.fullmatch("[0-9]+\\.[0-9](\\([0-9]+\\.[0-9]\\))?", arch_name):
 			arch_bin = [arch_name]
 			arch_ptx = [arch_name]
 		else:
@@ -345,23 +344,22 @@ def cuda_select_nvcc_arch_flags(cuda_version, cuda_arch_list="Auto", detected=""
 			if not arch_ptx:
 				arch_ptx = arch_bin
 			cuda_arch_ptx += arch_ptx
-			
-	cuda_arch_bin = re.sub    ("\.",  "",  " ".join(cuda_arch_bin))
-	cuda_arch_ptx = re.sub    ("\.",  "",  " ".join(cuda_arch_ptx))
+	
+	cuda_arch_bin = re.sub("\\.", "", " ".join(cuda_arch_bin))
+	cuda_arch_ptx = re.sub("\\.", "", " ".join(cuda_arch_ptx))
 	cuda_arch_bin = re.findall("[0-9()]+", cuda_arch_bin)
 	cuda_arch_ptx = re.findall("[0-9]+",   cuda_arch_ptx)
-	
-	if cuda_arch_bin: cuda_arch_bin = sorted(list(set(cuda_arch_bin)))
-	if cuda_arch_ptx: cuda_arch_ptx = sorted(list(set(cuda_arch_ptx)))
+	cuda_arch_bin = sorted(list(set(cuda_arch_bin)))
+	cuda_arch_ptx = sorted(list(set(cuda_arch_ptx)))
 	
 	nvcc_flags          = []
 	nvcc_archs_readable = []
 	
 	for arch in cuda_arch_bin:
-		m = re.match("""([0-9]+)\(([0-9]+)\)""", arch)
+		m = re.match("([0-9]+)\\(([0-9]+)\\)", arch)
 		if m:
-			nvcc_flags          += ["-gencode", "arch=compute_{},code=sm_{}".format(m[1], m[0])]
-			nvcc_archs_readable += ["sm_"+m[0]]
+			nvcc_flags          += ["-gencode", "arch=compute_"+m[2]+",code=sm_"+m[1]]
+			nvcc_archs_readable += ["sm_"+m[1]]
 		else:
 			nvcc_flags          += ["-gencode", "arch=compute_"+arch+",code=sm_"+arch]
 			nvcc_archs_readable += ["sm_"+arch]
