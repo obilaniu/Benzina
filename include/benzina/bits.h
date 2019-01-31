@@ -181,6 +181,9 @@
 #define BENZINA_CHROMALOC_TOP           3  //| Top, between top-most luma samples.
 #define BENZINA_CHROMALOC_BOTTOMLEFT    4  //| Bottom-left, co-sited with left-most luma sample of second row. Extremely rare.
 #define BENZINA_CHROMALOC_BOTTOM        5  //| Bottom, between left-most luma samples of second row. Extremely rare.
+#define BENZINA_CHROMALOC_TOPRIGHT      6  //| NON-STANDARD: Top-right, co-sited with second luma sample of first row.
+#define BENZINA_CHROMALOC_RIGHT         7  //| NON-STANDARD: Center-right, between second-left-most luma samples.
+#define BENZINA_CHROMALOC_BOTTOMRIGHT   8  //| NON-STANDARD: Bottom-right, co-sited with second luma sample of second row.
 
 
 
