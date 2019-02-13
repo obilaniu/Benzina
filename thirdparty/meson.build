@@ -84,8 +84,8 @@ elif NVCC_VERSION.version_compare('>=7.0.28')
 else
   NVIDIA_DRIVER_MIN = IS_HOST_WINDOWS ? '378.66' : '378.13'
 endif
-NVIDIA_DRIVER_MAX = IS_HOST_WINDOWS ? '418.30' : '418.30'
-NVIDIA_DRIVER_9_0 = IS_HOST_WINDOWS ? '418.30' : '418.30'
+NVIDIA_DRIVER_MAX = IS_HOST_WINDOWS ? '418.81' : '418.30'
+NVIDIA_DRIVER_9_0 = IS_HOST_WINDOWS ? '418.81' : '418.30'
 NVIDIA_DRIVER_8_2 = IS_HOST_WINDOWS ? '397.93' : '396.24'
 NVIDIA_DRIVER_8_1 = IS_HOST_WINDOWS ? '390.77' : '390.25'
 NVIDIA_DRIVER_8_0 = IS_HOST_WINDOWS ? '378.66' : '378.13'
@@ -172,8 +172,8 @@ endif
 if   not libnvcuvid.found()
   warning('No Video Codec SDK found.')
 elif NVIDIA_DRIVER.version_compare('>='+NVIDIA_DRIVER_9_0)
-  message('Found Video Codec SDK >= 9.0, requires NVIDIA Driver >= '+NVIDIA_DRIVER_9_0+' and mandatory CUDA Toolkit >= 8.0')
-  if NVCC_VERSION != 'unknown' and NVCC_VERSION.version_compare('<8.0')
+  message('Found Video Codec SDK >= 9.0, requires NVIDIA Driver >= '+NVIDIA_DRIVER_9_0+' and mandatory CUDA Toolkit >= 10.0')
+  if NVCC_VERSION != 'unknown' and NVCC_VERSION.version_compare('<10.0')
     warning('Warning: CUDA Toolkit @0@ too old!'.format(NVCC_VERSION))
   endif
   nvcuvidCDefs += ['-DNVDECODE=9000']
