@@ -32,9 +32,9 @@
 #     do that we try to use the stubs, then the system libraries. If programs
 #     link and run with specific APIs, they are assumed usable.
 #
-CUDA_ARCH         = get_option('cuda_arch')
-CUDA_HOME         = get_option('cuda_home').split(':')[0]
-CUDA_RUNTIME      = get_option('cuda_runtime') == 'static' ? 'cudart_static' : 'cudart'
+CUDA_ARCH         = get_option('nvidia_arch')
+CUDA_HOME         = get_option('nvidia_home').split(':')[0]
+CUDA_RUNTIME      = get_option('nvidia_runtime') == 'static' ? 'cudart_static' : 'cudart'
 NVIDIA_DRIVER     = get_option('nvidia_driver').to_lower()
 currSrcDir        = meson.current_source_dir()
 nvccPath          = CUDA_HOME  / 'bin' / 'nvcc'
@@ -215,7 +215,7 @@ if nvcc.found()
     message(detectGPU.stderr())
     nvccGenCodeFlags += detectGPU.stdout().split()
   endif
-  nvccCudaRtFlags += ['-cudart', get_option('cuda_runtime')]
+  nvccCudaRtFlags += ['-cudart', get_option('nvidia_runtime')]
   if(get_option('buildtype') == 'debugoptimized' or
      get_option('buildtype') == 'debug')
     nvccOptFlags += ['-g', '-lineinfo']
