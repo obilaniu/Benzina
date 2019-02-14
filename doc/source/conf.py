@@ -12,9 +12,15 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 
-import os
-import sys
-sys.path.insert(0, os.path.abspath('../../src/'))
+import importlib
+benzina_spec = importlib.util.find_spec("benzina")
+if benzina_spec is None:
+    import os
+    import sys
+    sys.path.insert(0, os.path.abspath('../benzina_native_placeholder/'))
+    import benzina
+    sys.path.insert(0, os.path.abspath('../../src/'))
+    importlib.reload(benzina)
 
 
 # -- Project information -----------------------------------------------------
@@ -45,6 +51,7 @@ extensions = [
     'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
     'sphinx.ext.githubpages',
+    'sphinx.ext.napoleon',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -100,8 +107,15 @@ html_static_path = ['_static']
 # defined by theme itself.  Builtin themes are using these templates by
 # default: ``['localtoc.html', 'relations.html', 'sourcelink.html',
 # 'searchbox.html']``.
-#
-# html_sidebars = {}
+html_sidebars = {
+    '**': [
+        'about.html',
+        'navigation.html',
+        'relations.html',
+        'searchbox.html',
+        'donate.html',
+    ]
+}
 
 
 # -- Options for HTMLHelp output ---------------------------------------------

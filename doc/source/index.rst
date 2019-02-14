@@ -10,7 +10,14 @@ Benzina Documentation
    :maxdepth: 2
    :caption: API:
 
-   imagenet_example.rst
+   api/dataloader.rst
+   api/operations.rst
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Examples:
+
+   examples/imagenet_example.rst
 
 Indices and tables
 ==================
