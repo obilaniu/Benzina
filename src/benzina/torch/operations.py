@@ -52,36 +52,52 @@ class ColorTransform:
     defined in Benzina's kernel. The transformation is called for each sample of
     a batch.
 
-    0: ITU-R BT.601-6-625 recommentation
-            Kr = 0.299
-            Kg = 0.587
-            Kb = 0.114
-        but full scale
-            Y,Cb,Cr in [0, 255]
+    =====  =================================
+    Index  Description
+    =====  =================================
+    0      ITU-R BT.601-6-625 recommentation
 
-    1: ITU-R BT.601-6-625 recommentation
-            Kr = 0.299
-            Kg = 0.587
-            Kb = 0.114
-        with head/footroom
-            Y       in [16,235]
-            Cb,Cr   in [16,240]
+           * Kr = 0.299
+           * Kg = 0.587
+           * Kb = 0.114
 
-    2: ITU-R BT.709 recommentation
-            Kr = 0.2126
-            Kg = 0.7152
-            Kb = 0.0722
-        with head/footroom
-            Y       in [16,235]
-            Cb,Cr   in [16,240]
+           but full scale
 
-    3: ITU-R BT.2020 recommentation
-            Kr = 0.2627
-            Kg = 0.6780
-            Kb = 0.0593
-        with head/footroom
-            Y       in [16,235]
-            Cb,Cr   in [16,240]
+           * Y,Cb,Cr in [0, 255]
+
+    1      ITU-R BT.601-6-625 recommentation
+
+           * Kr = 0.299
+           * Kg = 0.587
+           * Kb = 0.114
+
+           with head/footroom
+
+           * Y       in [16,235]
+           * Cb,Cr   in [16,240]
+
+    2      ITU-R BT.709 recommentation
+
+           * Kr = 0.2126
+           * Kg = 0.7152
+           * Kb = 0.0722
+
+           with head/footroom
+
+           * Y       in [16,235]
+           * Cb,Cr   in [16,240]
+
+    3      ITU-R BT.2020 recommentation
+
+           * Kr = 0.2627
+           * Kg = 0.6780
+           * Kb = 0.0593
+
+           with head/footroom
+
+           * Y       in [16,235]
+           * Cb,Cr   in [16,240]
+    =====  =================================
     """
     def __init__(self):
         pass
