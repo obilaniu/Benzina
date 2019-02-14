@@ -17,7 +17,7 @@ benzina_spec = importlib.util.find_spec("benzina")
 if benzina_spec is None:
     import os
     import sys
-    sys.path.insert(0, os.path.abspath('../benzina_native_placeholder/'))
+    sys.path.insert(0, os.path.abspath('../benzina_placeholders/'))
     import benzina
     sys.path.insert(0, os.path.abspath('../../src/'))
     importlib.reload(benzina)
