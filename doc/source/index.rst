@@ -28,17 +28,11 @@ Benzina               Intel Xeon E5-2623*   1             Tesla V100*   1050 img
 
 
 .. toctree::
-   :maxdepth: 2
-   :caption: API:
+   :maxdepth: 3
 
-   api/dataloader.rst
-   api/operations.rst
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Examples:
-
-   examples/imagenet_example.rst
+   api/list.rst
+   examples/list.rst
+   datasets/list.rst
 
 Indices and tables
 ==================
