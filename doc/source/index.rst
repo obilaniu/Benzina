@@ -4,8 +4,21 @@
    contain the root `toctree` directive.
 
 Benzina Documentation
-===================================
+=====================
 
+Table of Content
+----------------
+
+.. toctree::
+   :maxdepth: 3
+
+   examples/_index.rst
+   datasets/list.rst
+   api/_index.rst
+   compilation/_index.rst
+
+Description of the project
+--------------------------
 Benzina is an image loading library that accelerates image loading and preprocessing
 by making use of the hardware decoder in NVIDIA's GPUs.
 
@@ -25,14 +38,6 @@ Benzina               Intel Xeon E5-2623*   1             Tesla V100*   1050 img
 .. Note::
    * Intel Xeon E5-2623 is the Xeon E5-2623 v3 @ 3.00 GHz version
    * Tesla V100 is the Tesla V100 PCIE 16GB version
-
-
-.. toctree::
-   :maxdepth: 3
-
-   api/list.rst
-   examples/list.rst
-   datasets/list.rst
 
 Indices and tables
 ==================

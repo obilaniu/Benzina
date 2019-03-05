@@ -10,7 +10,7 @@ images:
 * Center crop the image to have a 256 x 256 image
 
 Dataset Composition
-^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^
 The dataset is composed of a train set, followed by a validation set then a
 test set for a total of 1 431 167 entries:
 
