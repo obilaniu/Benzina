@@ -76,4 +76,7 @@ Then, compile and install Benzina:
 .. code-block:: bash
 
     $ cd Benzina
-    $ python setup.py install
+    $ CUDA_HOME=${CUDA_HOME%:*} python setup.py install
+
+.. Note::
+   ``${CUDA_HOME%:*}`` will trim the ``:`` and what follows in the variable
