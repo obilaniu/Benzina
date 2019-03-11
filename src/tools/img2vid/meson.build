@@ -19,7 +19,7 @@ endif
 
 
 ### CUDA code compilation
-benzina_img2vidCudaSrcs = files('kernels.cpp')
+benzina_img2vidCudaSrcs = files('kernels.cu')
 benzina_img2vidCudaObjs = nvccCompGen.process(benzina_img2vidCudaSrcs,
     extra_args: ['-Xptxas', '--warn-on-double-precision-use,-O3'] +
                 benzinaIFlags + ffmpegIFlags,

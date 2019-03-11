@@ -32,6 +32,7 @@
 #     do that we try to use the stubs, then the system libraries. If programs
 #     link and run with specific APIs, they are assumed usable.
 #
+CUDA_MODULE       = import('unstable-cuda')
 CUDA_ARCH         = get_option('nvidia_arch')
 CUDA_HOME         = get_option('nvidia_home').split(':')[0]
 CUDA_RUNTIME      = get_option('nvidia_runtime') == 'static' ? 'cudart_static' : 'cudart'
@@ -50,6 +51,7 @@ cudaIncs          = nvcuvidIncs
 nvccGenCodeFlags  = []
 nvccCudaRtFlags   = []
 nvccOptFlags      = []
+nvccCcBinFlag     = []
 nvcc              = find_program(nvccPath, 'nvcc', required: false, disabler: true)
 nvidiasmi         = find_program('nvidia-smi',     required: false, disabler: true)
 NVCC_VERSION      = 'unknown'
@@ -61,29 +63,12 @@ if nvcc.found()
     nvcc = disabler()
   endif
 endif
-if   NVCC_VERSION == 'unknown'
+if NVCC_VERSION == 'unknown'
   NVIDIA_DRIVER_MIN = IS_HOST_WINDOWS ? '378.66' : '378.13'
-elif NVCC_VERSION.version_compare('>=10.1.105')
-  NVIDIA_DRIVER_MIN = IS_HOST_WINDOWS ? '418.96' : '418.39'
-elif NVCC_VERSION.version_compare('>=10.0.130')
-  NVIDIA_DRIVER_MIN = IS_HOST_WINDOWS ? '411.31' : '410.48'
-elif NVCC_VERSION.version_compare('>=9.2.148')
-  NVIDIA_DRIVER_MIN = IS_HOST_WINDOWS ? '398.26' : '396.37'
-elif NVCC_VERSION.version_compare('>=9.2.88')
-  NVIDIA_DRIVER_MIN = IS_HOST_WINDOWS ? '397.44' : '396.26'
-elif NVCC_VERSION.version_compare('>=9.1.85')
-  NVIDIA_DRIVER_MIN = IS_HOST_WINDOWS ? '391.29' : '390.46'
-elif NVCC_VERSION.version_compare('>=9.0.76')
-  NVIDIA_DRIVER_MIN = IS_HOST_WINDOWS ? '385.54' : '384.81'
-elif NVCC_VERSION.version_compare('>=8.0.61')
-  NVIDIA_DRIVER_MIN = IS_HOST_WINDOWS ? '376.51' : '375.26'
-elif NVCC_VERSION.version_compare('>=8.0.44')
-  NVIDIA_DRIVER_MIN = IS_HOST_WINDOWS ? '369.30' : '367.48'
-elif NVCC_VERSION.version_compare('>=7.5.16')
-  NVIDIA_DRIVER_MIN = IS_HOST_WINDOWS ? '353.66' : '352.31'
-elif NVCC_VERSION.version_compare('>=7.0.28')
-  NVIDIA_DRIVER_MIN = IS_HOST_WINDOWS ? '347.62' : '346.46'
 else
+  NVIDIA_DRIVER_MIN = CUDA_MODULE.min_driver_version(NVCC_VERSION)
+endif
+if NVIDIA_DRIVER_MIN == 'unknown'
   NVIDIA_DRIVER_MIN = IS_HOST_WINDOWS ? '378.66' : '378.13'
 endif
 NVIDIA_DRIVER_MAX = IS_HOST_WINDOWS ? '419.17' : '418.43'
@@ -205,26 +190,47 @@ endif
 
 
 #
-# GPU presence detection and architecture selection
+# GPU architecture detection and compile flags selection.
 #
 if nvcc.found()
-  detectGPU = run_command(python, [detectGPUpy, nvcc, CUDA_ARCH])
-  if detectGPU.returncode() != 0
-    warning('GPU detection failed:')
-    warning(detectGPU.stdout())
-    warning(detectGPU.stderr())
-  else
-    message(detectGPU.stderr())
-    nvccGenCodeFlags += detectGPU.stdout().split()
+  gpuarchs = []
+  if CUDA_ARCH == 'Auto'
+    detectGPU = run_command(nvcc, ['-w', '-cudart', 'static', detectGPUc, '--run'])
+    detectGPUstdout = detectGPU.stdout().strip()
+    detectGPUstderr = detectGPU.stderr().strip()
+    if detectGPU.returncode() == 0
+      gpuarchs += detectGPUstdout.split()
+      if detectGPUstderr != ''
+        message(detectGPUstderr)
+      endif
+    else
+      warning('GPU detection failed:')
+      if detectGPUstdout != ''
+        warning(detectGPUstdout)
+      endif
+      if detectGPUstderr != ''
+        warning(detectGPUstderr)
+      endif
+    endif
   endif
-  nvccCudaRtFlags += ['-cudart', get_option('nvidia_runtime')]
+  nvccGenCodeReadable = CUDA_MODULE.nvcc_arch_readable(NVCC_VERSION, CUDA_ARCH, detected: gpuarchs)
+  nvccGenCodeFlags   += CUDA_MODULE.nvcc_arch_flags   (NVCC_VERSION, CUDA_ARCH, detected: gpuarchs)
+  nvccCudaRtFlags    += ['-cudart', get_option('nvidia_runtime')]
   if(get_option('buildtype') == 'debugoptimized' or
      get_option('buildtype') == 'debug')
     nvccOptFlags += ['-g', '-lineinfo']
   else
     nvccOptFlags += ['-O3']
   endif
-  nvccCcBinFlag = ['-ccbin', cxx.cmd_array()[0]]
+  nvccCcBinFlag += ['-ccbin', cxx.cmd_array()[0]]
+  
+  if   CUDA_ARCH != 'Auto'
+    message('Building for selected GPUs [@0@]'.format(' '.join(nvccGenCodeReadable)))
+  elif gpuarchs != []
+    message('Building for detected GPUs [@0@]'.format(' '.join(nvccGenCodeReadable)))
+  else
+    message('Building for common GPUs [@0@]'  .format(' '.join(nvccGenCodeReadable)))
+  endif
 endif
 
 

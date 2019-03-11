@@ -1,27 +1,17 @@
 # -*- coding: utf-8 -*-
 
 #
-# Imports
+# Imports and early Python version check.
 #
-import os, sys, subprocess, time
-from   setuptools import setup, find_packages, Extension
-
 packageName = "benzina"
 githubURL   = "https://github.com/obilaniu/Benzina"
 
-
-#
-# Restrict to Python 3.5+
-#
+import os, sys
 if sys.version_info[:2] < (3, 5):
-	sys.stdout.write(packageName+" is Python 3.5+ only!\n")
-	sys.exit(1)
-
-
-#
-# Retrieve setup scripts
-#
-from . import git, versioning, utils
+    sys.stdout.write(packageName+" is Python 3.5+ only!\n")
+    sys.exit(1)
+from setuptools import setup, find_packages, Extension
+from .          import git, versioning, utils
 
 
 #
@@ -30,7 +20,7 @@ from . import git, versioning, utils
 with open(os.path.join(git.getSrcRoot(),
                        "scripts",
                        "LONG_DESCRIPTION.txt"), "r", encoding="utf-8") as f:
-	long_description = f.read()
+    long_description = f.read()
 
 
 #
@@ -40,7 +30,7 @@ with open(os.path.join(git.getSrcRoot(),
                        "src",
                        packageName,
                        "version.py"), "w") as f:
-	f.write(versioning.synthesizeVersionPy())
+    f.write(versioning.synthesizeVersionPy())
 
 
 
@@ -81,7 +71,7 @@ setup(
     ],
     python_requires      = '>=3.5',
     setup_requires       = [
-        "meson>=0.49.0",
+        "meson>=0.50.0",
     ],
     install_requires     = [
         "nauka>=0.0.11",

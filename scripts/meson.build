@@ -32,7 +32,7 @@ endif
 
 
 #
-# Important Python scripts used elsewhere
+# GPU detection test.
 #
-detectGPUpy  = files('detectgpus.py')
+detectGPUc   = files('detectgpus.c')
 

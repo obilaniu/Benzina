@@ -26,7 +26,7 @@ endif
 
 
 ### CUDA code compilation
-libbenzina_plugin_nvdecodeCudaSrcs = files('kernels.cpp')
+libbenzina_plugin_nvdecodeCudaSrcs = files('kernels.cu')
 libbenzina_plugin_nvdecodeCudaObjs = nvccCompGen.process(libbenzina_plugin_nvdecodeCudaSrcs, extra_args: [
     '-Xcompiler', '-fPIC',
     '-Xptxas', '--warn-on-double-precision-use,-O3',

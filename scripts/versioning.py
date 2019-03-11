@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import os, re, sys, subprocess, time
+import os, re, time
 from   . import git
 
 #
@@ -57,9 +57,9 @@ posixTime  = int(os.environ.get("SOURCE_DATE_EPOCH", time.time()))
 iso8601Time= time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(posixTime))
 verLocal   = verPublic+"+"+iso8601Time
 if verVCS:
-	verLocal += "."+verVCS
-	if not verClean:
-		verLocal += ".dirty"
+    verLocal += "."+verVCS
+    if not verClean:
+        verLocal += ".dirty"
 
 #
 # SemVer Version.
@@ -72,29 +72,29 @@ identifiers= []
 if verPreRel: identifiers.append(verPreRel)
 if verDevRel: identifiers.append(verDevRel[1:])
 if identifiers:
-	verSemVer += "-" + ".".join(identifiers)
+    verSemVer += "-" + ".".join(identifiers)
 metadata   = []
 if regexMatch.group("postN"):
-	metadata.append("post")
-	metadata.append(regexMatch.group("postN"))
+    metadata.append("post")
+    metadata.append(regexMatch.group("postN"))
 metadata.append("buildtime")
 metadata.append(iso8601Time)
 if verVCS:
-	metadata.append("git")
-	metadata.append(verVCS)
-	if not verClean:
-		metadata.append("dirty")
+    metadata.append("git")
+    metadata.append(verVCS)
+    if not verClean:
+        metadata.append("dirty")
 if metadata:
-	verSemVer += "+" + ".".join(metadata)
+    verSemVer += "+" + ".".join(metadata)
 
 
 #
 # Version utilities
 #
 def synthesizeVersionPy():
-	templatePath = os.path.join(git.getSrcRoot(),
-	                            "scripts",
-	                            "version.py.in")
-	
-	with open(templatePath, "r") as f:
-		return f.read().format(**globals())
+    templatePath = os.path.join(git.getSrcRoot(),
+                                "scripts",
+                                "version.py.in")
+    
+    with open(templatePath, "r") as f:
+        return f.read().format(**globals())

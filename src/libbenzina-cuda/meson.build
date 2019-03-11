@@ -14,7 +14,7 @@ endif
 
 ### CUDA code compilation
 libbenzinacudaCDefs    = ['-DBENZINA_CUDA_IS_SHARED=1']
-libbenzinacudaCudaSrcs = files('kernels.cpp')
+libbenzinacudaCudaSrcs = files('kernels.cu')
 libbenzinacudaCudaObjs = nvccCompGen.process(libbenzinacudaCudaSrcs, extra_args: [
     '-Xcompiler', '-fPIC',
     '-Xptxas', '--warn-on-double-precision-use,-O3',
