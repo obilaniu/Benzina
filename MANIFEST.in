@@ -11,6 +11,7 @@ graft thirdparty
 global-include meson.build meson_options.txt
 
 # But exclude binaries, installed headers and other junk:
+exclude src/benzina/version.py
 prune src/benzina/include
 prune src/benzina/lib
 global-exclude __pycache__ *.py[cod] *.exe .DS_Store
