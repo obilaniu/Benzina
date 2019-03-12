@@ -1,5 +1,6 @@
 /* Includes */
 #include <stdio.h>
+#include <string.h>
 #include "geometry.h"
 
 
@@ -32,6 +33,30 @@ uint32_t rect2dw(const BENZINA_RECT2D* r){
 uint32_t rect2dh(const BENZINA_RECT2D* r){
     return maxu32(r->p[0].y, r->p[2].y) - maxu32(r->p[0].y, r->p[2].y) + 1;
 }
+int      str2chromafmt(const char* s){
+    if      (!strcmp(s, "yuv400")){return BENZINA_CHROMAFMT_YUV400;
+    }else if(!strcmp(s, "yuv420")){return BENZINA_CHROMAFMT_YUV420;
+    }else if(!strcmp(s, "yuv422")){return BENZINA_CHROMAFMT_YUV422;
+    }else if(!strcmp(s, "yuv444")){return BENZINA_CHROMAFMT_YUV444;
+    }else{
+        return -100;
+    }
+}
+int      str2canvaschromafmt(const char* s){
+    return !strcmp(s, "yuv420super") ? -BENZINA_CHROMAFMT_YUV420 : str2chromafmt(s);
+}
+int      str2chromaloc(const char* s){
+    if      (!strcmp(s,       "left")){return BENZINA_CHROMALOC_LEFT;
+    }else if(!strcmp(s,     "center")){return BENZINA_CHROMALOC_CENTER;
+    }else if(!strcmp(s,    "topleft")){return BENZINA_CHROMALOC_TOPLEFT;
+    }else if(!strcmp(s,        "top")){return BENZINA_CHROMALOC_TOP;
+    }else if(!strcmp(s, "bottomleft")){return BENZINA_CHROMALOC_BOTTOMLEFT;
+    }else if(!strcmp(s,     "bottom")){return BENZINA_CHROMALOC_BOTTOM;
+    }else{
+        return -1;
+    }
+}
+
 
 /**
  * @brief Validate the geometry problem's solution.
@@ -133,10 +158,10 @@ int main(int argc, char* argv[]){
     
     BENZINA_GEOM geom = {0};
     int  transpose, hflip, vflip, crop=0, resize=0, invalid=0, ret;
-    char canvasChromaFormat[20] = "yuv420";
-    char sourceChromaFormat[20] = "yuv420";
-    char sourceChromaLoc   [20] = "left";
-    char canvasChromaLoc   [20] = "left";
+    char canvasChromaFormat[21] = "yuv420";
+    char sourceChromaFormat[21] = "yuv420";
+    char sourceChromaLoc   [21] = "left";
+    char canvasChromaLoc   [21] = "left";
     int  canvasConvs = argc >= 2 ? sscanf(argv[1], "%u:%u:%20[yuv420super]",
                                           &geom.in.canvas.w,
                                           &geom.in.canvas.h,
@@ -149,14 +174,14 @@ int main(int argc, char* argv[]){
     switch(canvasConvs){
         case 0: geom.in.canvas.w = 1024;
         case 1: geom.in.canvas.h = geom.in.canvas.w;
-        case 2: 
+        case 2: geom.in.canvas.chroma_format = str2canvaschromafmt(canvasChromaFormat);
         default: break;
     }
     switch(sourceConvs){
         case 0: geom.in.source.w = 1024;
         case 1: geom.in.source.h = geom.in.source.w;
-        case 2: 
-        case 3:
+        case 2: geom.in.source.chroma_format = str2chromafmt(sourceChromaFormat);
+        case 3: geom.in.source.chroma_loc    = str2chromaloc(sourceChromaLoc);
         default: break;
     }
     
