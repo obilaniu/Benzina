@@ -1,9 +1,7 @@
 # Ignored whole directories
 build
 dist
-images
 install
-3rdparty
 
 # Ignored file extensions
 ## Preprocessed files
@@ -65,6 +63,7 @@ install
 **.bak
 **.swp
 **~
+**.autosave
 
 ## TensorBoard
 *tfevents*
