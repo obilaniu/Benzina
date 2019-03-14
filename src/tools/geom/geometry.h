@@ -55,48 +55,44 @@ struct BENZINA_RECT2D{
  */
 
 struct BENZINA_GEOM{
+    /* Input */
     struct{
         struct{
             uint32_t w, h;
-            int      chroma_format;
+            int      chroma_fmt;
             int      chroma_loc;
         } source;
         struct{
             uint32_t w, h;
-            int      chroma_format;
+            int      chroma_fmt;
+            int      superscale;
         } canvas;
-    } in;
+    } i;
     
-    unsigned wholly_contained_untransposed : 1;
-    unsigned wholly_contained_transposed   : 1;
-    unsigned wholly_contained              : 1;
-    unsigned landscape_src                 : 1;
-    unsigned landscape_canvas              : 1;
-    unsigned transpose                     : 1;
-    unsigned hflip                         : 1;
-    unsigned vflip                         : 1;
-    unsigned chroma_loc_canvas             : 3;
-    unsigned resize                        : 1;
-    uint32_t transw, transh;
-    uint32_t arcorw, arcorh;
-    uint32_t cropw,  croph;
-    uint32_t cropx,  cropy;
-    uint32_t embedw, embedh;
-    
+    /* Output */
     struct{
         int transpose, vflip, hflip;
-        BENZINA_RECT2D source, canvas;
         int chroma_loc;
-    } out;
+        BENZINA_RECT2D source, canvas;
+    } o;
 };
-
 
 
 /**
  * Public Function Definitions
  */
 
-extern int benzina_geom_solve(BENZINA_GEOM* geom);
+extern uint32_t rect2d_x(const BENZINA_RECT2D* r);
+extern uint32_t rect2d_y(const BENZINA_RECT2D* r);
+extern uint32_t rect2d_w(const BENZINA_RECT2D* r);
+extern uint32_t rect2d_h(const BENZINA_RECT2D* r);
+extern void     rect2d_scalex(BENZINA_RECT2D* r, uint32_t a, uint32_t b);
+extern void     rect2d_scaley(BENZINA_RECT2D* r, uint32_t a, uint32_t b);
+extern void     rect2d_transp(BENZINA_RECT2D* r);
+extern void     rect2d_hflip (BENZINA_RECT2D* r);
+extern void     rect2d_vflip (BENZINA_RECT2D* r);
+
+extern int      benzina_geom_solve(BENZINA_GEOM* geom);
 
 
 /* End Extern "C" and Include Guard */

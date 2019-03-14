@@ -15,24 +15,13 @@
  * Functions.
  */
 
-/**
- * Utility Functions
- */
-
+/* Utility Functions */
+int      strendswith(const char* s, const char* e){
+    size_t ls = strlen(s), le = strlen(e);
+    return ls<le ? 0 : !strcmp(s+ls-le, e);
+}
 uint32_t minu32(uint32_t a, uint32_t b){return a<b?a:b;}
-uint32_t maxu32(uint32_t a, uint32_t b){return a<b?a:b;}
-uint32_t rect2dx(const BENZINA_RECT2D* r){
-    return minu32(r->p[0].x, r->p[2].x);
-}
-uint32_t rect2dy(const BENZINA_RECT2D* r){
-    return minu32(r->p[0].y, r->p[2].y);
-}
-uint32_t rect2dw(const BENZINA_RECT2D* r){
-    return maxu32(r->p[0].x, r->p[2].x) - maxu32(r->p[0].x, r->p[2].x) + 1;
-}
-uint32_t rect2dh(const BENZINA_RECT2D* r){
-    return maxu32(r->p[0].y, r->p[2].y) - maxu32(r->p[0].y, r->p[2].y) + 1;
-}
+uint32_t maxu32(uint32_t a, uint32_t b){return a>b?a:b;}
 int      str2chromafmt(const char* s){
     if      (!strcmp(s, "yuv400")){return BENZINA_CHROMAFMT_YUV400;
     }else if(!strcmp(s, "yuv420")){return BENZINA_CHROMAFMT_YUV420;
@@ -43,7 +32,7 @@ int      str2chromafmt(const char* s){
     }
 }
 int      str2canvaschromafmt(const char* s){
-    return !strcmp(s, "yuv420super") ? -BENZINA_CHROMAFMT_YUV420 : str2chromafmt(s);
+    return !strcmp(s, "yuv420super") ? BENZINA_CHROMAFMT_YUV420 : str2chromafmt(s);
 }
 int      str2chromaloc(const char* s){
     if      (!strcmp(s,       "left")){return BENZINA_CHROMALOC_LEFT;
@@ -72,7 +61,7 @@ int validate(const BENZINA_GEOM* geom){
     uint32_t cx,cy,cw,ch,sx,sy,sw,sh;
     
     /* Chroma Location Check */
-    switch(geom->out.chroma_loc){
+    switch(geom->o.chroma_loc){
         case BENZINA_CHROMALOC_TOPRIGHT:
         case BENZINA_CHROMALOC_RIGHT:
         case BENZINA_CHROMALOC_BOTTOMRIGHT:
@@ -80,66 +69,66 @@ int validate(const BENZINA_GEOM* geom){
     }
     
     /* Oversize Check */
-    cx = rect2dx(&geom->out.canvas);
-    cy = rect2dy(&geom->out.canvas);
-    cw = rect2dw(&geom->out.canvas);
-    ch = rect2dh(&geom->out.canvas);
+    cx = rect2d_x(&geom->o.canvas);
+    cy = rect2d_y(&geom->o.canvas);
+    cw = rect2d_w(&geom->o.canvas);
+    ch = rect2d_h(&geom->o.canvas);
     
-    sx = rect2dx(&geom->out.source);
-    sy = rect2dy(&geom->out.source);
-    sw = rect2dw(&geom->out.source);
-    sh = rect2dh(&geom->out.source);
+    sx = rect2d_x(&geom->o.source);
+    sy = rect2d_y(&geom->o.source);
+    sw = rect2d_w(&geom->o.source);
+    sh = rect2d_h(&geom->o.source);
     
-    if(cx >= geom->in.canvas.w || cw > geom->in.canvas.w || cx+cw > geom->in.canvas.w ||
-       cy >= geom->in.canvas.h || ch > geom->in.canvas.h || cy+ch > geom->in.canvas.h ||
-       sx >= geom->in.source.w || sw > geom->in.source.w || sx+sw > geom->in.source.w ||
-       sy >= geom->in.source.h || sh > geom->in.source.h || sy+sh > geom->in.source.h){
+    if(cx >= geom->i.canvas.w || cw > geom->i.canvas.w || cx+cw > geom->i.canvas.w ||
+       cy >= geom->i.canvas.h || ch > geom->i.canvas.h || cy+ch > geom->i.canvas.h ||
+       sx >= geom->i.source.w || sw > geom->i.source.w || sx+sw > geom->i.source.w ||
+       sy >= geom->i.source.h || sh > geom->i.source.h || sy+sh > geom->i.source.h){
         return 2;
     }
     
     /* Rectangular Check */
-    if(geom->out.canvas.p[0].x == geom->out.canvas.p[1].x){
-        if(geom->out.canvas.p[2].x != geom->out.canvas.p[3].x ||
-           geom->out.canvas.p[1].y != geom->out.canvas.p[2].y ||
-           geom->out.canvas.p[0].y != geom->out.canvas.p[3].y){
+    if(geom->o.canvas.p[0].x == geom->o.canvas.p[1].x){
+        if(geom->o.canvas.p[2].x != geom->o.canvas.p[3].x ||
+           geom->o.canvas.p[1].y != geom->o.canvas.p[2].y ||
+           geom->o.canvas.p[0].y != geom->o.canvas.p[3].y){
             return 3;
         }
     }else{
-        if(geom->out.canvas.p[0].y != geom->out.canvas.p[1].y ||
-           geom->out.canvas.p[2].y != geom->out.canvas.p[3].y ||
-           geom->out.canvas.p[0].x != geom->out.canvas.p[3].x ||
-           geom->out.canvas.p[1].x != geom->out.canvas.p[2].x){
+        if(geom->o.canvas.p[0].y != geom->o.canvas.p[1].y ||
+           geom->o.canvas.p[2].y != geom->o.canvas.p[3].y ||
+           geom->o.canvas.p[0].x != geom->o.canvas.p[3].x ||
+           geom->o.canvas.p[1].x != geom->o.canvas.p[2].x){
             return 3;
         }
     }
-    if(geom->out.source.p[0].x == geom->out.source.p[1].x){
-        if(geom->out.source.p[2].x != geom->out.source.p[3].x ||
-           geom->out.source.p[1].y != geom->out.source.p[2].y ||
-           geom->out.source.p[0].y != geom->out.source.p[3].y){
+    if(geom->o.source.p[0].x == geom->o.source.p[1].x){
+        if(geom->o.source.p[2].x != geom->o.source.p[3].x ||
+           geom->o.source.p[1].y != geom->o.source.p[2].y ||
+           geom->o.source.p[0].y != geom->o.source.p[3].y){
             return 3;
         }
     }else{
-        if(geom->out.source.p[0].y != geom->out.source.p[1].y ||
-           geom->out.source.p[2].y != geom->out.source.p[3].y ||
-           geom->out.source.p[0].x != geom->out.source.p[3].x ||
-           geom->out.source.p[1].x != geom->out.source.p[2].x){
+        if(geom->o.source.p[0].y != geom->o.source.p[1].y ||
+           geom->o.source.p[2].y != geom->o.source.p[3].y ||
+           geom->o.source.p[0].x != geom->o.source.p[3].x ||
+           geom->o.source.p[1].x != geom->o.source.p[2].x){
             return 3;
         }
     }
     
     /* Alignment Check */
-    if(geom->in.canvas.chroma_format == BENZINA_CHROMAFMT_YUV420 ||
-       geom->in.canvas.chroma_format == BENZINA_CHROMAFMT_YUV422){
+    if(geom->i.canvas.chroma_fmt == BENZINA_CHROMAFMT_YUV420 ||
+       geom->i.canvas.chroma_fmt == BENZINA_CHROMAFMT_YUV422){
         if((cx|cw) & 1){return 4;}
     }
-    if(geom->in.source.chroma_format == BENZINA_CHROMAFMT_YUV420 ||
-       geom->in.source.chroma_format == BENZINA_CHROMAFMT_YUV422){
+    if(geom->i.source.chroma_fmt == BENZINA_CHROMAFMT_YUV420 ||
+       geom->i.source.chroma_fmt == BENZINA_CHROMAFMT_YUV422){
         if((sx|sw) & 1){return 4;}
     }
-    if(geom->in.canvas.chroma_format == BENZINA_CHROMAFMT_YUV420){
+    if(geom->i.canvas.chroma_fmt == BENZINA_CHROMAFMT_YUV420){
         if((cy|ch) & 1){return 4;}
     }
-    if(geom->in.source.chroma_format == BENZINA_CHROMAFMT_YUV420){
+    if(geom->i.source.chroma_fmt == BENZINA_CHROMAFMT_YUV420){
         if((sy|sh) & 1){return 4;}
     }
     
@@ -158,33 +147,39 @@ int main(int argc, char* argv[]){
     
     BENZINA_GEOM geom = {0};
     int  transpose, hflip, vflip, crop=0, resize=0, invalid=0, ret;
-    char canvasChromaFormat[21] = "yuv420";
-    char sourceChromaFormat[21] = "yuv420";
-    char sourceChromaLoc   [21] = "left";
-    char canvasChromaLoc   [21] = "left";
+    char canvasChromaFmt[21] = "yuv420";
+    char sourceChromaFmt[21] = "yuv420";
+    char sourceChromaLoc[21] = "left";
+    char canvasChromaLoc[21] = "left";
     int  canvasConvs = argc >= 2 ? sscanf(argv[1], "%u:%u:%20[yuv420super]",
-                                          &geom.in.canvas.w,
-                                          &geom.in.canvas.h,
-                                          canvasChromaFormat) : 0;
+                                          &geom.i.canvas.w, &geom.i.canvas.h,
+                                          canvasChromaFmt) : 0;
     int  sourceConvs = argc >= 3 ? sscanf(argv[2], "%u:%u:%20[yuv420]:%20[a-z]",
-                                          &geom.in.source.w,
-                                          &geom.in.source.h,
-                                          sourceChromaFormat,
-                                          sourceChromaLoc) : 0;
+                                          &geom.i.source.w, &geom.i.source.h,
+                                          sourceChromaFmt, sourceChromaLoc) : 0;
     switch(canvasConvs){
-        case 0: geom.in.canvas.w = 1024;
-        case 1: geom.in.canvas.h = geom.in.canvas.w;
-        case 2: geom.in.canvas.chroma_format = str2canvaschromafmt(canvasChromaFormat);
-        default: break;
+        default:
+        case 0:
+            geom.i.canvas.w          = 1024;
+        case 1:
+            geom.i.canvas.h          = geom.i.canvas.w;
+        case 2:
+        case 3:;
     }
+    geom.i.canvas.chroma_fmt = str2canvaschromafmt(canvasChromaFmt);
+    geom.i.canvas.superscale = strendswith(canvasChromaFmt, "super");
     switch(sourceConvs){
-        case 0: geom.in.source.w = 1024;
-        case 1: geom.in.source.h = geom.in.source.w;
-        case 2: geom.in.source.chroma_format = str2chromafmt(sourceChromaFormat);
-        case 3: geom.in.source.chroma_loc    = str2chromaloc(sourceChromaLoc);
-        default: break;
+        default:
+        case 0:
+            geom.i.source.w          = 1024;
+        case 1:
+            geom.i.source.h          = geom.i.source.w;
+        case 2:
+        case 3:
+        case 4:;
     }
-    
+    geom.i.source.chroma_fmt = str2chromafmt(sourceChromaFmt);
+    geom.i.source.chroma_loc = str2chromaloc(sourceChromaLoc);
     
     /**
      * Print Geometry Problem that will be solved.
@@ -193,21 +188,42 @@ int main(int argc, char* argv[]){
     printf("                       INPUT\n");
     printf("       |  Width x Height | Chroma Format | Location\n");
     printf("-------+-----------------+---------------+---------\n");
-    printf("Canvas |  %5u x %5u  | %13s |\n",    geom.in.canvas.w, geom.in.canvas.h, canvasChromaFormat);
-    printf("Source |  %5u x %5u  | %13s | %s\n", geom.in.source.w, geom.in.source.h, sourceChromaFormat, sourceChromaLoc);
+    printf("Source |  %5u x %5u  | %13s | %s\n", geom.i.source.w, geom.i.source.h, sourceChromaFmt, sourceChromaLoc);
+    printf("Canvas |  %5u x %5u  | %13s | %s\n", geom.i.canvas.w, geom.i.canvas.h, canvasChromaFmt, "N/A");
+    printf("\n\n");
     
     
     /* Solve the problem. */
-    benzina_geom_solve(&geom);
+    ret       = benzina_geom_solve(&geom);
+    if(ret){
+        printf("Error in solver! benzina_geom_solve() == %d\n", ret);
+        return ret;
+    }
+    
+    /* Validate. */
     ret       = validate(&geom);
-    transpose = geom.out.transpose;
-    hflip     = geom.out.hflip;
-    vflip     = geom.out.vflip;
-    crop      = rect2dw(&geom.out.source) != (transpose ? geom.in.source.h : geom.in.source.w) ||
-                rect2dh(&geom.out.source) != (transpose ? geom.in.source.w : geom.in.source.h);
-    resize    = rect2dw(&geom.out.source) != (transpose ? rect2dh : rect2dw)(&geom.out.canvas) ||
-                rect2dh(&geom.out.source) != (transpose ? rect2dw : rect2dh)(&geom.out.canvas);
+    transpose = geom.o.transpose;
+    hflip     = geom.o.hflip;
+    vflip     = geom.o.vflip;
+    crop      = rect2d_w(&geom.o.source) != geom.i.source.w ||
+                rect2d_h(&geom.o.source) != geom.i.source.h;
+    resize    = rect2d_w(&geom.o.canvas) != (transpose ? geom.i.source.h :
+                                                         geom.i.source.w) ||
+                rect2d_h(&geom.o.canvas) != (transpose ? geom.i.source.w :
+                                                         geom.i.source.h);
     invalid   = ret != 0;
+    switch(geom.o.chroma_loc){
+        case BENZINA_CHROMALOC_TOPLEFT:     snprintf(canvasChromaLoc, sizeof(canvasChromaLoc), "%s", "topleft");     break;
+        case BENZINA_CHROMALOC_TOP:         snprintf(canvasChromaLoc, sizeof(canvasChromaLoc), "%s", "top");         break;
+        case BENZINA_CHROMALOC_TOPRIGHT:    snprintf(canvasChromaLoc, sizeof(canvasChromaLoc), "%s", "topright");    break;
+        case BENZINA_CHROMALOC_LEFT:        snprintf(canvasChromaLoc, sizeof(canvasChromaLoc), "%s", "left");        break;
+        case BENZINA_CHROMALOC_CENTER:      snprintf(canvasChromaLoc, sizeof(canvasChromaLoc), "%s", "center");      break;
+        case BENZINA_CHROMALOC_RIGHT:       snprintf(canvasChromaLoc, sizeof(canvasChromaLoc), "%s", "right");       break;
+        case BENZINA_CHROMALOC_BOTTOMLEFT:  snprintf(canvasChromaLoc, sizeof(canvasChromaLoc), "%s", "bottomleft");  break;
+        case BENZINA_CHROMALOC_BOTTOM:      snprintf(canvasChromaLoc, sizeof(canvasChromaLoc), "%s", "bottom");      break;
+        case BENZINA_CHROMALOC_BOTTOMRIGHT: snprintf(canvasChromaLoc, sizeof(canvasChromaLoc), "%s", "bottomright"); break;
+        default:                            snprintf(canvasChromaLoc, sizeof(canvasChromaLoc), "%s", "unknown");     break;
+    }
     
     
     /**
@@ -222,12 +238,11 @@ int main(int argc, char* argv[]){
      *     (I)nvalid
      */
     
-    printf("\n\n");
     printf("                       OUTPUT\n");
     printf("Description     | Value\n");
-    printf("----------------+---------------------------------------------\n");
-    printf("Canvas Corners  | (%5u,%5u) -- (%5u,%5u) -- (%5u,%5u) -- (%5u,%5u) -- cycle\n", geom.out.canvas.p[0].x, geom.out.canvas.p[0].y, geom.out.canvas.p[1].x, geom.out.canvas.p[1].y, geom.out.canvas.p[2].x, geom.out.canvas.p[2].y, geom.out.canvas.p[3].x, geom.out.canvas.p[3].y);
-    printf("Source Corners  | (%5u,%5u) -- (%5u,%5u) -- (%5u,%5u) -- (%5u,%5u) -- cycle\n", geom.out.source.p[0].x, geom.out.source.p[0].y, geom.out.source.p[1].x, geom.out.source.p[1].y, geom.out.source.p[2].x, geom.out.source.p[2].y, geom.out.source.p[3].x, geom.out.source.p[3].y);
+    printf("----------------+--------------------------------------------------------------------------\n");
+    printf("Source Corners  | (%5u,%5u) -- (%5u,%5u) -- (%5u,%5u) -- (%5u,%5u) -- cycle\n", geom.o.source.p[0].x, geom.o.source.p[0].y, geom.o.source.p[1].x, geom.o.source.p[1].y, geom.o.source.p[2].x, geom.o.source.p[2].y, geom.o.source.p[3].x, geom.o.source.p[3].y);
+    printf("Canvas Corners  | (%5u,%5u) -- (%5u,%5u) -- (%5u,%5u) -- (%5u,%5u) -- cycle\n", geom.o.canvas.p[0].x, geom.o.canvas.p[0].y, geom.o.canvas.p[1].x, geom.o.canvas.p[1].y, geom.o.canvas.p[2].x, geom.o.canvas.p[2].y, geom.o.canvas.p[3].x, geom.o.canvas.p[3].y);
     printf("Chroma Location | %13s -> %-13s (source -> canvas)\n", sourceChromaLoc, canvasChromaLoc);
     printf("Flags           | %c%c%c%c%c%c\n", transpose?'T':'-', hflip?'H':'-', vflip?'V':'-', crop?'C':'-', resize?'R':'-', invalid?'I':'-');
     
