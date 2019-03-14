@@ -207,10 +207,10 @@ int main(int argc, char* argv[]){
     vflip     = geom.o.vflip;
     crop      = rect2d_w(&geom.o.source) != geom.i.source.w ||
                 rect2d_h(&geom.o.source) != geom.i.source.h;
-    resize    = rect2d_w(&geom.o.canvas) != (transpose ? geom.i.source.h :
-                                                         geom.i.source.w) ||
-                rect2d_h(&geom.o.canvas) != (transpose ? geom.i.source.w :
-                                                         geom.i.source.h);
+    resize    = rect2d_w(&geom.o.canvas) != (transpose ? rect2d_h(&geom.o.source) :
+                                                         rect2d_w(&geom.o.source)) ||
+                rect2d_h(&geom.o.canvas) != (transpose ? rect2d_w(&geom.o.source) :
+                                                         rect2d_h(&geom.o.source));
     invalid   = ret != 0;
     switch(geom.o.chroma_loc){
         case BENZINA_CHROMALOC_TOPLEFT:     snprintf(canvasChromaLoc, sizeof(canvasChromaLoc), "%s", "topleft");     break;

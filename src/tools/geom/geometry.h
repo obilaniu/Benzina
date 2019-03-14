@@ -91,6 +91,9 @@ extern void     rect2d_scaley(BENZINA_RECT2D* r, uint32_t a, uint32_t b);
 extern void     rect2d_transp(BENZINA_RECT2D* r);
 extern void     rect2d_hflip (BENZINA_RECT2D* r);
 extern void     rect2d_vflip (BENZINA_RECT2D* r);
+extern void     rect2d_cropw (BENZINA_RECT2D* r, uint32_t w);
+extern void     rect2d_croph (BENZINA_RECT2D* r, uint32_t h);
+extern void     rect2d_transl(BENZINA_RECT2D* r, uint32_t x, uint32_t y);
 
 extern int      benzina_geom_solve(BENZINA_GEOM* geom);
 

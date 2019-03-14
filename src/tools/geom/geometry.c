@@ -42,6 +42,28 @@ static inline int      chromaloctransp(int chroma_loc){
         default:                              return chroma_loc;
     }
 }
+static inline int      chromalochflip (int chroma_loc){
+    switch(chroma_loc){
+        case BENZINA_CHROMALOC_TOPLEFT:       return BENZINA_CHROMALOC_TOPRIGHT;
+        case BENZINA_CHROMALOC_LEFT:          return BENZINA_CHROMALOC_RIGHT;
+        case BENZINA_CHROMALOC_BOTTOMLEFT:    return BENZINA_CHROMALOC_BOTTOMRIGHT;
+        case BENZINA_CHROMALOC_TOPRIGHT:      return BENZINA_CHROMALOC_TOPLEFT;
+        case BENZINA_CHROMALOC_RIGHT:         return BENZINA_CHROMALOC_LEFT;
+        case BENZINA_CHROMALOC_BOTTOMRIGHT:   return BENZINA_CHROMALOC_BOTTOMLEFT;
+        default:                              return chroma_loc;
+    }
+}
+static inline int      chromalocvflip (int chroma_loc){
+    switch(chroma_loc){
+        case BENZINA_CHROMALOC_TOPLEFT:       return BENZINA_CHROMALOC_BOTTOMLEFT;
+        case BENZINA_CHROMALOC_TOP:           return BENZINA_CHROMALOC_BOTTOM;
+        case BENZINA_CHROMALOC_TOPRIGHT:      return BENZINA_CHROMALOC_BOTTOMRIGHT;
+        case BENZINA_CHROMALOC_BOTTOMLEFT:    return BENZINA_CHROMALOC_TOPLEFT;
+        case BENZINA_CHROMALOC_BOTTOM:        return BENZINA_CHROMALOC_TOP;
+        case BENZINA_CHROMALOC_BOTTOMRIGHT:   return BENZINA_CHROMALOC_TOPRIGHT;
+        default:                              return chroma_loc;
+    }
+}
 
 /* Public Function Definitions */
 
@@ -128,6 +150,47 @@ extern void     rect2d_vflip (BENZINA_RECT2D* r){
 }
 
 /**
+ * @brief Scale a rectangle r to width w or height h.
+ * @param [in]  r      The rectangle being cropped.
+ * @param [in]  mw,mh  The maximum width or height to crop the rectangle to.
+ * @return The new width or height. This will be no greater than w or h.
+ */
+
+extern void     rect2d_cropw (BENZINA_RECT2D* r, uint32_t mw){
+    uint32_t xmin = rect2d_x(r), w = rect2d_w(r);
+    if(w <= mw){return;}
+    
+    int i;
+    for(i=0;i<4;i++){
+        r->p[i].x = xmin + minu32(r->p[i].x-xmin, mw-1);
+    }
+}
+extern void     rect2d_croph (BENZINA_RECT2D* r, uint32_t mh){
+    uint32_t ymin = rect2d_y(r), h = rect2d_h(r);
+    if(h <= mh){return;}
+    
+    int i;
+    for(i=0;i<4;i++){
+        r->p[i].y = ymin + minu32(r->p[i].y-ymin, mh-1);
+    }
+}
+
+/**
+ * @brief Translate a rectangle r by (x,y) pixels.
+ * @param [in]  r  The rectangle being translated
+ * @param [in]  x  The number of pixels in the x dimension to translate by
+ * @param [in]  y  The number of pixels in the y dimension to translate by
+ */
+
+extern void     rect2d_transl(BENZINA_RECT2D* r, uint32_t x, uint32_t y){
+    int i;
+    for(i=0;i<4;i++){
+        r->p[i].x += x;
+        r->p[i].y += y;
+    }
+}
+
+/**
  * @brief Solve the geometry problem for a given frame.
  * 
  * The geometry problem is the question of how precisely to transform any image
@@ -146,12 +209,12 @@ extern int benzina_geom_solve(BENZINA_GEOM* geom){
     uint32_t subcx = chromafmtsubx(geom->i.canvas.chroma_fmt);
     uint32_t subcy = chromafmtsuby(geom->i.canvas.chroma_fmt);
     
-    if(geom->i.canvas.w <= 0   ){return 1;}
-    if(geom->i.canvas.h <= 0   ){return 1;}
+    if(geom->i.canvas.w < subcx){return 1;}
+    if(geom->i.canvas.h < subcy){return 1;}
     if(geom->i.canvas.w % subcx){return 1;}
     if(geom->i.canvas.h % subcy){return 1;}
-    if(geom->i.source.w <= 0   ){return 1;}
-    if(geom->i.source.h <= 0   ){return 1;}
+    if(geom->i.source.w < subsx){return 1;}
+    if(geom->i.source.h < subsy){return 1;}
     if(geom->i.source.w % subsx){return 1;}
     if(geom->i.source.h % subsy){return 1;}
     
@@ -201,16 +264,16 @@ extern int benzina_geom_solve(BENZINA_GEOM* geom){
      * canvas landscape or vice-versa.
      */
     
-    int wholly_contained_untransposed = rect2d_w(&geom->o.canvas) <= geom->i.canvas.w &&
-                                        rect2d_h(&geom->o.canvas) <= geom->i.canvas.h;
-    int wholly_contained_transposed   = rect2d_w(&geom->o.canvas) <= geom->i.canvas.h &&
-                                        rect2d_h(&geom->o.canvas) <= geom->i.canvas.w;
-    int landscape_source              = geom->i.source.w >= geom->i.source.h;
-    int landscape_canvas              = geom->i.canvas.w >= geom->i.canvas.h;
-    int portrait_canvas               = !landscape_canvas;
-    geom->o.transpose                 = wholly_contained_untransposed ? 0 :
-                                        wholly_contained_transposed   ? 1 :
-                                        landscape_source != landscape_canvas;
+    const int wholly_contained_untransposed = rect2d_w(&geom->o.canvas) <= geom->i.canvas.w &&
+                                              rect2d_h(&geom->o.canvas) <= geom->i.canvas.h;
+    const int wholly_contained_transposed   = rect2d_w(&geom->o.canvas) <= geom->i.canvas.h &&
+                                              rect2d_h(&geom->o.canvas) <= geom->i.canvas.w;
+    const int landscape_source              = geom->i.source.w >= geom->i.source.h;
+    const int landscape_canvas              = geom->i.canvas.w >= geom->i.canvas.h;
+    const int portrait_canvas               = !landscape_canvas;
+    geom->o.transpose = wholly_contained_untransposed ? 0 :
+                        wholly_contained_transposed   ? 1 :
+                        landscape_source != landscape_canvas;
     if(geom->o.transpose){
         rect2d_transp(&geom->o.canvas);
         geom->o.chroma_loc = chromaloctransp(geom->o.chroma_loc);
@@ -226,10 +289,11 @@ extern int benzina_geom_solve(BENZINA_GEOM* geom){
     if(geom->i.canvas.chroma_fmt == BENZINA_CHROMAFMT_YUV420){
         switch(geom->o.chroma_loc){
             default: break;
-            case BENZINA_CHROMALOC_TOPRIGHT:    geom->o.chroma_loc = BENZINA_CHROMALOC_TOPLEFT;    geom->o.hflip = 1; goto hflip;
-            case BENZINA_CHROMALOC_RIGHT:       geom->o.chroma_loc = BENZINA_CHROMALOC_LEFT;       geom->o.hflip = 1; goto hflip;
-            case BENZINA_CHROMALOC_BOTTOMRIGHT: geom->o.chroma_loc = BENZINA_CHROMALOC_BOTTOMLEFT; geom->o.hflip = 1; goto hflip;
-            hflip:
+            case BENZINA_CHROMALOC_TOPRIGHT:
+            case BENZINA_CHROMALOC_RIGHT:
+            case BENZINA_CHROMALOC_BOTTOMRIGHT:
+                geom->o.chroma_loc = chromalochflip(geom->o.chroma_loc);
+                geom->o.hflip      = 1;
                 rect2d_hflip(&geom->o.canvas);
             break;
         }
@@ -237,6 +301,7 @@ extern int benzina_geom_solve(BENZINA_GEOM* geom){
     
     /**
      * 5. Source Crop
+     * 6. Resize
      * 
      * The source image may or may not fit into the canvas after the
      * (optional) transposition.
@@ -246,38 +311,104 @@ extern int benzina_geom_solve(BENZINA_GEOM* geom){
      * - If it does not fit, but just one dimension is to blame, *and* the
      *   aspect ratio is more extreme than that of the canvas, crop the
      *   width (for a landscape canvas) or height (for a portrait canvas)
-     *   to the canvas' width and height. The aspect ratio will still exceed
-     *   that of the canvas, but will be less extreme, and the cropped frame
-     *   fits entirely in the canvas.
-     *    * A resize is not required.
-     * - If it does not fit, and both dimensions are to blame, *and* the
-     *   aspect ratio is more extreme than that of the canvas, crop the
-     *   width (for a landscape canvas) or height (for a portrait canvas)
-     *   to match the aspect ratio of the canvas.
-     *    * A resize is required.
+     *   to EITHER canvas size OR canvas AR, whichever results in the larger
+     *   image. The aspect ratio may still exceed that of the canvas, but will
+     *   be less extreme.
+     *    * A resize is not required the crop was to canvas size, but is
+     *      required if the crop was to aspect ratio.
      * - Otherwise, it does not fit, at least one dimension is to blame,
      *   and the aspect ratio is equal to or less extreme than the canvas.
      *   No cropping is done, as we intend to put the entire frame within
      *   the canvas, but we'll need to scale down the destination port.
      *    * A resize is required.
-     * 
-     * Also crop a little extra to round down the window size to an integer
-     * number of subsampling units.
      */
     
-#if 0
-    
-#endif
+    uint64_t ocw = rect2d_w(&geom->o.canvas), osw = rect2d_w(&geom->o.source);
+    uint64_t och = rect2d_h(&geom->o.canvas), osh = rect2d_h(&geom->o.source);
+    uint64_t mcw = geom->i.canvas.w;
+    uint64_t mch = geom->i.canvas.h;
+    int      extreme_wide = ocw*mch > mcw*och;
+    int      extreme_tall = och*mcw > mch*ocw;
+    if      (ocw <= mcw && och <= mch){
+    }else if(extreme_wide && landscape_canvas){
+        if(och <= mch){
+            /* Crop to canvas width. Embedding AR > Canvas AR. No Resize. */
+            if(geom->o.transpose){
+                /* Want: nsh/nsw = nsh/osw = mcw/och  ->  nsh = osw*mcw/och */
+                rect2d_croph(&geom->o.source, mcw*osw/och);
+                rect2d_cropw(&geom->o.canvas, mcw);
+            }else{
+                /* Want: nsw/nsh = nsw/osh = mcw/och  ->  nsw = osh*mcw/och */
+                rect2d_cropw(&geom->o.source, mcw*osh/och);
+                rect2d_cropw(&geom->o.canvas, mcw);
+            }
+        }else{
+            /* Crop to canvas AR. Embedding AR = Canvas AR. Resize. */
+            if(geom->o.transpose){
+                /* Want: nsh/nsw = nsh/osw = mcw/mch  ->  nsh = osw*mcw/mch */
+                rect2d_croph(&geom->o.source, mcw*osw/mch);
+                rect2d_cropw(&geom->o.canvas, mcw);
+                rect2d_croph(&geom->o.canvas, mch);
+            }else{
+                /* Want: nsw/nsh = nsw/osh = mcw/mch  ->  nsw = osh*mcw/mch */
+                rect2d_cropw(&geom->o.source, mcw*osh/mch);
+                rect2d_cropw(&geom->o.canvas, mcw);
+                rect2d_croph(&geom->o.canvas, mch);
+            }
+        }
+    }else if(extreme_tall && portrait_canvas){
+        if(ocw <= mcw){
+            /* Crop to canvas height. Embedding AR > Canvas AR. No Resize. */
+            if(geom->o.transpose){
+                /* Want: nsw/nsh = nsw/osh = mch/ocw  ->  nsw = osh*mch/ocw */
+                rect2d_cropw(&geom->o.source, mch*osh/ocw);
+                rect2d_croph(&geom->o.canvas, mch);
+            }else{
+                /* Want: nsh/nsw = nsh/osw = mch/ocw  ->  nsh = osw*mch/ocw */
+                rect2d_croph(&geom->o.source, mch*osw/ocw);
+                rect2d_croph(&geom->o.canvas, mch);
+            }
+        }else{
+            /* Crop to canvas AR. Embedding AR = Canvas AR. Resize. */
+            if(geom->o.transpose){
+                /* Want: nsw/nsh = nsw/osh = mch/mcw  ->  nsw = osh*mch/mcw */
+                rect2d_cropw(&geom->o.source, mch*osh/mcw);
+                rect2d_croph(&geom->o.canvas, mch);
+                rect2d_cropw(&geom->o.canvas, mcw);
+            }else{
+                /* Want: nsh/nsw = nsh/osw = mch/mcw  ->  nsh = osw*mch/mcw */
+                rect2d_croph(&geom->o.source, mch*osw/mcw);
+                rect2d_croph(&geom->o.canvas, mch);
+                rect2d_cropw(&geom->o.canvas, mcw);
+            }
+        }
+    }else if(landscape_canvas){
+        /* Landscape image does not have extreme AR, but does not fit in landscape canvas. */
+        rect2d_cropw(&geom->o.canvas, geom->o.transpose ? mch*osh/osw : mch*osw/osh);
+        rect2d_croph(&geom->o.canvas, mch);
+    }else{
+        /* Portrait  image does not have extreme AR, but does not fit in portrait  canvas. */
+        rect2d_croph(&geom->o.canvas, geom->o.transpose ? mcw*osw/osh : mcw*osh/osw);
+        rect2d_cropw(&geom->o.canvas, mcw);
+    }
     
     /**
-     * 6. Resize
+     * 7. Translate
      * 
-     * The source image, even after cropping, may not fit within the canvas.
+     * Once the sizes of the embedding into the canvas and the viewport into
+     * the source image are determined, we
+     * 
+     *     1) Position the embedding at the top left of the canvas and
+     *     2) Center the viewport within the source.
+     * 
+     * Alignment constraints due to chroma subsampling factors may need to be
+     * taken into account.
      */
     
-#if 0
-    
-#endif
+    uint32_t tsx = (geom->i.source.w - rect2d_w(&geom->o.source)) / (2*subsx) * subsx;
+    uint32_t tsy = (geom->i.source.h - rect2d_h(&geom->o.source)) / (2*subsy) * subsy;
+    rect2d_transl(&geom->o.source, tsx-rect2d_x(&geom->o.source), tsy-rect2d_y(&geom->o.source));
+    rect2d_transl(&geom->o.canvas,    -rect2d_x(&geom->o.canvas),    -rect2d_y(&geom->o.canvas));
     
     return 0;
 }
