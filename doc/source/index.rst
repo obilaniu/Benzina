@@ -15,7 +15,6 @@ Table of Content
    examples/_index.rst
    datasets/list.rst
    api/_index.rst
-   compilation/_index.rst
 
 Description of the project
 --------------------------
