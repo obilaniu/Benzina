@@ -44,10 +44,9 @@ toolkitLibDir     = CUDA_HOME  / 'lib64'
 toolkitStubLibDir = CUDA_HOME  / 'lib64' / 'stubs'
 stubLibDir        = currSrcDir / 'lib' / host_machine.cpu_family()
 nvcuvidIncDir     = currSrcDir / 'include'
-nvcuvidIncs       = include_directories('include', toolkitIncDir)
+nvcuvidIncs       = [include_directories('include')]
 nvcuvidIFlags     = ['-I'+nvcuvidIncDir, '-I'+toolkitIncDir]
 nvcuvidCDefs      = []
-cudaIncs          = nvcuvidIncs
 nvccGenCodeFlags  = []
 nvccCudaRtFlags   = []
 nvccOptFlags      = []
@@ -59,10 +58,12 @@ if nvcc.found()
   NVCC_RUN = run_command(nvcc, ['-V'])
   if NVCC_RUN.returncode() == 0
     NVCC_VERSION = NVCC_RUN.stdout().split('V')[-1].strip()
+    nvcuvidIncs += [include_directories(toolkitIncDir)]
   else
     nvcc = disabler()
   endif
 endif
+cudaIncs          = nvcuvidIncs
 if NVCC_VERSION == 'unknown'
   NVIDIA_DRIVER_MIN = IS_HOST_WINDOWS ? '378.66' : '378.13'
 else
