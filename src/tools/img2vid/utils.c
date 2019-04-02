@@ -225,6 +225,8 @@ extern int i2v_canonicalize_pixfmt(AVFrame* out, AVFrame* in){
     AVFilterGraph*     graph         = NULL;
     AVFilterInOut*     inputs        = NULL;
     AVFilterInOut*     outputs       = NULL;
+    AVFilterContext*   buffersrcctx  = NULL;
+    AVFilterContext*   buffersinkctx = NULL;
     const AVFilter*    buffersrc     = NULL;
     const AVFilter*    buffersink    = NULL;
     char               graphstr     [512] = {0};
@@ -326,6 +328,8 @@ extern int i2v_canonicalize_pixfmt(AVFrame* out, AVFrame* in){
         i2vmessage(stderr, "Failed to allocate buffersink filter instance!\n");
         goto fail;
     }
+    buffersrcctx  = outputs->filter_ctx;
+    buffersinkctx = inputs ->filter_ctx;
     ret = avfilter_graph_parse_ptr(graph, graphstr, &inputs, &outputs, NULL);
     if(ret < 0){
         i2vmessage(stderr, "Error parsing graph! (%d)\n", ret);
@@ -355,14 +359,13 @@ extern int i2v_canonicalize_pixfmt(AVFrame* out, AVFrame* in){
      * or pushing in a NULL frame.
      */
     
-    ret = av_buffersrc_add_frame_flags(outputs->filter_ctx, in,
-                                       AV_BUFFERSRC_FLAG_KEEP_REF);
-    av_buffersrc_close(outputs->filter_ctx, 0, 0);
+    ret = av_buffersrc_add_frame_flags(buffersrcctx, in, AV_BUFFERSRC_FLAG_KEEP_REF);
+    av_buffersrc_close(buffersrcctx, 0, 0);
     if(ret < 0){
         i2vmessage(stderr, "Error pushing frame into graph! (%d)\n", ret);
         goto fail;
     }
-    ret = av_buffersink_get_frame(inputs->filter_ctx, out);
+    ret = av_buffersink_get_frame(buffersinkctx, out);
     if(ret < 0){
         i2vmessage(stderr, "Error pulling frame from graph! (%d)\n", ret);
         goto fail;
@@ -375,12 +378,8 @@ extern int i2v_canonicalize_pixfmt(AVFrame* out, AVFrame* in){
     
     ret = 0;
     fail:
-    avfilter_free      (outputs ->filter_ctx);
-    avfilter_free      (inputs  ->filter_ctx);
-    outputs->filter_ctx = NULL;
-    inputs ->filter_ctx = NULL;
-    av_freep           (&outputs->name);
-    av_freep           (&inputs ->name);
+    avfilter_free      (buffersrcctx);
+    avfilter_free      (buffersinkctx);
     avfilter_inout_free(&outputs);
     avfilter_inout_free(&inputs);
     avfilter_graph_free(&graph);
