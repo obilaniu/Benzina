@@ -7,8 +7,8 @@
 
 
 ### C code compilation
-benzina_geomSrcs     = files('main.c', 'geometry.c')
-benzina_geomDeps     = [libm, libdl, libbenzina]
+benzina_geomSrcs     = files('main.c')
+benzina_geomDeps     = [libm, libdl, libbenzina, libbenzinageom]
 benzina_geom         = executable('benzina-geom', benzina_geomSrcs,
                                   dependencies  : benzina_geomDeps,
                                   build_rpath   : toolrpath,

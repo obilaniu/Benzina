@@ -37,7 +37,7 @@ benzina_img2vidCudaSta  = static_library('post-dlink', benzina_img2vidCudaObjs,
 
 
 ### C code compilation
-benzina_img2vidSrcs     = files('main.c')
+benzina_img2vidSrcs     = files('main.c', 'utils.c')
 benzina_img2vidDeps     = [libavcodec, libavformat, libavfilter, libavutil, libswscale,
                            threadsDep, libm, libdl,
                            libcuda, libcudart, libcudadevrt,

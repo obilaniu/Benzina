@@ -35,12 +35,12 @@ extern "C" {
  */
 
 #define i2vmessage(fp, f, ...)                                          \
-	(i2vfprintf((fp), "%s:%d: " f, __FILE__, __LINE__, ## __VA_ARGS__))
+    (i2vfprintf((fp), "%s:%d: " f, __FILE__, __LINE__, ## __VA_ARGS__))
 #define i2vmessageexit(code, fp, f, ...)     \
-	do{                                      \
-		i2vmessage(fp, f, ## __VA_ARGS__);   \
-		exit(code);                          \
-	}while(0)
+    do{                                      \
+        i2vmessage(fp, f, ## __VA_ARGS__);   \
+        exit(code);                          \
+    }while(0)
 
 
 
@@ -51,14 +51,17 @@ extern "C" {
  */
 
 typedef struct{
-	const char* urlIn;
-	const char* urlOut;
-	const char* embedMode;
-	int         dashdashseen;
-	struct{unsigned l,r,t,b;} crop;
-	struct{unsigned w,h;}     size;
-	unsigned    crf;
-	const char* x264params;
+    const char* urlIn;
+    const char* urlOut;
+    int         dashdashseen;
+    struct{unsigned l,r,t,b;} crop;
+    struct{
+        unsigned w,h;
+        int      chroma_fmt;
+        int      superscale;
+    } canvas;
+    unsigned    crf;
+    const char* x264params;
 } ARGS;
 
 /**
@@ -68,58 +71,46 @@ typedef struct{
  */
 
 typedef struct{
-	/* Args */
-	ARGS             args;
-	
-	/* Status */
-	int              ret;
-	
-	/* FFmpeg Encode/Decode */
-	struct{
-		AVFormatContext*   formatCtx;
-		int                formatStream;
-		AVCodecParameters* codecPar;
-		AVCodec*           codec;
-		AVCodecContext*    codecCtx;
-		AVPacket*          packet;
-		AVFrame*           frame;
-	} in;
-	struct{
-		struct{int l,r,t,b;}    crop;      /* Cropping applied to source image */
-		struct{int l,r,t,b;}    pad;       /* Padding  applied to destination image */
-		struct{int x,y,w,h;}    embed;     /* Embedded image's x,y offset and wxh size within frame. */
-		struct{float x,y;}      scale;     /* Scale factor source/destination */
-		struct{float x,y;}      lumaoff;   /* Offset applied to source luma accesses */
-		struct{float x,y;}      chromaoff; /* Offset applied to source chroma accesses (if subsampled) */
-		enum AVColorRange       range;     /* Chroma range. */
-	} tx;
-	struct{
-		AVCodec*           codec;
-		AVCodecContext*    codecCtx;
-		AVPacket*          packet;
-		AVDictionary*      codecCtxOpt;
-		FILE*              fp;
-	} out;
-	struct{
-		struct{
-			AVFrame*           frame;
-		} in;
-		struct{
-			AVFrame*           frame;
-		} out;
-	} filt;
-	
-	/* FFmpeg Graph */
-	struct{
-		AVFilterGraph*   graph;
-		const AVFilter*  buffersrc;
-		const AVFilter*  buffersink;
-		AVFilterContext* buffersrcCtx;
-		AVFilterContext* inputscaleCtx;
-		AVFilterContext* buffersinkCtx;
-		AVFilterInOut*   inputs;
-		AVFilterInOut*   outputs;
-	} graph;
+    /* Args */
+    ARGS             args;
+    
+    /* Status */
+    int              ret;
+    
+    /* FFmpeg Encode/Decode */
+    struct{
+        AVFormatContext*   formatCtx;
+        int                formatStream;
+        AVCodecParameters* codecPar;
+        AVCodec*           codec;
+        AVCodecContext*    codecCtx;
+        AVPacket*          packet;
+        AVFrame*           frame;
+    } in;
+    struct{
+        struct{int l,r,t,b;}    crop;      /* Cropping applied to source image */
+        struct{int l,r,t,b;}    pad;       /* Padding  applied to destination image */
+        struct{int x,y,w,h;}    embed;     /* Embedded image's x,y offset and wxh size within frame. */
+        struct{float x,y;}      scale;     /* Scale factor source/destination */
+        struct{float x,y;}      lumaoff;   /* Offset applied to source luma accesses */
+        struct{float x,y;}      chromaoff; /* Offset applied to source chroma accesses (if subsampled) */
+        enum AVColorRange       range;     /* Chroma range. */
+    } tx;
+    struct{
+        AVCodec*           codec;
+        AVCodecContext*    codecCtx;
+        AVPacket*          packet;
+        AVDictionary*      codecCtxOpt;
+        FILE*              fp;
+    } out;
+    struct{
+        struct{
+            AVFrame*           frame;
+        } in;
+        struct{
+            AVFrame*           frame;
+        } out;
+    } filt;
 } UNIVERSE;
 
 
@@ -131,10 +122,10 @@ typedef struct{
  */
 
 static inline int   streq        (const char* s, const char* t){
-	return !strcmp(s,t);
+    return !strcmp(s,t);
 }
 static inline int   strne        (const char* s, const char* t){
-	return !streq(s,t);
+    return !streq(s,t);
 }
 
 /**
@@ -144,14 +135,14 @@ static inline int   strne        (const char* s, const char* t){
 static inline int   i2vfprintf   (FILE*            fp,
                                   const char*      f,
                                   ...){
-	va_list ap;
-	int     ret=0;
-	
-	fp = fp ? fp : stderr;
-	va_start(ap, f);
-	ret = vfprintf(fp, f, ap);
-	va_end  (ap);
-	return ret;
+    va_list ap;
+    int     ret=0;
+    
+    fp = fp ? fp : stderr;
+    va_start(ap, f);
+    ret = vfprintf(fp, f, ap);
+    va_end  (ap);
+    return ret;
 }
 
 
