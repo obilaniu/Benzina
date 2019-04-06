@@ -22,6 +22,6 @@ libbenzina_plugin_skeletonSha  = shared_library('benzina-plugin-skeleton',
                                                 gnu_symbol_visibility: 'hidden',
                                                 build_rpath          : librpath,
                                                 install_rpath        : librpath,
-                                                install              : true,
+                                                install              : false,
                                                 install_dir          : libdir)
 
