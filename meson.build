@@ -5,6 +5,7 @@ project('Benzina', 'c', 'cpp',
         default_options:         [
             'c_std=gnu99',
             'warning_level=3',
+            'b_ndebug=if-release',
         ],
 )
 
@@ -51,13 +52,15 @@ endif
 #
 cc          = meson.get_compiler('c')
 cxx         = meson.get_compiler('cpp')
+CC_SYNTAX   = cc.get_argument_syntax()
+CXX_SYNTAX  = cxx.get_argument_syntax()
 # Relax a bit the warning flags on GCC & Clang. -Wpedantic is very noisy.
-if cc.get_argument_syntax() == 'gcc' or cxx.get_argument_syntax() == 'gcc'
-  relaxWarnings = ['-Wno-pedantic',
-                   '-Wno-implicit-fallthrough',
-                   '-Wno-missing-field-initializers',
-                   '-Wno-missing-braces',
-                   '-Wno-unused-function']
+if CC_SYNTAX == 'gcc' or CXX_SYNTAX == 'gcc'
+  relaxWarnings    = ['-Wno-pedantic',
+                      '-Wno-implicit-fallthrough',
+                      '-Wno-missing-field-initializers',
+                      '-Wno-missing-braces',
+                      '-Wno-unused-function']
   relaxWarningsC   = cc .get_supported_arguments(relaxWarnings)
   relaxWarningsCxx = cxx.get_supported_arguments(relaxWarnings)
   add_project_arguments(relaxWarningsC,   language: 'c')
@@ -82,7 +85,7 @@ ffmpegIFlags = []
 ffmpegNames  = []
 foreach L : [libavcodec, libavformat, libavfilter, libavutil, libswscale]
   if L.found()
-    ffmpegNames += [L.name() + L.version().split('.')[0]]
+    ffmpegNames += [L.name() + '-' + L.version()]#.split('.')[0]
     if L.type_name() == 'pkgconfig'
       foreach D : L.get_pkgconfig_variable('includedir',
                                            default: '/usr/include/ffmpeg').split(':')
