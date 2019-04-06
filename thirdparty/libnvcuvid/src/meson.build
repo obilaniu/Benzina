@@ -11,6 +11,9 @@
 nvcuvidLinkArgs = []
 nvcuvidCArgs    = ['-D__CUVID_INTERNAL']
 nvcuvidKwargs   = IS_HOST_WINDOWS ? {} : {'soversion': '1'}
+cuda_h          = configure_file(input:  dynlink_cuda_h,
+                                 copy:   true,
+                                 output: 'cuda.h')
 
 
 #
@@ -33,7 +36,7 @@ if CC_SYNTAX == 'gcc'
   nvcuvidLinkArgs += ['-nostartfiles',
                       '-Wl,-s,--build-id=none,--hash-style=sysv,-z,norelro']
 endif
-libnvcuvidSha   = shared_library('nvcuvid', files('libnvcuvid.c'),
+libnvcuvidSha   = shared_library('nvcuvid', [files('libnvcuvid.c'), cuda_h],
                                  include_directories: nvcuvidIncs + ['.'],
                                  c_args             : nvcuvidCArgs + nvcuvidCDefs,
                                  link_args          : nvcuvidLinkArgs,

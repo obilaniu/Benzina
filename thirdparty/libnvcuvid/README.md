@@ -1,4 +1,4 @@
-# Stub libnvcuvid
+# libnvcuvid stub
 
 ## Introduction
 
@@ -39,8 +39,11 @@ There is, however, in NVIDIA's `nv_codec_headers` project an MIT-licensed
 `dynlink_cuda.h` header which, although it does not define the functions
 that `cuda.h` has, does define all the enums and types needed.
 
-We rename this `dynlink_cuda.h` to `cuda.h` and use it exclusively to
-build the stub. This is why the renamed `cuda.h` is in the `src/`
+At build time, we rename this `include/dynlink_cuda.h` to `src/cuda.h` using
+`configure_file()`, and use it exclusively to build the stub. Because
+`include/` is used as an include directory, the dynamic-link variant
+`dynlink_cuda.h` **must never** be present under the name `cuda.h` in
+`include/`. This is why the renamed `cuda.h` is placed in the `src/`
 subdirectory of the stub, and is also why the `src/` **must not** ever be
 included by any target except the stub.
 

@@ -4,10 +4,12 @@
 # This directory holds the unmodified, authentic Video Codec SDK headers, namely
 #    - cuviddec.h
 #    - nvcuvid.h
-# These headers directly include cuda.h, a dynamic-link version of which exists
-# in libnvcuvid/src in this project. This cuda.h *MUST NOT* be placed in this
-# directory, as this directory will be made available for inclusion by all
-# other targets, and if a file called cuda.h is found in it, it will take
+# These headers directly include cuda.h, a dynamic-link version of which called
+# dynlink_cuda.h exists in this directory. This include/dynlink_cuda.h file is
+# renamed, using configure_file(), to src/cuda.h in the *build-tree* directory
+# The cuda.h file *MUST NOT* end up in either the build- or source-tree
+# include/ directory, as this directory will be made available for inclusion by
+# all other targets, and if a file called cuda.h is found in it, it will take
 # precedence over the CUDA Toolkit's own, authentic cuda.h.
 #
 
@@ -15,6 +17,7 @@ nvcuvidIncDir   = meson.current_source_dir()
 nvcuvidIncs     = [include_directories('.')]
 nvcuvidIFlags   = ['-I'+nvcuvidIncDir]
 nvcuvidCDefs    = []
+dynlink_cuda_h  = files('dynlink_cuda.h')
 
 
 #
