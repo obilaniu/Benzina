@@ -22,7 +22,7 @@ endif
 benzina_img2vidCudaSrcs = files('kernels.cu')
 benzina_img2vidCudaObjs = nvccCompGen.process(benzina_img2vidCudaSrcs,
     extra_args: ['-Xptxas', '--warn-on-double-precision-use,-O3'] +
-                benzinaIFlags + ffmpegIFlags,
+                benzinaIFlags + ffmpegIFlags + ['-I'+libbenzinageomIncDir],
 )
 benzina_img2vidCudaSta  = static_library('pre-dlink', benzina_img2vidCudaObjs)
 benzina_img2vidCudaObjs = custom_target ('benzina_img2vidCuda-dlink',
@@ -41,7 +41,7 @@ benzina_img2vidSrcs     = files('main.c', 'utils.c')
 benzina_img2vidDeps     = [libavcodec, libavformat, libavfilter, libavutil, libswscale,
                            threadsDep, libm, libdl,
                            libcuda, libcudart, libcudadevrt,
-                           libbenzina, libbenzinacuda]
+                           libbenzina, libbenzinacuda, libbenzinageom]
 benzina_img2vid         = executable('benzina-img2vid',   benzina_img2vidSrcs,
                                      dependencies       : benzina_img2vidDeps,
                                      link_whole         : [benzina_img2vidCudaSta],

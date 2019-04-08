@@ -28,8 +28,10 @@ extern "C" {
 /* Public Function Declarations */
 
 /**
- * @brief Some pixel formats are deprecated in favour of a combination with
- *        other attributes (such as color_range), so we fix them up.
+ * @brief Fixup several possible problems in frame metadata.
+ * 
+ * Some pixel formats are deprecated in favour of a combination with other
+ * attributes (such as color_range), so we fix them up.
  * 
  * The AV_CODEC_ID_MJPEG decoder still reports the pixel format using the
  * obsolete pixel-format codes AV_PIX_FMT_YUVJxxxP. This causes problems
@@ -40,11 +42,14 @@ extern "C" {
  * corresponding AV_PIX_FMT_YUVxxxP code, and setting the color_range to
  * full-range: AVCOL_RANGE_JPEG.
  * 
+ * The color primary, transfer function and colorspace data may all be
+ * unspecified. Fill in with plausible data.
+ * 
  * @param [in]  f   The AVFrame whose attributes are to be fixed up.
  * @return 0.
  */
 
-extern int i2v_fixup_pix_fmt(AVFrame* f);
+extern int i2v_fixup_frame(AVFrame* f);
 
 /**
  * @brief Pick a canonical, losslessly compatible pixel format for given pixel

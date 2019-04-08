@@ -28,6 +28,7 @@ extern "C" {
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+#include "geometry.h"
 
 
 /**
@@ -47,32 +48,25 @@ extern "C" {
 /** Data Structure Definitions */
 
 /**
- * @brief Arguments struct.
- */
-
-typedef struct{
-    const char* urlIn;
-    const char* urlOut;
-    int         dashdashseen;
-    struct{unsigned l,r,t,b;} crop;
-    struct{
-        unsigned w,h;
-        int      chroma_fmt;
-        int      superscale;
-    } canvas;
-    unsigned    crf;
-    const char* x264params;
-} ARGS;
-
-/**
  * @brief State of the program.
  * 
- * There's lot's of crap here.
+ * There's lots of crap here.
  */
 
 typedef struct{
     /* Args */
-    ARGS             args;
+    struct{
+        char*       urlIn;
+        char*       urlEmb;
+        char*       urlOut;
+        struct{
+            unsigned w,h;
+            int      chroma_fmt;
+            int      superscale;
+        } canvas;
+        unsigned    crf;
+        const char* x264params;
+    } args;
     
     /* Status */
     int              ret;
@@ -84,33 +78,19 @@ typedef struct{
         AVCodecParameters* codecPar;
         AVCodec*           codec;
         AVCodecContext*    codecCtx;
-        AVPacket*          packet;
-        AVFrame*           frame;
     } in;
     struct{
-        struct{int l,r,t,b;}    crop;      /* Cropping applied to source image */
-        struct{int l,r,t,b;}    pad;       /* Padding  applied to destination image */
-        struct{int x,y,w,h;}    embed;     /* Embedded image's x,y offset and wxh size within frame. */
-        struct{float x,y;}      scale;     /* Scale factor source/destination */
-        struct{float x,y;}      lumaoff;   /* Offset applied to source luma accesses */
-        struct{float x,y;}      chromaoff; /* Offset applied to source chroma accesses (if subsampled) */
-        enum AVColorRange       range;     /* Chroma range. */
+        FILE*              fp;
+    } emb;
+    struct{
+        BENZINA_GEOM       geom;
     } tx;
     struct{
         AVCodec*           codec;
         AVCodecContext*    codecCtx;
         AVPacket*          packet;
-        AVDictionary*      codecCtxOpt;
         FILE*              fp;
     } out;
-    struct{
-        struct{
-            AVFrame*           frame;
-        } in;
-        struct{
-            AVFrame*           frame;
-        } out;
-    } filt;
 } UNIVERSE;
 
 

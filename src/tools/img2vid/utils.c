@@ -16,7 +16,7 @@
  * Public Functions.
  */
 
-extern int i2v_fixup_pix_fmt(AVFrame* f){
+extern int i2v_fixup_frame(AVFrame* f){
     switch(f->format){
         #define FIXUPFORMAT(p)                         \
             case AV_PIX_FMT_YUVJ ## p:                 \
@@ -30,6 +30,29 @@ extern int i2v_fixup_pix_fmt(AVFrame* f){
         FIXUPFORMAT(444P);
         default: break;
         #undef  FIXUPFORMAT
+    }
+    switch(f->color_primaries){
+        case AVCOL_PRI_RESERVED0:
+        case AVCOL_PRI_RESERVED:
+        case AVCOL_PRI_UNSPECIFIED:
+            f->color_primaries = AVCOL_PRI_BT709;
+        break;
+        default: break;
+    }
+    switch(f->color_trc){
+        case AVCOL_TRC_RESERVED0:
+        case AVCOL_TRC_RESERVED:
+        case AVCOL_TRC_UNSPECIFIED:
+            f->color_trc = AVCOL_TRC_IEC61966_2_1;
+        break;
+        default: break;
+    }
+    switch(f->colorspace){
+        case AVCOL_SPC_RESERVED:
+        case AVCOL_TRC_UNSPECIFIED:
+            f->colorspace = AVCOL_SPC_BT470BG;
+        break;
+        default: break;
     }
     return 0;
 }
