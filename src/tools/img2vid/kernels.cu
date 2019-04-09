@@ -891,10 +891,7 @@ extern int  i2v_cuda_filter(UNIVERSE* u, AVFrame* dst, AVFrame* src, BENZINA_GEO
     err = cudaCreateTextureObject(&texObj1, &resDesc1, &texDesc1, NULL);
     err = cudaCreateTextureObject(&texObj2, &resDesc2, &texDesc2, NULL);
     
-    int cropX = 0, cropY = 0,
-        cropW = src->width -0-0,
-        cropH = src->height-0-0,
-        dstW  = dst->width,
+    int dstW  = dst->width,
         dstH  = dst->height;
     Db.x = 32;
     Db.y = 32;
@@ -905,23 +902,23 @@ extern int  i2v_cuda_filter(UNIVERSE* u, AVFrame* dst, AVFrame* src, BENZINA_GEO
     i2vKernel_gbrp_to_yuv420p
     <AVCOL_SPC_BT470BG, AVCOL_SPC_RGB, AVCOL_TRC_IEC61966_2_1, true, true, true>
     <<<Dg, Db>>>(
-                cudaOPlane0,
-                cudaOPlane1,
-                cudaOPlane2,
-                dst->height,
-                dst->width,
-                0,0,0,0,
-                cropX,           cropY,         cropW,         cropH,
-                0,0,
-                1.0f,            1.0f,
-                1.0f,            1.0f,
-                1.0f,            1.0f,
-                0,0,
-                0,0,
-                0,0,
-                texObj0,
-                texObj1,
-                texObj2
+        cudaOPlane0,
+        cudaOPlane1,
+        cudaOPlane2,
+        dstH,
+        dstW,
+        rect2d_x(&geom->o.canvas), rect2d_y(&geom->o.canvas), rect2d_w(&geom->o.canvas), rect2d_h(&geom->o.canvas),
+        rect2d_x(&geom->o.source), rect2d_y(&geom->o.source), rect2d_w(&geom->o.source), rect2d_h(&geom->o.source),
+        1.0f,            1.0f,
+        1.0f,            1.0f,
+        1.0f,            1.0f,
+        1.0f,            1.0f,
+        0,0,
+        0,0,
+        0,0,
+        texObj0,
+        texObj1,
+        texObj2
     );
     
     err = cudaMemcpy2D(dst->data[0], dst->linesize[0], cudaOPlane0, dst->width/1, dst->width/1, dst->height/1, cudaMemcpyDeviceToHost);

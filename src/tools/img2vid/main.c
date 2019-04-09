@@ -102,7 +102,8 @@ static int  i2v_configure_encoder(UNIVERSE* u, AVFrame* frame){
              "ref=1:chromaloc=1:log=-1:slices-max=32:fullrange=on:"
              "colorprim=%s:transfer=%s:colormatrix=%s%s%s",
              colorprimStr, transferStr, colormatrixStr,
-             *u->args.x264params?":":"", u->args.x264params);
+             (u->args.x264params && *u->args.x264params) ? ":"                : "",
+             (u->args.x264params)                        ? u->args.x264params : "");
     av_dict_set    (&codecCtxOpt, "profile",     "high444",    0);
     av_dict_set    (&codecCtxOpt, "preset",      "placebo",    0);
     av_dict_set    (&codecCtxOpt, "tune",        "stillimage", 0);
@@ -450,7 +451,6 @@ static void i2v_parse_crf   (UNIVERSE* u, char** p, char*** pOut){
     *pOut = p;
 }
 static void i2v_parse_x264  (UNIVERSE* u, char** p, char*** pOut){
-    u->args.x264params = "";
     if(p[1]){
         if(p[1][0] != '-'){
             u->args.x264params = p[1];
@@ -487,7 +487,7 @@ static void i2v_parse_one_group(UNIVERSE* u, char** argv, char*** argvOut){
     /* Set defaults for argument group */
     u->args.urlIn             =                     NULL;
     u->args.urlEmb            =                     NULL;
-    u->args.urlOut            =                     NULL;
+    u->args.urlOut            =               "out.h264";
     u->args.canvas.w          =                     1024;
     u->args.canvas.h          =                      512;
     u->args.canvas.superscale =                        1;
