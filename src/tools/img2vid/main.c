@@ -99,7 +99,7 @@ static int  i2v_configure_encoder(UNIVERSE* u, AVFrame* frame){
     colormatrixStr = colormatrixStr ? colormatrixStr : i2v_x264_color_space(
                                       frame->colorspace      = AVCOL_SPC_BT470BG);
     snprintf(x264params, sizeof(x264params),
-             "ref=1:chromaloc=1:log=-1:slices-max=32:fullrange=on:"
+             "ref=1:chromaloc=1:log=-1:slices-max=32:fullrange=on:stitchable=1:"
              "colorprim=%s:transfer=%s:colormatrix=%s%s%s",
              colorprimStr, transferStr, colormatrixStr,
              (u->args.x264params && *u->args.x264params) ? ":"                : "",
