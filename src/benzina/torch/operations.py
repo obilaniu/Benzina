@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
+import benzina.native
 import numpy as np
+
 
 class WarpTransform:
     """
@@ -331,38 +333,12 @@ class SimilarityTransform   (WarpTransform):
     
     def __call__(self, index, in_shape, out_shape, rng):
         """Return a random similarity transformation."""
-        s        = np.exp    (rng.uniform(low = np.log(self.s [0]), high = np.log(self.s [1])))
-        r        = np.deg2rad(rng.uniform(low =        self.r [0],  high =        self.r [1]))
-        tx       =            rng.uniform(low =        self.tx[0],  high =        self.tx[1])
-        ty       =            rng.uniform(low =        self.ty[0],  high =        self.ty[1])
-        fh       = 1-2*(rng.uniform() < self.fh)
-        fv       = 1-2*(rng.uniform() < self.fv)
-        
-        #
-        # H = T_inshape*T*R*S*T_outshape
-        #
-        T_o_y = (out_shape[0]-1)/2
-        T_o_x = (out_shape[1]-1)/2
-        T_outshape = np.asarray([[1, 0, -T_o_x],
-                                 [0, 1, -T_o_y],
-                                 [0, 0,    1  ]])
-        S_y = fv/s
-        S_x = fh/s
-        if self.autoscale:
-            S_y *= in_shape[0]/out_shape[0]
-            S_x *= in_shape[1]/out_shape[1]
-        S          = np.asarray([[S_x,  0,   0],
-                                 [ 0,  S_y,  0],
-                                 [ 0,   0,   1]])
-        R          = np.asarray([[+np.cos(r), +np.sin(r),   0],
-                                 [-np.sin(r), +np.cos(r),   0],
-                                 [    0,           0,       1]])
-        T_i_y = (in_shape[0]-1)/2
-        T_i_x = (in_shape[1]-1)/2
-        T_inshapeT = np.asarray([[1, 0, tx+T_i_x],
-                                 [0, 1, ty+T_i_y],
-                                 [0, 0,    1  ]])
-        
-        H = T_inshapeT.dot(R).dot(S).dot(T_outshape)
-        
-        return tuple(H.flatten().tolist())
+        return benzina.native.similarity(out_shape[0], out_shape[1],
+                                         in_shape[0],  in_shape[1],
+                                         self.s[0],    self.s[1],
+                                         self.r[0],    self.r[1],
+                                         self.tx[0],   self.tx[1],
+                                         self.ty[0],   self.ty[1],
+                                         self.fh,      self.fv,
+                                         int(rng.randint(2**64, dtype=np.uint64)),
+                                         self.autoscale)
