@@ -293,7 +293,14 @@ if nvcc.found()
      (get_option('b_ndebug') == 'true'))
     nvccOptFlags += ['-DNDEBUG']
   endif
-  nvccCcBinFlag += ['-ccbin', cxx.cmd_array()[0]]
+  if cxx.cmd_array().length() == 1
+    nvccCcBinFlag += ['-ccbin'] + cxx.cmd_array()
+  else
+    warning('\nNVCC\'s -ccbin argument does not provide any way of supplying '+
+            'multiple compiler arguments, multiple search directories or '+
+            'compiler wrappers (e.g. ccache).\n'+
+            'Ignoring [\''+'\', \''.join(cxx.cmd_array())+'\'] and using NVCC compiler defaults.')
+  endif
   
   if   CUDA_ARCH != 'Auto'
     message('Building for selected GPUs [@0@]'.format(' '.join(nvccGenCodeReadable)))
