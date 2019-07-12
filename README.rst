@@ -1,14 +1,22 @@
-.. image:: https://badge.fury.io/py/benzina.svg
+.. use rst_include to compile the README.rst on GitHub.
+   pip install rst-include
+   rst_include include -s README_src.rst -t README.rst
+
+.. |pypi| image:: https://badge.fury.io/py/benzina.svg
+   :scale: 100%
    :target: https://pypi.python.org/pypi/benzina
+
+.. |docs| image:: https://readthedocs.org/projects/docs/badge/?version=latest
+   :scale: 100%
+   :target: https://benzina.readthedocs.io/en/latest
+
+|pypi| |docs|
 
 Бензина / Benzina
 =================
 
 Description of the project
 --------------------------
-.. use rst_include to compile the README.rst on GitHub.
-   pip install rst-include
-   rst_include include -s README_src.rst -t README.rst
 
 Benzina is an image loading library that accelerates image loading and preprocessing
 by making use of the hardware decoder in NVIDIA's GPUs.

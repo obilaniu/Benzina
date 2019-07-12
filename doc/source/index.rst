@@ -3,8 +3,7 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-.. image:: https://badge.fury.io/py/benzina.svg
-   :target: https://pypi.python.org/pypi/benzina
+.. include:: links.rst
 
 Бензина / Benzina
 =================
