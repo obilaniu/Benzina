@@ -1,8 +1,11 @@
+=============
 Datasets List
 =============
 
+
 ImageNet 2012
--------------
+=============
+
 This is the first dataset created for Benzina. It includes the following preprocessing of the
 images:
 
@@ -10,7 +13,8 @@ images:
 * Center crop the image to have a 256 x 256 image
 
 Dataset Composition
-^^^^^^^^^^^^^^^^^^^
+-------------------
+
 The dataset is composed of a train set, followed by a validation set then a
 test set for a total of 1 431 167 entries:
 
@@ -22,7 +26,8 @@ test set for a total of 1 431 167 entries:
   | Entries 1331168 to 1431167 (100 000 entries)
 
 Dataset Files Structure
-^^^^^^^^^^^^^^^^^^^^^^^
+-----------------------
+
 The data is separated into:
 
 * | *data.bin*
