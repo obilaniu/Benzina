@@ -19,6 +19,7 @@ Table of Content
 
    examples/_index.rst
    datasets/list.rst
+   contribution/_index.rst
    api/_index.rst
 
 
