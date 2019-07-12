@@ -19,6 +19,11 @@ Table of Content
    datasets/list.rst
    api/_index.rst
 
+
+.. Todo:: 
+   * Add reference to GH (Maybe use an ENV VAR to point to upstream repo)
+   * Roadmap
+
 Description of the project
 --------------------------
 Benzina is an image loading library that accelerates image loading and preprocessing
