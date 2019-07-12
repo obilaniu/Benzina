@@ -4,9 +4,13 @@
 
 .. include:: doc/source/links.rst
 
+
+=================
 Бензина / Benzina
 =================
 
+
 Description of the project
---------------------------
+==========================
+
 .. include:: doc/source/description.rst

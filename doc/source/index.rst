@@ -5,11 +5,14 @@
 
 .. include:: links.rst
 
+
+=================
 Бензина / Benzina
 =================
 
+
 Table of Content
-----------------
+================
 
 .. toctree::
    :maxdepth: 3
@@ -18,9 +21,12 @@ Table of Content
    datasets/list.rst
    api/_index.rst
 
+
 Description of the project
---------------------------
+==========================
+
 .. include:: description.rst
+
 
 Indices and tables
 ==================

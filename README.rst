@@ -12,11 +12,13 @@
 
 |pypi| |docs|
 
+=================
 Бензина / Benzina
 =================
 
+
 Description of the project
---------------------------
+==========================
 
 Benzina is an image loading library that accelerates image loading and preprocessing
 by making use of the hardware decoder in NVIDIA's GPUs.
