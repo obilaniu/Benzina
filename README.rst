@@ -19,10 +19,10 @@
 Benzina is an image loading library that accelerates image loading and preprocessing
 by making use of the hardware decoder in NVIDIA's GPUs.
 
-Since it minimize the use of the CPU and of the GPU computing units, it's easier
+Since it minimizes the use of the CPU and of the GPU computing units, it is easier
 to reach saturation of GPU computing power / CPU. In our tests using ResNet18 models
 in PyTorch on the ImageNet 2012 dataset, we could observe an increase by 2.4x the
-amount of images loaded, preprocessed then processed by the model when using a
+amount of images loaded, preprocessed and then processed by the model when using a
 single CPU and GPU:
 
 ===================   ===================   ===========   ===========   =================   ========================
