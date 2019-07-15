@@ -1,3 +1,6 @@
+ImageNet loading in PyTorch
+===========================
+
 As long as your dataset is converted into Benzina's data format, you can load it
 to train a PyTorch model in a few lines of code. Here is an example demonstrating
 how this can be done with an ImageNet dataset. It is based on the

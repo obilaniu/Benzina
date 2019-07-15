@@ -1,3 +1,6 @@
+Submitting bugs
+===============
+
 Due diligence
 -------------
 

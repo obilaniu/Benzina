@@ -30,9 +30,6 @@ Table of Content
    * Roadmap
 
 
-Description of the project
-==========================
-
 .. include:: description.rst
 
 

@@ -1,3 +1,6 @@
+Contributing changes
+====================
+
 Licensing of contributed material
 ---------------------------------
 
