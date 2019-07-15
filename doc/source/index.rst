@@ -19,10 +19,13 @@ Table of Content
 
    examples/_index.rst
    datasets/list.rst
+   objectives.rst
+   limits.rst
+   roadmap.rst
    contribution/_index.rst
    api/_index.rst
 
-.. Todo:: 
+.. Todo::
    * Add reference to GH (Maybe use an ENV VAR to point to upstream repo)
    * Roadmap
 

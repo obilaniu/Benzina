@@ -1,9 +1,10 @@
+=================
 Known limitations
 =================
 
 
 As of July 2019
----------------
+===============
 
 * No TensorFlow integration
 * Currently only supports ImageNet

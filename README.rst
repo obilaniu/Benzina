@@ -38,6 +38,62 @@ Benzina               Intel Xeon E5-2623*   1             Tesla V100*   1050 img
 
 The name "Benzina" is a phonetic transliteration of the Ukrainian word "Бензина", meaning "gasoline" (or "petrol").
 
+==========
+Objectives
+==========
+
+In much of the work in the field of machine learning and deep learning, a bottleneck exists in the dataloading phase itself. This is becoming increasingly recognised as an issue which needs to be solved.
+
+Benzina aims to become a go-to tool for dataloading large datasets. Other tools exist, such as `Dali <https://docs.nvidia.com/deeplearning/sdk/dali-developer-guide/docs/index.html>`. Yet Benzina concentrates itself on two aspects :
+
+* Highest level of performance for dataloading using GPU as loading device
+* Creation of a generalist storage format as a single file facilitating distribution of datasets and useful in the context of file system limits.
+
+
+Further feature points
+======================
+
+* Generalist DNN framework methods provided to integrate Benzina to PyTorch and TensorFlow
+* Command line programs will be created to assist in Bezina - compatible datasets
+* API interface to interact with Benzina
+
+=================
+Known limitations
+=================
+
+
+As of July 2019
+===============
+
+* No TensorFlow integration
+* Currently only supports ImageNet
+* Dataset storage is not yet normalized as a single file
+* Unknown effect of compression algorithm on model accuracy
+
+=======
+RoadMap
+=======
+
+
+Summer 2019
+===========
+
+* Collaboration phase with researchers
+
+* TensorFlow implementation
+
+* Normalized format
+   * Specification freeze
+   * Dataset creation utils
+   * More tests
+   * Collaboration with researchers using new format
+
+
+Autumn 2019
+===========
+
+Conference Talk on Benzina
+
 =================
 How to Contribute
 =================

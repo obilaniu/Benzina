@@ -1,8 +1,10 @@
+=======
 RoadMap
 =======
 
+
 Summer 2019
------------
+===========
 
 * Collaboration phase with researchers
 
@@ -14,7 +16,8 @@ Summer 2019
    * More tests
    * Collaboration with researchers using new format
 
+
 Autumn 2019
------------
+===========
 
 Conference Talk on Benzina
