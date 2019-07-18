@@ -60,42 +60,14 @@ Further feature points
 * Command line programs will be created to assist in Bezina - compatible datasets
 * API interface to interact with Benzina
 
-=================
-Known limitations
-=================
+============================================
+`Known limitations <doc/source/limits.rst>`_
+============================================
 
+===================================
+`Roadmap <doc/source/roadmap.rst>`_
+===================================
 
-As of July 2019
-===============
-
-* No TensorFlow integration
-* Currently only supports ImageNet
-* Dataset storage is not yet normalized as a single file
-* Unknown effect of compression algorithm on model accuracy
-
-=======
-RoadMap
-=======
-
-
-Summer 2019
-===========
-
-* Collaboration phase with researchers
-
-* TensorFlow implementation
-
-* Normalized format
-   * Specification freeze
-   * Dataset creation utils
-   * More tests
-   * Collaboration with researchers using new format
-
-
-Autumn 2019
-===========
-
-Conference Talk on Benzina
 
 =================
 How to Contribute
@@ -137,9 +109,8 @@ Make sure your report gets the attention it deserves: bug reports with missing
 information may be ignored or punted back to you, delaying a fix.  The below
 constitutes a bare minimum; more info is almost always better:
 
-* **What version of the core programming language interpreter/compiler are you
-  using?** For example, if it's a Python project, are you using Python 2.7.3?
-  Python 3.3.1? PyPy 2.0?
+* **What version of the core programming language interpreter are you using?**
+  For example, are you using Python 3.5? Python 3.6?
 * **Which version or versions of the software are you using?** Ideally, you
   followed the advice above and have ruled out (or verified that the problem
   exists in) a few different versions.

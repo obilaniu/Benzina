@@ -11,8 +11,14 @@
 
 .. include:: doc/source/description.rst
 .. include:: doc/source/objectives.rst
-.. include:: doc/source/limits.rst
-.. include:: doc/source/roadmap.rst
+
+============================================
+`Known limitations <doc/source/limits.rst>`_
+============================================
+
+===================================
+`Roadmap <doc/source/roadmap.rst>`_
+===================================
 
 
 =================
