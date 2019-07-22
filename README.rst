@@ -2,19 +2,23 @@
    pip install rst-include
    rst_include include -s README_src.rst -t README.rst
 
+.. |docs_url| https://benzina.readthedocs.io/en/latest
+
 .. |pypi| image:: https://badge.fury.io/py/benzina.svg
    :scale: 100%
    :target: https://pypi.python.org/pypi/benzina
 
 .. |docs| image:: https://readthedocs.org/projects/docs/badge/?version=latest
    :scale: 100%
-   :target: https://benzina.readthedocs.io/en/latest
+   :target: |docs_url|
 
 |pypi| |docs|
+
 
 =================
 Бензина / Benzina
 =================
+
 
 Description of the project
 ==========================
@@ -41,88 +45,88 @@ Benzina               Intel Xeon E5-2623*   1             Tesla V100*   1050 img
 
 The name "Benzina" is a phonetic transliteration of the Ukrainian word "Бензина", meaning "gasoline" (or "petrol").
 
-==========
-Objectives
-==========
 
-In much of the work in the field of machine learning and deep learning, a bottleneck exists in the dataloading phase itself. This is becoming increasingly recognised as an issue which needs to be solved.
+ImageNet loading in PyTorch
+===========================
 
-Benzina aims to become a go-to tool for dataloading large datasets. Other tools exist, such as `Dali <https://docs.nvidia.com/deeplearning/sdk/dali-developer-guide/docs/index.html>`_. Yet Benzina concentrates itself on two aspects :
+As long as your dataset is converted into Benzina's data format, you can load it
+to train a PyTorch model in a few lines of code. Here is an example demonstrating
+how this can be done with an ImageNet dataset. It is based on the
+`ImageNet example from PyTorch <https://github.com/pytorch/examples/tree/master/imagenet>`_
 
-* Highest level of performance for dataloading using GPU as loading device
-* Creation of a generalist storage format as a single file facilitating distribution of datasets and useful in the context of file system limits.
+.. code-block:: python
+
+    import torch
+    import benzina.torch as bz
+    import benzina.torch.operations as ops
+
+    seed = 1234
+    torch.manual_seed(seed)
+
+    # Dataset
+    dataset = bz.ImageNet("path/to/data")
+
+    indices = list(range(len(dataset)))
+    n_valid = 50000
+    n_test = 100000
+    n_train = len(dataset) - n_valid - n_test
+    train_sampler = torch.utils.data.SubsetRandomSampler(indices[:n_train])
+    valid_sampler = torch.utils.data.SubsetRandomSampler(indices[n_train:-n_test])
+
+    # Dataloaders
+    bias = ops.ConstantBiasTransform(bias=(123.675, 116.28 , 103.53))
+    std = ops.ConstantNormTransform(norm=(58.395, 57.12 , 57.375))
+
+    train_dataloader = bz.DataLoader(
+        dataset,
+        batch_size=256,
+        sampler=train_sampler,
+        seed=seed,
+        shape=(224,224),
+        bias_transform=bias,
+        norm_transform=std,
+        warp_transform=ops.SimilarityTransform(flip_h=0.5))
+    valid_dataloader = bz.DataLoader(
+        dataset,
+        batch_size=512,
+        sampler=valid_sampler,
+        seed=seed,
+        shape=(224,224),
+        bias_transform=bias,
+        norm_transform=std,
+        warp_transform=ops.SimilarityTransform())
+
+    for epoch in range(1, 10):
+        # train for one epoch
+        train(train_dataloader, ...)
+
+        # evaluate on validation set
+        accuracy = validate(valid_dataloader, ...)
 
 
-Further feature points
-======================
-
-* Generalist DNN framework methods provided to integrate Benzina to PyTorch and TensorFlow
-* Command line programs will be created to assist in Bezina - compatible datasets
-* API interface to interact with Benzina
-
-============================================
-`Known limitations <doc/source/limits.rst>`_
-============================================
-
-===================================
-`Roadmap <doc/source/roadmap.rst>`_
-===================================
+==========================================
+`Objectives <|docs_url|/objectives.html>`_
+==========================================
 
 
-=================
-How to Contribute
-=================
+=============================================
+`Known limitations <|docs_url|/limits.html>`_
+=============================================
 
-This section is heavily based on
-`Contributing to Open Source Projects <https://github.com/bitprophet/contribution-guide.org/blob/master/index.rst>`_
 
-Submitting bugs
-===============
+====================================
+`Roadmap <|docs_url|/roadmap.html>`_
+====================================
 
-Due diligence
--------------
 
-Before submitting a bug, please do the following:
+==========================================================
+`How to Contribute <|docs_url|/contribution/_index.html>`_
+==========================================================
 
-* Perform **basic troubleshooting** steps:
 
-    * **Make sure you're on the latest version.** If you're not on the most
-      recent version, your problem may have been solved already! Upgrading is
-      always the best first step.
-    * **Try older versions.** If you're already *on* the latest release, try
-      rolling back a few minor versions (e.g. if on 1.7, try 1.5 or 1.6) and
-      see if the problem goes away. This will help the devs narrow down when
-      the problem first arose in the commit log.
-    * **Try switching up dependency versions.** If the software in question has
-      dependencies (other libraries, etc) try upgrading/downgrading those as
-      well.
+`Submitting bugs <|docs_url|/contribution/_index.html#submitting-bugs>`_
+========================================================================
 
-* **Search the project's bug/issue tracker** to make sure it's not a known
-  issue.
-* If you don't find a pre-existing issue, consider **checking with the mailing
-  list and/or IRC channel** in case the problem is non-bug-related.
 
-What to put in your bug report
-------------------------------
-
-Make sure your report gets the attention it deserves: bug reports with missing
-information may be ignored or punted back to you, delaying a fix.  The below
-constitutes a bare minimum; more info is almost always better:
-
-* **What version of the core programming language interpreter are you using?**
-  For example, are you using Python 3.5? Python 3.6?
-* **Which version or versions of the software are you using?** Ideally, you
-  followed the advice above and have ruled out (or verified that the problem
-  exists in) a few different versions.
-* **How can the developers recreate the bug on their end?** If possible,
-  include a copy of your code, the command you used to invoke it, and the full
-  output of your run (if applicable.)
-
-    * A common tactic is to pare down your code until a simple (but still
-      bug-causing) "base case" remains. Not only can this help you identify
-      problems which aren't real bugs, but it means the developer can get to
-      fixing the bug faster.
-
-`Contributing changes <doc/source/contribution/contributing_changes.rst>`_
-==========================================================================
-
+`Contributing changes <|docs_url|/contribution/_index.html#contributing-changes>`_
+==================================================================================

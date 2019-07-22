@@ -15,7 +15,7 @@ Table of Content
 ================
 
 .. toctree::
-   :maxdepth: 3
+   :maxdepth: 1
 
    examples/_index.rst
    datasets/list.rst

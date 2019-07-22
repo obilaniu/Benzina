@@ -16,7 +16,10 @@ from   . import git
 # which has a well-defined normalization.
 #
 
-verPublic  = "0.0.3.dev0"
+# The short X.Y version
+verShort = "0.0"
+# The full version, including alpha/beta/rc tags
+verPublic  = '.'.join([verShort, "3.dev0"])
 
 #
 # Information computed from the public version.
@@ -95,6 +98,6 @@ def synthesizeVersionPy():
 	templatePath = os.path.join(git.getSrcRoot(),
 	                            "scripts",
 	                            "version.py.in")
-	
+
 	with open(templatePath, "r") as f:
 		return f.read().format(**globals())
