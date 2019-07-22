@@ -95,6 +95,6 @@ def synthesizeVersionPy():
 	templatePath = os.path.join(git.getSrcRoot(),
 	                            "scripts",
 	                            "version.py.in")
-
+	
 	with open(templatePath, "r") as f:
 		return f.read().format(**globals())

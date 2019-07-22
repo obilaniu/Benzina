@@ -12,10 +12,8 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 
-import importlib, os, sys
-benzina_spec = importlib.util.find_spec('benzina')
-if benzina_spec is None:
-    sys.path.insert(1, os.path.abspath('../../src/'))
+import os, sys
+sys.path.insert(1, os.path.abspath('../../src'))
 
 
 # -- Project information -----------------------------------------------------
