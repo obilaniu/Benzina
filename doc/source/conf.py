@@ -13,7 +13,7 @@
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 
 import importlib, os, sys
-benzina_spec = importlib.util.find_spec("benzina")
+benzina_spec = importlib.util.find_spec('benzina')
 if benzina_spec is None:
     sys.path.insert(1, os.path.abspath('../../src/'))
 
@@ -27,7 +27,7 @@ author = 'Olexa Bilaniuk'
 sys.path.insert(1, os.path.abspath('../..'))
 import scripts.versioning as versioning
 # The short X.Y version
-version = versioning.verShort
+version = '.'.join(versioning.verPublic.split('.')[:2])
 # The full version, including alpha/beta/rc tags
 release = versioning.verPublic
 

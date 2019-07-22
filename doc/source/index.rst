@@ -25,10 +25,6 @@ Table of Content
    contribution/_index.rst
    api/_index.rst
 
-.. Todo::
-   * Add reference to GH (Maybe use an ENV VAR to point to upstream repo)
-   * Roadmap
-
 
 .. include:: description.rst
 
