@@ -1,7 +1,3 @@
-.. use rst_include to compile the README.rst on GitHub.
-   pip install rst-include
-   rst_include include -s README_src.rst -t README.rst
-
 .. |docs_url| https://benzina.readthedocs.io/en/latest
 
 .. |pypi| image:: https://badge.fury.io/py/benzina.svg
