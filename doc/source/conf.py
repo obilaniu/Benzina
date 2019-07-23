@@ -19,15 +19,7 @@ sys.path.insert(1, os.path.abspath('../../src'))
 # -- Project information -----------------------------------------------------
 
 project = 'Benzina'
-copyright = '2019, Olexa Bilaniuk'
 author = 'Olexa Bilaniuk'
-
-sys.path.insert(1, os.path.abspath('../..'))
-import scripts.versioning as versioning
-# The short X.Y version
-version = '.'.join(versioning.verPublic.split('.')[:2])
-# The full version, including alpha/beta/rc tags
-release = versioning.verPublic
 
 
 # -- General configuration ---------------------------------------------------
