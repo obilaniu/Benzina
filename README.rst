@@ -1,12 +1,10 @@
-.. |docs_url| https://benzina.readthedocs.io/en/latest
-
 .. |pypi| image:: https://badge.fury.io/py/benzina.svg
    :scale: 100%
    :target: https://pypi.python.org/pypi/benzina
 
 .. |docs| image:: https://readthedocs.org/projects/docs/badge/?version=latest
    :scale: 100%
-   :target: |docs_url|
+   :target: https://benzina.readthedocs.io/en/latest
 
 |pypi| |docs|
 
@@ -101,28 +99,28 @@ how this can be done with an ImageNet dataset. It is based on the
 
 
 ==========================================
-`Objectives <|docs_url|/objectives.html>`_
+`Objectives <https://benzina.readthedocs.io/en/latest/objectives.html>`_
 ==========================================
 
 
 =============================================
-`Known limitations <|docs_url|/limits.html>`_
+`Known limitations <https://benzina.readthedocs.io/en/latest/limits.html>`_
 =============================================
 
 
 ====================================
-`Roadmap <|docs_url|/roadmap.html>`_
+`Roadmap <https://benzina.readthedocs.io/en/latest/roadmap.html>`_
 ====================================
 
 
 ==========================================================
-`How to Contribute <|docs_url|/contribution/_index.html>`_
+`How to Contribute <https://benzina.readthedocs.io/en/latest/contribution/_index.html>`_
 ==========================================================
 
 
-`Submitting bugs <|docs_url|/contribution/_index.html#submitting-bugs>`_
+`Submitting bugs <https://benzina.readthedocs.io/en/latest/contribution/_index.html#submitting-bugs>`_
 ========================================================================
 
 
-`Contributing changes <|docs_url|/contribution/_index.html#contributing-changes>`_
+`Contributing changes <https://benzina.readthedocs.io/en/latest/contribution/_index.html#contributing-changes>`_
 ==================================================================================
