@@ -12,21 +12,22 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 
-import os
-import sys
-sys.path.insert(0, os.path.abspath('../../src/'))
+import os, sys
+sys.path.insert(1, os.path.abspath('../../src'))
 
 
 # -- Project information -----------------------------------------------------
 
 project = 'Benzina'
-copyright = '2018, Olexa Bilaniuk'
+copyright = '2019, Olexa Bilaniuk'
 author = 'Olexa Bilaniuk'
 
+sys.path.insert(1, os.path.abspath('../..'))
+import scripts.versioning as versioning
 # The short X.Y version
-version = ''
+version = '.'.join(versioning.verPublic.split('.')[:2])
 # The full version, including alpha/beta/rc tags
-release = '0.0.1'
+release = versioning.verPublic
 
 
 # -- General configuration ---------------------------------------------------
@@ -45,6 +46,7 @@ extensions = [
     'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
     'sphinx.ext.githubpages',
+    'sphinx.ext.napoleon',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -91,7 +93,7 @@ html_theme = 'alabaster'
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+# html_static_path = ['_static']
 
 # Custom sidebar templates, must be a dictionary that maps document names
 # to template names.
@@ -100,8 +102,15 @@ html_static_path = ['_static']
 # defined by theme itself.  Builtin themes are using these templates by
 # default: ``['localtoc.html', 'relations.html', 'sourcelink.html',
 # 'searchbox.html']``.
-#
-# html_sidebars = {}
+html_sidebars = {
+    '**': [
+        'about.html',
+        'navigation.html',
+        'relations.html',
+        'searchbox.html',
+        'donate.html',
+    ]
+}
 
 
 # -- Options for HTMLHelp output ---------------------------------------------
@@ -185,3 +194,6 @@ epub_exclude_files = ['search.html']
 
 # If true, `todo` and `todoList` produce output, else they produce nothing.
 todo_include_todos = True
+
+autodoc_member_order = 'bysource'
+autodoc_mock_imports = ['benzina.native', 'benzina.version', 'numpy', 'torch']

@@ -3,14 +3,31 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Benzina Documentation
-===================================
+.. include:: links.rst
+
+
+=================
+Бензина / Benzina
+=================
+
+
+Table of Contents
+=================
 
 .. toctree::
    :maxdepth: 2
-   :caption: API:
 
-   imagenet_example.rst
+   examples/_index.rst
+   datasets/list.rst
+   objectives.rst
+   limits.rst
+   roadmap.rst
+   contribution/_index.rst
+   api/_index.rst
+
+
+.. include:: description.rst
+
 
 Indices and tables
 ==================

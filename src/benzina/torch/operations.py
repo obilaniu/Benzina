@@ -14,17 +14,15 @@ class WarpTransform:
     """
     __call__ needs to be implemented in subclasses
 
-    Arguments
-    ---------
-    index (int): the index of the sample in the dataset
-    in_shape (tuple of ints): the shape of the input sample
-    out_shape (tuple of ints): the shape of the output sample
-    rng (numpy.random.RandomState): a random number generator seeded by the dataloader
+    Args:
+        index (int): the index of the sample in the dataset
+        in_shape (tuple of ints): the shape of the input sample
+        out_shape (tuple of ints): the shape of the output sample
+        rng (numpy.random.RandomState): a random number generator seeded by the dataloader
 
-    Returns
-    -------
-    out (tuple of numerics): a flatten, row-major 3 x 3 warp matrix returned in
-        a tuple of numerics.
+    Returns:
+        out (tuple of numerics): a flatten, row-major 3 x 3 warp matrix returned in
+            a tuple of numerics.
     """
     def __call__(self, index, in_shape, out_shape, rng):
         return NotImplementedError('__call__ needs to be implemented in subclasses')
@@ -38,17 +36,15 @@ class OOBTransform:
     """
     __call__ needs to be implemented in subclasses
 
-    Arguments
-    ---------
-    index (int): the index of the sample in the dataset
-    in_shape (tuple of ints): the shape of the input sample
-    out_shape (tuple of ints): the shape of the output sample
-    rng (numpy.random.RandomState): a random number generator seeded by the dataloader
+    Args:
+        index (int): the index of the sample in the dataset
+        in_shape (tuple of ints): the shape of the input sample
+        out_shape (tuple of ints): the shape of the output sample
+        rng (numpy.random.RandomState): a random number generator seeded by the dataloader
 
-    Returns
-    -------
-    out (tuple of numerics): a tuple in RGB order containing the RGB color to
-        use when no data is available. It should be in RGB order.
+    Returns:
+        out (tuple of numerics): a tuple in RGB order containing the RGB color to
+            use when no data is available. It should be in RGB order.
     """
     def __call__(self, index, in_shape, out_shape, rng):
         return NotImplementedError('__call__ needs to be implemented in subclasses')
@@ -58,53 +54,67 @@ class ColorTransform:
     defined in Benzina's kernel. The transformation is called for each sample of
     a batch.
 
-    0: ITU-R BT.601-6-625 recommentation
-            Kr = 0.299
-            Kg = 0.587
-            Kb = 0.114
-        but full scale
-            Y,Cb,Cr in [0, 255]
+    =====  =================================
+    Index  Description
+    =====  =================================
+    0      ITU-R BT.601-6-625 recommentation
 
-    1: ITU-R BT.601-6-625 recommentation
-            Kr = 0.299
-            Kg = 0.587
-            Kb = 0.114
-        with head/footroom
-            Y       in [16,235]
-            Cb,Cr   in [16,240]
+           * Kr = 0.299
+           * Kg = 0.587
+           * Kb = 0.114
 
-    2: ITU-R BT.709 recommentation
-            Kr = 0.2126
-            Kg = 0.7152
-            Kb = 0.0722
-        with head/footroom
-            Y       in [16,235]
-            Cb,Cr   in [16,240]
+           but full scale
 
-    3: ITU-R BT.2020 recommentation
-            Kr = 0.2627
-            Kg = 0.6780
-            Kb = 0.0593
-        with head/footroom
-            Y       in [16,235]
-            Cb,Cr   in [16,240]
+           * Y,Cb,Cr in [0, 255]
+
+    1      ITU-R BT.601-6-625 recommentation
+
+           * Kr = 0.299
+           * Kg = 0.587
+           * Kb = 0.114
+
+           with head/footroom
+
+           * Y       in [16,235]
+           * Cb,Cr   in [16,240]
+
+    2      ITU-R BT.709 recommentation
+
+           * Kr = 0.2126
+           * Kg = 0.7152
+           * Kb = 0.0722
+
+           with head/footroom
+
+           * Y       in [16,235]
+           * Cb,Cr   in [16,240]
+
+    3      ITU-R BT.2020 recommentation
+
+           * Kr = 0.2627
+           * Kg = 0.6780
+           * Kb = 0.0593
+
+           with head/footroom
+
+           * Y       in [16,235]
+           * Cb,Cr   in [16,240]
+    =====  =================================
     """
     def __init__(self):
         pass
     """
     __call__ needs to be implemented in subclasses
 
-    Arguments
-    ---------
-    index (int): the index of the sample in the dataset
-    in_shape (tuple of ints): the shape of the input sample
-    out_shape (tuple of ints): the shape of the output sample
-    rng (numpy.random.RandomState): a random number generator seeded by the dataloader
+    Args:
+        index (int): the index of the sample in the dataset
+        in_shape (tuple of ints): the shape of the input sample
+        out_shape (tuple of ints): the shape of the output sample
+        rng (numpy.random.RandomState): a random number generator seeded by the dataloader
 
-    Returns
-    -------
-    out (tuple of numerics): a tuple containing a single int indicating which
-        method to use when converting a sample's YCbCr value to RGB.
+    Returns:
+        out (tuple of numerics): a tuple containing a single int indicating which
+            method to use when converting a sample's YCbCr value to RGB.
     """
     def __call__(self, index, in_shape, out_shape, rng):
         return NotImplementedError('__call__ needs to be implemented in subclasses')
@@ -118,18 +128,16 @@ class NormTransform:
     """
     __call__ needs to be implemented in subclasses
 
-    Arguments
-    ---------
-    index (int): the index of the sample in the dataset
-    in_shape (tuple of ints): the shape of the input sample
-    out_shape (tuple of ints): the shape of the output sample
-    rng (numpy.random.RandomState): a random number generator seeded by the dataloader
+    Args:
+        index (int): the index of the sample in the dataset
+        in_shape (tuple of ints): the shape of the input sample
+        out_shape (tuple of ints): the shape of the output sample
+        rng (numpy.random.RandomState): a random number generator seeded by the dataloader
 
-    Returns
-    -------
-    out (tuple of numerics): a tuple in RGB order containing the normalization
-        constant of a sample's RGB channels. Components will be multiplied to the
-        respective channels of a sample.
+    Returns:
+        out (tuple of numerics): a tuple in RGB order containing the normalization
+            constant of a sample's RGB channels. Components will be multiplied to the
+            respective channels of a sample.
     """
     def __call__(self, index, in_shape, out_shape, rng):
         return NotImplementedError('__call__ needs to be implemented in subclasses')
@@ -143,18 +151,16 @@ class BiasTransform:
     """
     __call__ needs to be implemented in subclasses
 
-    Arguments
-    ---------
-    index (int): the index of the sample in the dataset
-    in_shape (tuple of ints): the shape of the input sample
-    out_shape (tuple of ints): the shape of the output sample
-    rng (numpy.random.RandomState): a random number generator seeded by the dataloader
+    Args:
+        index (int): the index of the sample in the dataset
+        in_shape (tuple of ints): the shape of the input sample
+        out_shape (tuple of ints): the shape of the output sample
+        rng (numpy.random.RandomState): a random number generator seeded by the dataloader
 
-    Returns
-    -------
-    out (tuple of numerics): a tuple in RGB order containing the bias of a
-        sample's RGB channels. Components will be substracted to the respective
-        channels of a sample.
+    Returns:
+        out (tuple of numerics): a tuple in RGB order containing the bias of a
+            sample's RGB channels. Components will be substracted to the respective
+            channels of a sample.
     """
     def __call__(self, index, in_shape, out_shape, rng):
         return NotImplementedError('__call__ needs to be implemented in subclasses')
@@ -165,10 +171,9 @@ class ConstantWarpTransform (WarpTransform):
     Represents a constant warp transformation to be applied on each sample of a
     batch independently of its index.
 
-    Arguments
-    ---------
-    warp (iterable of numerics, optional): a flatten, row-major 3 x 3 warp matrix
-        (default: flatten identity matrix).
+    Args:
+        warp (iterable of numerics, optional): a flatten, row-major 3 x 3 warp matrix
+            (default: flatten identity matrix).
     """
     def __init__(self, warp=(1.0, 0.0, 0.0,
                              0.0, 1.0, 0.0,
@@ -187,11 +192,10 @@ class ConstantOOBTransform  (OOBTransform):
     Represents a constant out of bounds transformation to be applied on each
     sample of a batch independently of its index.
 
-    Arguments
-    ---------
-    oob (numeric or iterable of numerics, optional): an iterable in RGB order
-        containing the RGB color to use when no data is available (default:
-        (0.0, 0.0, 0.0)).
+    Args:
+        oob (numeric or iterable of numerics, optional): an iterable in RGB order
+            containing the RGB color to use when no data is available (default:
+            (0.0, 0.0, 0.0)).
     """
     def __init__(self, oob=(0.0, 0.0, 0.0)):
         if   oob is None:
@@ -208,10 +212,9 @@ class ConstantColorTransform(ColorTransform):
     Represents a constant color transformation to be applied on each sample of a
     batch independently of its index.
 
-    Arguments
-    ---------
-    index (int, optional): the index of the method to use when converting
-        a sample's YCbCr value to RGB (default: 0).
+    Args:
+        index (int, optional): the index of the method to use when converting
+            a sample's YCbCr value to RGB (default: 0).
     """
     def __init__(self, index=0):
         if   index is None:
@@ -228,12 +231,11 @@ class ConstantNormTransform(NormTransform):
     Represents a constant norm transformation to be applied on each sample of a
     batch independently of its index.
 
-    Arguments
-    ---------
-    norm (numeric or iterable of numerics, optional): an iterable in RGB order
-        containing the normalization constant of a sample's RGB channels. Components
-        will be multiplied to the respective channels of a sample
-        (default: (1.0, 1.0, 1.0)).
+    Args:
+        norm (numeric or iterable of numerics, optional): an iterable in RGB order
+            containing the normalization constant of a sample's RGB channels. Components
+            will be multiplied to the respective channels of a sample
+            (default: (1.0, 1.0, 1.0)).
     """
     def __init__(self, norm=(1.0, 1.0, 1.0)):
         if   norm is None:
@@ -250,11 +252,10 @@ class ConstantBiasTransform (BiasTransform):
     Represents a constant bias transformation to be applied on each sample of a
     batch independently of its index.
 
-    Arguments
-    ---------
-    bias (numeric or iterable of numerics, optional): an iterable in RGB order
-        containing the bias of a sample's RGB channels. Components will be
-        substracted to the respective channels of a sample (default: (0.0, 0.0, 0.0)).
+    Args:
+        bias (numeric or iterable of numerics, optional): an iterable in RGB order
+            containing the bias of a sample's RGB channels. Components will be
+            substracted to the respective channels of a sample (default: (0.0, 0.0, 0.0)).
     """
     def __init__(self, bias=(0.0, 0.0, 0.0)):
         if   bias is None:
@@ -271,27 +272,26 @@ class SimilarityTransform   (WarpTransform):
     Represents a random similarity warp transformation to be applied on each
     sample of a batch.
 
-    Arguments
-    ---------
-    scale (numeric or iterable of numerics, optional): the scale range to draw a
-        random value from. If a single numeric, the value and it's inverse will
-        be used to define the range (default: (+1.0,+1.0)).
-    rotation (iterable of numerics, optional): the rotation range in radian to
-        draw a random value from. If a single numeric, the value and it's inverse
-        will be used to define the range (default: (-0.0,+0.0)).
-    translation_x (iterable of numerics, optional): the translation on the x axis
-        range to draw a random value from. If a single numeric, the value and it's
-        inverse will be used to define the range (default: (-0,+0)).
-    translation_y (iterable of numerics, optional): the translation on the y axis
-        range to draw a random value from. If a single numeric, the value and it's
-        inverse will be used to define the range (default: (-0,+0)).
-    flip_h (iterable of numerics, optional): the horizontal flip probability range.
-        Valid values are between 0 and 1 (default: (0.0)).
-    flip_v (iterable of numerics, optional): the vertical flip probability range.
-        Valid values are between 0 and 1 (default: (0.0)).
-    autoscale (bool, optional): If ``True``, the sample will be automatically scaled
-        to the output shape before applying the other transformations (default:
-        False).
+    Args:
+        scale (numeric or iterable of numerics, optional): the scale range to draw a
+            random value from. If a single numeric, the value and it's inverse will
+            be used to define the range (default: (+1.0,+1.0)).
+        rotation (iterable of numerics, optional): the rotation range in radian to
+            draw a random value from. If a single numeric, the value and it's inverse
+            will be used to define the range (default: (-0.0,+0.0)).
+        translation_x (iterable of numerics, optional): the translation on the x axis
+            range to draw a random value from. If a single numeric, the value and it's
+            inverse will be used to define the range (default: (-0,+0)).
+        translation_y (iterable of numerics, optional): the translation on the y axis
+            range to draw a random value from. If a single numeric, the value and it's
+            inverse will be used to define the range (default: (-0,+0)).
+        flip_h (iterable of numerics, optional): the horizontal flip probability range.
+            Valid values are between 0 and 1 (default: (0.0)).
+        flip_v (iterable of numerics, optional): the vertical flip probability range.
+            Valid values are between 0 and 1 (default: (0.0)).
+        autoscale (bool, optional): If ``True``, the sample will be automatically scaled
+            to the output shape before applying the other transformations (default:
+            False).
     """
     def __init__(self,
                  scale         = (+1.0,+1.0),

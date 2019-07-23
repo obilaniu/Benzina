@@ -1,6 +1,6 @@
-# Include README.md, LICENSE.md, setup.py, setup.cfg and other critical
+# Include README.rst, LICENSE.md, setup.py, setup.cfg and other critical
 # top-level files:
-include setup.* *.md
+include README.rst setup.* *.md
 
 # Grab all of the source code and build scripts:
 graft doc
