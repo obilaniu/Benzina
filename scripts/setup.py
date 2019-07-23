@@ -32,6 +32,7 @@ with open(os.path.join(git.getSrcRoot(),
                        "version.py"), "w") as f:
     f.write(versioning.synthesizeVersionPy())
 
+author = "Olexa Bilaniuk"
 
 
 #
@@ -40,7 +41,7 @@ with open(os.path.join(git.getSrcRoot(),
 setup(
     name                 = packageName,
     version              = versioning.verPublic,
-    author               = "Olexa Bilaniuk",
+    author               = author,
     author_email         = "anonymous@anonymous.com",
     license              = "MIT",
     url                  = githubURL,
@@ -94,6 +95,14 @@ setup(
         "build_configure": utils.build_configure,
         "build_ext":       utils.build_ext,
         "clean":           utils.clean,
+    },
+    command_options={
+        'build_sphinx': {
+            'project': ("setup.py", packageName),
+            'copyright': ("setup.py", "2019, {}".format(author)),
+            'version': ("setup.py", versioning.verRelease),
+            'release': ("setup.py", versioning.verPublic)
+        }
     },
     zip_safe             = False,
 )
