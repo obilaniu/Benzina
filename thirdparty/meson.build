@@ -44,7 +44,7 @@ nvccPath           = CUDA_HOME  / 'bin' / 'nvcc'
 toolkitIncDir      = CUDA_HOME  / 'include'
 toolkitLibDir      = CUDA_HOME  / 'lib64'
 toolkitStubLibDir  = CUDA_HOME  / 'lib64' / 'stubs'
-cudaIncs           = [include_directories(toolkitIncDir)]
+cudaIncs           = []
 nvccGenCodeFlags   = []
 nvccCudaRtFlags    = []
 nvccOptFlags       = []
@@ -54,6 +54,10 @@ if nvcc.found()
   NVCC_RUN = run_command(nvcc, ['-V'])
   if NVCC_RUN.returncode() == 0
     CUDA_VERSION = NVCC_RUN.stdout().split('V')[-1].strip()
+    #
+    # Do this here to avoid configure failure when CUDA Toolkit is absent.
+    #
+    cudaIncs += [include_directories(toolkitIncDir)]
   else
     nvcc = disabler()
   endif

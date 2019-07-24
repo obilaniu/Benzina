@@ -1,6 +1,6 @@
 project('Benzina', 'c', 'cpp',
         version:                 '0.0.3',
-        meson_version:           '>=0.50.0',
+        meson_version:           '>=0.51.1',
         license:                 'MIT',
         default_options:         [
             'c_std=gnu99',
@@ -41,6 +41,15 @@ elif IS_HOST_WINDOWS
           'widespread use of Linuxisms and low-level system calls, but '+
           'Windows equivalents or approximations do exist and Benzina could '+
           'in principle be ported to that OS.')
+endif
+
+
+#
+# GPL check for permission
+#
+ENABLE_GPL = get_option('enable_gpl')
+if ENABLE_GPL
+  message('Enabling build with GPL license.')
 endif
 
 
@@ -101,10 +110,6 @@ if ffmpegNames.length() > 0
   message('Enabling build with FFmpeg (@0@)'.format(', '.join(ffmpegNames)))
 else
   message('Disabling build with FFmpeg')
-endif
-ENABLE_GPL = get_option('enable_gpl')
-if ENABLE_GPL
-  message('Enabling build with GPL license.')
 endif
 
 

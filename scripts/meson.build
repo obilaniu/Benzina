@@ -32,7 +32,8 @@ endif
 
 
 #
-# GPU detection test.
+# Declare GPU architecture auto-detection test source code
+# for possible use later on.
 #
 detectGPUc   = files('detectgpus.c')
 

@@ -72,10 +72,10 @@ setup(
     ],
     python_requires      = '>=3.5',
     setup_requires       = [
-        "meson>=0.50.0",
+        "meson>=0.51.1",
     ],
     install_requires     = [
-        "nauka>=0.0.11",
+        "meson>=0.51.1",
         "numpy>=1.10",
     ],
     packages             = find_packages("src"),
