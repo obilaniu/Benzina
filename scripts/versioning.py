@@ -16,7 +16,7 @@ from   . import git
 # which has a well-defined normalization.
 #
 
-verPublic  = "0.0.3"
+verPublic  = "0.0.4.dev0"
 
 #
 # Information computed from the public version.

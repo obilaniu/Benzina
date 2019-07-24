@@ -1,5 +1,5 @@
 project('Benzina', 'c', 'cpp',
-        version:                 '0.0.3',
+        version:                 '0.0.4',
         meson_version:           '>=0.51.1',
         license:                 'MIT',
         default_options:         [
