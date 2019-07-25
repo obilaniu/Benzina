@@ -73,9 +73,11 @@ setup(
     python_requires      = '>=3.5',
     setup_requires       = [
         "meson>=0.51.1",
+        "ninja>=1.5",
     ],
     install_requires     = [
         "meson>=0.51.1",
+        "ninja>=1.5",
         "numpy>=1.10",
     ],
     packages             = find_packages("src"),
