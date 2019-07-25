@@ -28,7 +28,7 @@ cuda_h          = configure_file(input:  dynlink_cuda_h,
 # Various options are enabled that silence warnings and reduce library size,
 # given that the library is only a stub and will never be used at runtime.
 #
-if CC_SYNTAX == 'gcc'
+if CC_SYNTAX == 'gcc' and IS_HOST_LINUX
   nvcuvidCArgs    += ['-w',
                       '-fno-exceptions',
                       '-fno-unwind-tables',
