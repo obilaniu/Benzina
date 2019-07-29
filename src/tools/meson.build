@@ -4,5 +4,5 @@
 
 subdir('skeleton')         # Template.
 subdir('geom')
-subdir('img2vid')
+subdir('image2heif')
 subdir('nvdecodetest')

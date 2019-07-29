@@ -96,6 +96,9 @@ extern const char* i2v_x264_color_trc      (enum AVColorTransferCharacteristic c
 extern const char* i2v_x264_color_space    (enum AVColorSpace                  color_space);
 
 
+extern int  i2v_cuda_filter(UNIVERSE* u, AVFrame* dst, AVFrame* src, BENZINA_GEOM* geom);
+
+
 /* End Extern "C" and Include Guard */
 #ifdef __cplusplus
 }

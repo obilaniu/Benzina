@@ -13,8 +13,6 @@ extern "C" {
  * Includes
  */
 
-#include <cuda.h>
-#include <cuda_runtime.h>
 #include <libavcodec/avcodec.h>
 #include <libavfilter/avfilter.h>
 #include <libavformat/avformat.h>

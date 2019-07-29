@@ -471,3 +471,7 @@ extern const char* i2v_x264_color_space(enum AVColorSpace color_space){
         default:                           return NULL;
     }
 }
+
+extern int  i2v_cuda_filter(UNIVERSE* u, AVFrame* dst, AVFrame* src, BENZINA_GEOM* geom){
+    return 0;
+}
