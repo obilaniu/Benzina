@@ -16,6 +16,7 @@ project('Benzina', 'c', 'cpp',
 IS_CROSS        = meson.is_cross_build()
 IS_NATIVE       = not IS_CROSS
 IS_HOST_LE      = host_machine.endian()     == 'little'
+IS_HOST_BE      = host_machine.endian()     == 'big'
 IS_HOST_X86_64  = host_machine.cpu_family() == 'x86_64'
 IS_HOST_AARCH64 = host_machine.cpu_family() == 'aarch64'
 IS_HOST_PPC64   = host_machine.cpu_family() == 'ppc64'
@@ -79,6 +80,18 @@ libm        = cc.find_library('m',  required: IS_HOST_LINUX)
 libdl       = cc.find_library('dl', required: IS_HOST_LINUX)
 librt       = cc.find_library('rt', required: IS_HOST_LINUX)
 threadsDep  = dependency('threads')
+
+
+#
+# Configuration Data
+#
+# Begin collecting configuration information as we configure the build.
+#
+configdata = configuration_data()
+configdata.set10('BENZINA_ENDIAN_BIG',    IS_HOST_BE,
+                 description: 'Whether host machine is big-endian (1) or not (0).')
+configdata.set10('BENZINA_ENDIAN_LITTLE', IS_HOST_LE,
+                 description: 'Whether host machine is little-endian (1) or not (0).')
 
 
 #
