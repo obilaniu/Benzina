@@ -15,7 +15,7 @@
 
 #include "cuviddec.h"
 
-#include "benzina/benzina.h"
+#include "benzina/benzina-old.h"
 #include "benzina/plugins/nvdecode.h"
 #include "kernels.h"
 

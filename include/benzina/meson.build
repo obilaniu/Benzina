@@ -14,8 +14,8 @@ version_h  = configure_file(configuration: configdata,
                             encoding:      'utf-8')
 
 install_headers('attribute.h',
-                'benzina.h',
                 'benzina-new.h',
+                'benzina-old.h',
                 'benzina-cuda.h',
                 'bits.h',
                  config_h,

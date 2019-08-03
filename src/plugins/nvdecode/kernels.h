@@ -9,7 +9,7 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <stdint.h>
-#include "benzina/benzina.h"
+#include "benzina/benzina-old.h"
 
 
 

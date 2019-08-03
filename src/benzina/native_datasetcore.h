@@ -10,7 +10,7 @@
 #include <Python.h>           /* Because of "reasons", the Python header must be first. */
 #include <stddef.h>
 #include <stdint.h>
-#include "benzina/benzina.h"
+#include "benzina/benzina-old.h"
 
 
 

@@ -2,7 +2,7 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 
-#include "benzina/benzina.h"
+#include "benzina/benzina-old.h"
 #include "kernels.h"
 
 
