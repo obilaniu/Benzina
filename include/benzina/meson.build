@@ -4,16 +4,25 @@
 # We generate a benzina/config.h header, which must then be installed.
 #
 
-configh    = configure_file(configuration: configdata,
+config_h   = configure_file(configuration: configdata,
+                            input:         'config.h',
                             output:        'config.h',
-                            output_format: 'c',
+                            encoding:      'utf-8')
+version_h  = configure_file(configuration: configdata,
+                            input:         'version.h',
+                            output:        'version.h',
                             encoding:      'utf-8')
 
-install_headers('benzina.h',
+install_headers('attribute.h',
+                'benzina.h',
+                'benzina-new.h',
                 'benzina-cuda.h',
                 'bits.h',
+                 config_h,
+                'endian.h',
+                'inline.h',
+                 version_h,
                 'visibility.h',
-                configh,
                 install_dir: includedir/'benzina')
 
 subdir('plugins')

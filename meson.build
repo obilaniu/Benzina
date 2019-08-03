@@ -88,9 +88,15 @@ threadsDep  = dependency('threads')
 # Begin collecting configuration information as we configure the build.
 #
 configdata = configuration_data()
-configdata.set10('BENZINA_ENDIAN_BIG',    IS_HOST_BE,
+configdata.set  ('LIBBENZINA_VERSION_MAJOR', meson.project_version().split('.')[0].to_int(),
+                 description: 'The major version of libbenzina.')
+configdata.set  ('LIBBENZINA_VERSION_MINOR', meson.project_version().split('.')[1].to_int(),
+                 description: 'The minor version of libbenzina.')
+configdata.set  ('LIBBENZINA_VERSION_PATCH', meson.project_version().split('.')[2].to_int(),
+                 description: 'The patch version of libbenzina.')
+configdata.set10('BENZINA_ENDIAN_BIG',       IS_HOST_BE,
                  description: 'Whether host machine is big-endian (1) or not (0).')
-configdata.set10('BENZINA_ENDIAN_LITTLE', IS_HOST_LE,
+configdata.set10('BENZINA_ENDIAN_LITTLE',    IS_HOST_LE,
                  description: 'Whether host machine is little-endian (1) or not (0).')
 
 

@@ -4,6 +4,13 @@
 
 
 /**
+ * Includes
+ */
+
+#include "benzina/attribute.h"
+
+
+/**
  * When building a library, it is a good idea to expose as few as possible
  * internal symbols (functions, objects, data structures). Not only does it
  * prevent users from relying on private portions of the library that are
@@ -26,20 +33,6 @@
  * The above commentary and below code is inspired from
  *                   'https://gcc.gnu.org/wiki/Visibility'
  */
-
-#if   defined(_WIN32) || defined(__CYGWIN__)
-# define BENZINA_ATTRIBUTE_EXPORT __declspec(dllexport)
-# define BENZINA_ATTRIBUTE_IMPORT __declspec(dllimport)
-# define BENZINA_ATTRIBUTE_HIDDEN
-#elif __GNUC__ >= 4
-# define BENZINA_ATTRIBUTE_EXPORT __attribute__((visibility("default")))
-# define BENZINA_ATTRIBUTE_IMPORT __attribute__((visibility("default")))
-# define BENZINA_ATTRIBUTE_HIDDEN __attribute__((visibility("hidden")))
-#else
-# define BENZINA_ATTRIBUTE_EXPORT
-# define BENZINA_ATTRIBUTE_IMPORT
-# define BENZINA_ATTRIBUTE_HIDDEN
-#endif
 
 
 /**
