@@ -21,6 +21,7 @@ install_headers('attribute.h',
                  config_h,
                 'endian.h',
                 'inline.h',
+                'iso.h',
                  version_h,
                 'visibility.h',
                 install_dir: includedir/'benzina')

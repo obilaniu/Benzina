@@ -9,6 +9,7 @@ libbenzinaSrcs  = files('benzina.c',
                         'benzinaproto.c',
                         'endian.c',
                         'init.c',
+                        'iso.c',
                         'version.c')
 libbenzinaDeps  = [threadsDep, libm, libdl]
 libbenzinaIncs  = [benzinaIncs]
