@@ -38,8 +38,22 @@ extern "C" {
  * @return Zero if successful; Non-zero if not successful.
  */
 
-BENZINA_PUBLIC int          benz_init                 (void);
+BENZINA_PUBLIC int benz_init(void);
 
+/**
+ * @brief Get Benzina version as integer or directly access as string.
+ * 
+ * @return LIBBENZINA_VERSION_INT(LIBBENZINA_VERSION_MAJOR,
+ *                                LIBBENZINA_VERSION_MINOR,
+ *                                LIBBENZINA_VERSION_PATCH) or
+ *         LIBBENZINA_VERSION    (LIBBENZINA_VERSION_MAJOR,
+ *                                LIBBENZINA_VERSION_MINOR,
+ *                                LIBBENZINA_VERSION_PATCH),
+ *         as compiled at build time.
+ */
+
+BENZINA_PUBLIC unsigned          benz_version(void);
+BENZINA_PUBLIC extern const char benz_version_str[];
 
 
 /* End Extern "C" and Include Guard */
