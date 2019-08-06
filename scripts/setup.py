@@ -5,6 +5,7 @@
 #
 packageName = "benzina"
 githubURL   = "https://github.com/obilaniu/Benzina"
+author      = "Olexa Bilaniuk"
 
 import os, sys
 if sys.version_info[:2] < (3, 5):
@@ -32,7 +33,6 @@ with open(os.path.join(git.getSrcRoot(),
                        "version.py"), "w") as f:
     f.write(versioning.synthesizeVersionPy())
 
-author = "Olexa Bilaniuk"
 
 
 #
