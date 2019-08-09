@@ -14,5 +14,5 @@ Further feature points
 ======================
 
 * Generalist DNN framework methods provided to integrate Benzina to PyTorch and TensorFlow
-* Command line programs will be created to assist in Bezina - compatible datasets
+* Command line programs will be created to assist in Benzina - compatible datasets
 * API interface to interact with Benzina
