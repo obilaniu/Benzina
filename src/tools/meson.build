@@ -1,7 +1,6 @@
 #
-# TOOLS
+# Tools
 #
-
 subdir('skeleton')         # Template.
 subdir('geom')
 subdir('image2heif')

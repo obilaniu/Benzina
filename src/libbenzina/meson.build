@@ -5,36 +5,36 @@
 # parsing code.
 #
 
-libbenzinaSrcs     = files('benzina.c',
+libbenzina_srcs    = files('benzina.c',
                            'benzinaproto.c',
                            'endian.c',
                            'init.c',
                            'iso.c',
                            'version.c')
-libbenzinaMapName  = 'libbenzina.map'
-libbenzinaMapFile  = files(libbenzinaMapName)
-libbenzinaMap      = meson.current_source_dir()/libbenzinaMapName
-libbenzinaDeps     = [threadsDep, libm, libdl]
-libbenzinaIncs     = [benzinaIncs]
-libbenzinaCDefs    = ['-DBENZINA_IS_SHARED=1']
-libbenzinaLinkArgs = []
+libbenzina_map_name = 'libbenzina.map'
+libbenzina_map_file = files(libbenzina_map_name)
+libbenzina_map      = meson.current_source_dir()/libbenzina_map_name
+libbenzina_deps     = [threads, libm, libdl]
+libbenzina_incs     = [benzina_incs]
+libbenzina_cdefs    = ['-DBENZINA_IS_SHARED=1']
+libbenzina_linkargs = []
 if cc.get_id() == 'gcc'
-  libbenzinaLinkArgs += ['-Wl,--version-script='+libbenzinaMap]
+  libbenzina_linkargs += ['-Wl,--version-script='+libbenzina_map]
 endif
-libbenzinaSha = shared_library('benzina',             libbenzinaSrcs,
-                               include_directories  : libbenzinaIncs,
-                               dependencies         : libbenzinaDeps,
-                               c_args               : libbenzinaCDefs + ['-DBENZINA_IS_BUILDING=1'],
-                               link_args            : libbenzinaLinkArgs,
-                               link_with            : [],
-                               link_depends         : libbenzinaMapFile,
-                               gnu_symbol_visibility: 'hidden',
-                               version              : meson.project_version(),
-                               build_rpath          : librpath,
-                               install_rpath        : librpath,
-                               install              : true,
-                               install_dir          : libdir)
-libbenzina    = declare_dependency(include_directories: benzinaIncs,
-                                   compile_args       : libbenzinaCDefs,
-                                   link_with          : libbenzinaSha)
+libbenzina_sha = shared_library('benzina',             libbenzina_srcs,
+                                include_directories  : libbenzina_incs,
+                                dependencies         : libbenzina_deps,
+                                c_args               : libbenzina_cdefs + ['-DBENZINA_IS_BUILDING=1'],
+                                link_args            : libbenzina_linkargs,
+                                link_with            : [],
+                                link_depends         : libbenzina_map_file,
+                                gnu_symbol_visibility: 'hidden',
+                                version              : meson.project_version(),
+                                build_rpath          : librpath,
+                                install_rpath        : librpath,
+                                install              : true,
+                                install_dir          : libdir)
+libbenzina     = declare_dependency(include_directories: benzina_incs,
+                                    compile_args       : libbenzina_cdefs,
+                                    link_with          : libbenzina_sha)
 

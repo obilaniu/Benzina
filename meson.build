@@ -66,20 +66,21 @@ CC_SYNTAX   = cc.get_argument_syntax()
 CXX_SYNTAX  = cxx.get_argument_syntax()
 # Relax a bit the warning flags on GCC & Clang. -Wpedantic is very noisy.
 if CC_SYNTAX == 'gcc' or CXX_SYNTAX == 'gcc'
-  relaxWarnings    = ['-Wno-pedantic',
-                      '-Wno-implicit-fallthrough',
-                      '-Wno-missing-field-initializers',
-                      '-Wno-missing-braces',
-                      '-Wno-unused-function']
-  relaxWarningsC   = cc .get_supported_arguments(relaxWarnings)
-  relaxWarningsCxx = cxx.get_supported_arguments(relaxWarnings)
-  add_project_arguments(relaxWarningsC,   language: 'c')
-  add_project_arguments(relaxWarningsCxx, language: 'cpp')
+  relax_warnings     = ['-Wno-pedantic',
+                        '-Wno-implicit-fallthrough',
+                        '-Wno-missing-field-initializers',
+                        '-Wno-missing-braces',
+                        '-Wno-unused-function']
+  relax_warnings_c   = cc .get_supported_arguments(relax_warnings)
+  relax_warnings_cxx = cxx.get_supported_arguments(relax_warnings)
+  add_project_arguments(relax_warnings_c,   language: 'c')
+  add_project_arguments(relax_warnings_cxx, language: 'cpp')
 endif
 libm        = cc.find_library('m',  required: IS_HOST_LINUX)
 libdl       = cc.find_library('dl', required: IS_HOST_LINUX)
 librt       = cc.find_library('rt', required: IS_HOST_LINUX)
-threadsDep  = dependency('threads')
+openmp      = dependency('openmp',  required: false)
+threads     = dependency('threads')
 
 
 #
@@ -103,30 +104,30 @@ configdata.set10('BENZINA_ENDIAN_LITTLE',    IS_HOST_LE,
 #
 # FFmpeg
 #
-libavcodec   = dependency('libavcodec',  version: '>=57', required: false, disabler: true)
-libavformat  = dependency('libavformat', version: '>=57', required: false, disabler: true)
-libavfilter  = dependency('libavfilter', version: '>=6',  required: false, disabler: true)
-libavutil    = dependency('libavutil',   version: '>=55', required: false, disabler: true)
-libswscale   = dependency('libswscale',  version: '>=4',  required: false, disabler: true)
-ffmpegIncDir = []
-ffmpegIFlags = []
-ffmpegNames  = []
+libavcodec    = dependency('libavcodec',  version: '>=57', required: false, disabler: true)
+libavformat   = dependency('libavformat', version: '>=57', required: false, disabler: true)
+libavfilter   = dependency('libavfilter', version: '>=6',  required: false, disabler: true)
+libavutil     = dependency('libavutil',   version: '>=55', required: false, disabler: true)
+libswscale    = dependency('libswscale',  version: '>=4',  required: false, disabler: true)
+ffmpeg_incdir = []
+ffmpeg_iflags = []
+ffmpeg_names  = []
 foreach L : [libavcodec, libavformat, libavfilter, libavutil, libswscale]
   if L.found()
-    ffmpegNames += [L.name() + '-' + L.version()]#.split('.')[0]
+    ffmpeg_names += [L.name() + '-' + L.version()]
     if L.type_name() == 'pkgconfig'
       foreach D : L.get_pkgconfig_variable('includedir',
                                            default: '/usr/include/ffmpeg').split(':')
-        ffmpegIncDir += D in ffmpegIncDir ? [] : [D]
+        ffmpeg_incdir += D in ffmpeg_incdir ? [] : [D]
       endforeach
     endif
   endif
 endforeach
-foreach D : ffmpegIncDir
-  ffmpegIFlags += ['-I'+D]
+foreach D : ffmpeg_incdir
+  ffmpeg_iflags += ['-I'+D]
 endforeach
-if ffmpegNames.length() > 0
-  message('Enabling build with FFmpeg (@0@)'.format(', '.join(ffmpegNames)))
+if ffmpeg_names.length() > 0
+  message('Enabling build with FFmpeg (@0@)'.format(', '.join(ffmpeg_names)))
 else
   message('Disabling build with FFmpeg')
 endif

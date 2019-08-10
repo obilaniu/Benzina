@@ -7,6 +7,7 @@
 
 ### License & Dependency Check
 if(not ENABLE_GPL          or
+   IS_HOST_WINDOWS         or
    not libavcodec.found()  or
    not libavformat.found() or
    not libavfilter.found() or
@@ -19,7 +20,7 @@ endif
 ### C code compilation
 benzina_image2heif_srcs = files('main.c', 'utils.c')
 benzina_image2heif_deps = [libavcodec, libavformat, libavfilter, libavutil, libswscale,
-                           threadsDep, libm, libdl, libbenzina, libbenzinageom]
+                           openmp, threads, libm, libdl, libbenzina, libbenzinageom]
 benzina_image2heif      = executable('benzina-image2heif', benzina_image2heif_srcs,
                                      dependencies        : benzina_image2heif_deps,
                                      build_rpath         : toolrpath,

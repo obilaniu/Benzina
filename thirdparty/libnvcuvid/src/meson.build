@@ -8,12 +8,12 @@
 # for this stub.
 #
 
-nvcuvidLinkArgs = []
-nvcuvidCArgs    = ['-D__CUVID_INTERNAL']
-nvcuvidKwargs   = IS_HOST_WINDOWS ? {} : {'soversion': '1'}
-cuda_h          = configure_file(input:  dynlink_cuda_h,
-                                 copy:   true,
-                                 output: 'cuda.h')
+nvcuvid_linkargs = []
+nvcuvid_cargs    = ['-D__CUVID_INTERNAL']
+nvcuvid_kwargs   = IS_HOST_WINDOWS ? {} : {'soversion': '1'}
+cuda_h           = configure_file(input:  dynlink_cuda_h,
+                                  copy:   true,
+                                  output: 'cuda.h')
 
 
 #
@@ -29,18 +29,18 @@ cuda_h          = configure_file(input:  dynlink_cuda_h,
 # given that the library is only a stub and will never be used at runtime.
 #
 if CC_SYNTAX == 'gcc' and IS_HOST_LINUX
-  nvcuvidCArgs    += ['-w',
+  nvcuvid_cargs    += ['-w',
                       '-fno-exceptions',
                       '-fno-unwind-tables',
                       '-fno-asynchronous-unwind-tables']
-  nvcuvidLinkArgs += ['-nostartfiles',
+  nvcuvid_linkargs += ['-nostartfiles',
                       '-Wl,-s,--build-id=none,--hash-style=sysv,-z,norelro']
 endif
-libnvcuvidSha   = shared_library('nvcuvid', [files('libnvcuvid.c'), cuda_h],
-                                 include_directories: nvcuvidIncs + ['.'],
-                                 c_args             : nvcuvidCArgs + nvcuvidCDefs,
-                                 link_args          : nvcuvidLinkArgs,
-                                 kwargs             : nvcuvidKwargs,
+libnvcuvid_sha  = shared_library('nvcuvid', [files('libnvcuvid.c'), cuda_h],
+                                 include_directories: nvcuvid_incs + ['.'],
+                                 c_args             : nvcuvid_cargs + nvcuvid_cdefs,
+                                 link_args          : nvcuvid_linkargs,
+                                 kwargs             : nvcuvid_kwargs,
                                  install            : false,
                                  override_options   : ['warning_level=0',
                                                        'buildtype=release',
@@ -57,10 +57,10 @@ libnvcuvidSha   = shared_library('nvcuvid', [files('libnvcuvid.c'), cuda_h],
 # make libnvcuvid fully functional as a stub.
 #
 if nvcc.found()
-  nvcuvidIFlags  += ['-I'+toolkitIncDir]
-  nvcuvidIncs    += [include_directories(toolkitIncDir)]
+  nvcuvid_iflags  += ['-I'+toolkit_incdir]
+  nvcuvid_incs    += [include_directories(toolkit_incdir)]
 endif
-libnvcuvid      = declare_dependency(include_directories: nvcuvidIncs,
-                                     compile_args       : nvcuvidCDefs,
-                                     link_with          : libnvcuvidSha)
+libnvcuvid      = declare_dependency(include_directories: nvcuvid_incs,
+                                     compile_args       : nvcuvid_cdefs,
+                                     link_with          : libnvcuvid_sha)
 

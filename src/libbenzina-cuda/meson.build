@@ -13,42 +13,41 @@ endif
 
 
 ### CUDA code compilation
-libbenzinacudaCDefs    = ['-DBENZINA_CUDA_IS_SHARED=1']
-libbenzinacudaCudaSrcs = files('kernels.cu')
-libbenzinacudaCudaObjs = nvccCompGen.process(libbenzinacudaCudaSrcs, extra_args: [
+libbenzinacuda_cdefs     = ['-DBENZINA_CUDA_IS_SHARED=1']
+libbenzinacudaCuda_srcs = files('kernels.cu')
+libbenzinacudaCuda_objs = nvccCompGen.process(libbenzinacudaCuda_srcs, extra_args: [
     '-Xcompiler', '-fPIC',
     '-Xptxas', '--warn-on-double-precision-use,-O3',
     '-DBENZINA_CUDA_IS_BUILDING=1',
-] + libbenzinacudaCDefs + libbenzinaCDefs + benzinaIFlags)
-libbenzinacudaCudaSta  = static_library('pre-dlink', libbenzinacudaCudaObjs)
-libbenzinacudaCudaDep  = declare_dependency(link_whole: libbenzinacudaCudaSta)
-libbenzinacudaCudaObjs = custom_target ('libbenzinacudaCuda-dlink',
+] + libbenzinacuda_cdefs + libbenzina_cdefs + benzina_iflags)
+libbenzinacudaCuda_sta  = static_library('pre-dlink', libbenzinacudaCuda_objs)
+libbenzinacudaCuda_dep  = declare_dependency(link_whole: libbenzinacudaCuda_sta)
+libbenzinacudaCuda_objs = custom_target ('libbenzinacudaCuda-dlink',
     command         : [nvcc, '-shared'] + nvccLinkArgs + ['@INPUT@', '-o', '@OUTPUT@'],
-    input           : libbenzinacudaCudaSta,
+    input           : libbenzinacudaCuda_sta,
     output          : ['@BASENAME@-dlink.o'],
     build_by_default: true,
     install         : false
 )
-libbenzinacudaCudaSta  = static_library('dlink', libbenzinacudaCudaObjs)
-libbenzinacudaCudaDep  = declare_dependency(dependencies: libbenzinacudaCudaDep,
-                                            link_whole:   libbenzinacudaCudaSta)
+libbenzinacudaCuda_sta = static_library('dlink', libbenzinacudaCuda_objs)
+libbenzinacudaCuda_dep = declare_dependency(dependencies: libbenzinacudaCuda_dep,
+                                            link_whole:   libbenzinacudaCuda_sta)
 
 
 ### C code compilation
-libbenzinacudaSrcs  = []
-libbenzinacudaDeps  = [threadsDep, libm, libdl,
-                       libcuda, libcudart, libcudadevrt,
-                       libbenzina, libbenzinacudaCudaDep,]
-libbenzinacudaSha   = shared_library('benzina-cuda',        libbenzinacudaSrcs,
-                                     dependencies         : libbenzinacudaDeps,
-                                     c_args               : libbenzinacudaCDefs + ['-DBENZINA_CUDA_IS_BUILDING=1'],
+libbenzinacuda_srcs = []
+libbenzinacuda_deps = [threads, libm, libdl, libcuda, libcudart, libcudadevrt,
+                       libbenzina, libbenzinacudaCuda_dep]
+libbenzinacuda_sha  = shared_library('benzina-cuda',        libbenzinacuda_srcs,
+                                     dependencies         : libbenzinacuda_deps,
+                                     c_args               : libbenzinacuda_cdefs + ['-DBENZINA_CUDA_IS_BUILDING=1'],
                                      gnu_symbol_visibility: 'hidden',
                                      build_rpath          : librpath,
                                      install_rpath        : librpath,
                                      install              : true,
                                      install_dir          : libdir)
-libbenzinacuda      = declare_dependency(include_directories: benzinaIncs,
-                                         compile_args       : libbenzinacudaCDefs,
-                                         link_with          : libbenzinacudaSha,
+libbenzinacuda      = declare_dependency(include_directories: benzina_incs,
+                                         compile_args       : libbenzinacuda_cdefs,
+                                         link_with          : libbenzinacuda_sha,
                                          dependencies       : libbenzina.partial_dependency(compile_args: true))
 

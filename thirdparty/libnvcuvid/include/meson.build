@@ -13,10 +13,10 @@
 # precedence over the CUDA Toolkit's own, authentic cuda.h.
 #
 
-nvcuvidIncDir   = meson.current_source_dir()
-nvcuvidIncs     = [include_directories('.')]
-nvcuvidIFlags   = ['-I'+nvcuvidIncDir]
-nvcuvidCDefs    = []
+nvcuvid_incdir  = meson.current_source_dir()
+nvcuvid_incs    = [include_directories('.')]
+nvcuvid_iflags  = ['-I'+nvcuvid_incdir]
+nvcuvid_cdefs   = []
 dynlink_cuda_h  = files('dynlink_cuda.h')
 
 
@@ -47,25 +47,25 @@ elif NVDEC_VERSION.version_compare('>=9.0')
   if CUDA_VERSION != 'unknown' and CUDA_VERSION.version_compare('<10.0')
     warning('Warning: CUDA Toolkit @0@ too old!'.format(CUDA_VERSION))
   endif
-  nvcuvidCDefs += ['-DNVDECODE=9000']
+  nvcuvid_cdefs += ['-DNVDECODE=9000']
 elif NVDEC_VERSION.version_compare('>=8.2')
   message('Found Video Codec SDK >= 8.2, requires NVIDIA Driver >= '+NVIDIA_DRIVER_8_2+' and mandatory CUDA Toolkit >= 8.0')
   if CUDA_VERSION != 'unknown' and CUDA_VERSION.version_compare('<8.0')
     warning('Warning: CUDA Toolkit @0@ too old!'.format(CUDA_VERSION))
   endif
-  nvcuvidCDefs += ['-DNVDECODE=8002']
+  nvcuvid_cdefs += ['-DNVDECODE=8002']
 elif NVDEC_VERSION.version_compare('>=8.1')
   message('Found Video Codec SDK == 8.1, requires NVIDIA Driver >= '+NVIDIA_DRIVER_8_1+' and mandatory CUDA Toolkit >= 8.0')
   if CUDA_VERSION != 'unknown' and CUDA_VERSION.version_compare('<8.0')
     warning('Warning: CUDA Toolkit @0@ too old!'.format(CUDA_VERSION))
   endif
-  nvcuvidCDefs += ['-DNVDECODE=8001']
+  nvcuvid_cdefs += ['-DNVDECODE=8001']
 elif NVDEC_VERSION.version_compare('>=8.0')
   message('Found Video Codec SDK == 8.0, requires NVIDIA Driver >= '+NVIDIA_DRIVER_8_0+' and optional  CUDA Toolkit >= 8.0')
   if CUDA_VERSION != 'unknown' and CUDA_VERSION.version_compare('<8.0')
     warning('Warning: CUDA Toolkit @0@ too old!'.format(CUDA_VERSION))
   endif
-  nvcuvidCDefs += ['-DNVDECODE=8000']
+  nvcuvid_cdefs += ['-DNVDECODE=8000']
 else
   warning('Found Video Codec SDK < 8.0, too old!')
 endif

@@ -1,5 +1,5 @@
-benzinaIncs   = include_directories('.')
-benzinaIncDir = meson.current_source_dir()
-benzinaIFlags = ['-I'+benzinaIncDir]
+benzina_incs   = include_directories('.')
+benzina_incdir = meson.current_source_dir()
+benzina_iflags = ['-I'+benzina_incdir]
 
 subdir('benzina')

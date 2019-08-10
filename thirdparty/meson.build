@@ -32,24 +32,23 @@
 #     do that we try to use the stubs, then the system libraries. If programs
 #     link and run with specific APIs, they are assumed usable.
 #
-CUDA_MODULE        = import('unstable-cuda')
-CUDA_VERSION       = 'unknown'
-CUDA_ARCH          = get_option('nvidia_arch')
-CUDA_HOME          = get_option('nvidia_home').split(':')[0]
-CUDA_RUNTIME       = get_option('nvidia_runtime') == 'static' ? 'cudart_static' : 'cudart'
-NVIDIA_DRIVER      = get_option('nvidia_driver').to_lower()
-NVDEC_VERSION      = get_option('nvdec_version').to_lower()
-currSrcDir         = meson.current_source_dir()
-nvccPath           = CUDA_HOME  / 'bin' / 'nvcc'
-toolkitIncDir      = CUDA_HOME  / 'include'
-toolkitLibDir      = CUDA_HOME  / 'lib64'
-toolkitStubLibDir  = CUDA_HOME  / 'lib64' / 'stubs'
-cudaIncs           = []
-nvccGenCodeFlags   = []
-nvccCudaRtFlags    = []
-nvccOptFlags       = []
-nvccCcBinFlag      = []
-nvcc               = find_program(nvccPath, 'nvcc', required: false, disabler: true)
+CUDA_MODULE         = import('unstable-cuda')
+CUDA_VERSION        = 'unknown'
+CUDA_ARCH           = get_option('nvidia_arch')
+CUDA_HOME           = get_option('nvidia_home').split(':')[0]
+CUDA_RUNTIME        = get_option('nvidia_runtime') == 'static' ? 'cudart_static' : 'cudart'
+NVIDIA_DRIVER       = get_option('nvidia_driver').to_lower()
+NVDEC_VERSION       = get_option('nvdec_version').to_lower()
+nvcc_path           = CUDA_HOME  / 'bin' / 'nvcc'
+toolkit_incdir      = CUDA_HOME  / 'include'
+toolkit_libdir      = CUDA_HOME  / 'lib64'
+toolkit_stub_libdir = CUDA_HOME  / 'lib64' / 'stubs'
+cuda_incs           = []
+nvcc_gencode_flags  = []
+nvcc_cudart_flags   = []
+nvcc_opt_flags      = []
+nvcc_ccbin_flag     = []
+nvcc                = find_program(nvcc_path, 'nvcc', required: false, disabler: true)
 if nvcc.found()
   NVCC_RUN = run_command(nvcc, ['-V'])
   if NVCC_RUN.returncode() == 0
@@ -57,7 +56,7 @@ if nvcc.found()
     #
     # Do this here to avoid configure failure when CUDA Toolkit is absent.
     #
-    cudaIncs += [include_directories(toolkitIncDir)]
+    cuda_incs += [include_directories(toolkit_incdir)]
   else
     nvcc = disabler()
   endif
@@ -252,11 +251,11 @@ endif
 #
 # Find CUDA libraries, but build linvcuvid stub ourselves.
 #
-libcuda      = cc.find_library('cuda',       required: false, disabler: true, dirs: toolkitStubLibDir)
-libcudart    = cc.find_library(CUDA_RUNTIME, required: false, disabler: true, dirs: toolkitLibDir)
-libcudadevrt = cc.find_library('cudadevrt',  required: false, disabler: true, dirs: toolkitLibDir)
+libcuda      = cc.find_library('cuda',       required: false, disabler: true, dirs: toolkit_stub_libdir)
+libcudart    = cc.find_library(CUDA_RUNTIME, required: false, disabler: true, dirs: toolkit_libdir)
+libcudadevrt = cc.find_library('cudadevrt',  required: false, disabler: true, dirs: toolkit_libdir)
 subdir('libnvcuvid')
-cudaIncs    += nvcuvidIncs
+cuda_incs   += nvcuvid_incs
 
 
 
@@ -266,7 +265,7 @@ cudaIncs    += nvcuvidIncs
 if nvcc.found()
   gpuarchs = []
   if CUDA_ARCH == 'Auto'
-    detectGPU = run_command(nvcc, ['-w', '-cudart', 'static', detectGPUc, '--run'])
+    detectGPU = run_command(nvcc, ['-w', '-cudart', 'static', detectgpus_c, '--run'])
     detectGPUstdout = detectGPU.stdout().strip()
     detectGPUstderr = detectGPU.stderr().strip()
     if detectGPU.returncode() == 0
@@ -284,21 +283,21 @@ if nvcc.found()
       endif
     endif
   endif
-  nvccGenCodeReadable = CUDA_MODULE.nvcc_arch_readable(CUDA_VERSION, CUDA_ARCH, detected: gpuarchs)
-  nvccGenCodeFlags   += CUDA_MODULE.nvcc_arch_flags   (CUDA_VERSION, CUDA_ARCH, detected: gpuarchs)
-  nvccCudaRtFlags    += ['-cudart', get_option('nvidia_runtime')]
+  nvcc_gencode_readable = CUDA_MODULE.nvcc_arch_readable(CUDA_VERSION, CUDA_ARCH, detected: gpuarchs)
+  nvcc_gencode_flags   += CUDA_MODULE.nvcc_arch_flags   (CUDA_VERSION, CUDA_ARCH, detected: gpuarchs)
+  nvcc_cudart_flags    += ['-cudart', get_option('nvidia_runtime')]
   if(get_option('buildtype') == 'debugoptimized' or
      get_option('buildtype') == 'debug')
-    nvccOptFlags += ['-g', '-lineinfo']
+    nvcc_opt_flags += ['-g', '-lineinfo']
   else
-    nvccOptFlags += ['-O3']
+    nvcc_opt_flags += ['-O3']
   endif
   if((get_option('b_ndebug') == 'if-release' and get_option('buildtype') == 'release') or
      (get_option('b_ndebug') == 'true'))
-    nvccOptFlags += ['-DNDEBUG']
+    nvcc_opt_flags += ['-DNDEBUG']
   endif
   if cxx.cmd_array().length() == 1
-    nvccCcBinFlag += ['-ccbin'] + cxx.cmd_array()
+    nvcc_ccbin_flag += ['-ccbin'] + cxx.cmd_array()
   else
     warning('\nNVCC\'s -ccbin argument does not provide any way of supplying '+
             'multiple compiler arguments, multiple search directories or '+
@@ -307,11 +306,11 @@ if nvcc.found()
   endif
   
   if   CUDA_ARCH != 'Auto'
-    message('Building for selected GPUs [@0@]'.format(' '.join(nvccGenCodeReadable)))
+    message('Building for selected GPUs [@0@]'.format(' '.join(nvcc_gencode_readable)))
   elif gpuarchs != []
-    message('Building for detected GPUs [@0@]'.format(' '.join(nvccGenCodeReadable)))
+    message('Building for detected GPUs [@0@]'.format(' '.join(nvcc_gencode_readable)))
   else
-    message('Building for common GPUs [@0@]'  .format(' '.join(nvccGenCodeReadable)))
+    message('Building for common GPUs [@0@]'  .format(' '.join(nvcc_gencode_readable)))
   endif
 endif
 
@@ -320,11 +319,11 @@ endif
 # Compile generator and linker args.
 #
 nvccCompGen   = generator(nvcc,
-    arguments: nvccCcBinFlag + nvccGenCodeFlags + nvccCudaRtFlags + nvccOptFlags + nvcuvidIFlags +
+    arguments: nvcc_ccbin_flag + nvcc_gencode_flags + nvcc_cudart_flags + nvcc_opt_flags + nvcuvid_iflags +
                ['-x', 'cu', '@EXTRA_ARGS@', '@INPUT@', '-c', '-o', '@OUTPUT@'],
     output:    ['@BASENAME@.o'],
 )
-nvccLinkArgs  = ['-dlink'] + nvccCcBinFlag + nvccCudaRtFlags + nvccGenCodeFlags
+nvccLinkArgs  = ['-dlink'] + nvcc_ccbin_flag + nvcc_cudart_flags + nvcc_gencode_flags
 
 
 #
@@ -332,12 +331,12 @@ nvccLinkArgs  = ['-dlink'] + nvccCcBinFlag + nvccCudaRtFlags + nvccGenCodeFlags
 # artifacts. Reduces the need to carry around include directories and custom
 # compile flags.
 #
-libcuda       = declare_dependency(include_directories: cudaIncs,
+libcuda       = declare_dependency(include_directories: cuda_incs,
                                    dependencies       : libcuda)
-libcudart     = declare_dependency(include_directories: cudaIncs,
+libcudart     = declare_dependency(include_directories: cuda_incs,
                                    dependencies       : [libcudart, librt])
-libcudadevrt  = declare_dependency(include_directories: cudaIncs,
+libcudadevrt  = declare_dependency(include_directories: cuda_incs,
                                    dependencies       : libcudart)
-libnvcuvid    = declare_dependency(include_directories: nvcuvidIncs,
+libnvcuvid    = declare_dependency(include_directories: nvcuvid_incs,
                                    dependencies       : libnvcuvid)
 

@@ -7,11 +7,11 @@
 # new plugins.
 #
 
-pluginCDefs  = ['-DBENZINA_PLUGIN_IS_BUILDING=1',
-                '-DBENZINA_PLUGIN_IS_SHARED=1'] + libbenzinaCDefs
-pluginCDefs += libbenzinacuda.found() ? libbenzinacudaCDefs : []
-pluginDep    = declare_dependency(dependencies: [libbenzina],
-                                  compile_args: pluginCDefs)
+plugin_cdefs  = ['-DBENZINA_PLUGIN_IS_BUILDING=1',
+                 '-DBENZINA_PLUGIN_IS_SHARED=1'] + libbenzina_cdefs
+plugin_cdefs += libbenzinacuda.found() ? libbenzinacuda_cdefs : []
+plugin        = declare_dependency(dependencies: [libbenzina],
+                                   compile_args: plugin_cdefs)
 
 
 

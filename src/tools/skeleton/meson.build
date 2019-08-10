@@ -12,15 +12,14 @@ endif
 
 
 ### C code compilation
-benzina_skeletonSrcs  = files('main.c')
-benzina_skeletonDeps  = [libavcodec, libavformat, libavfilter, libavutil, libswscale,
-                         threadsDep, libm, libdl,
-                         libcuda, libcudart, libnvcuvid,
+benzina_skeleton_srcs = files('main.c')
+benzina_skeleton_deps = [libavcodec, libavformat, libavfilter, libavutil, libswscale,
+                         threads, libm, libdl, libcuda, libcudart, libnvcuvid,
                          libbenzina, libbenzinacuda]
 benzina_skeleton      = executable('benzina-skeleton',
-                                   benzina_skeletonSrcs,
+                                   benzina_skeleton_srcs,
                                    include_directories: [],
-                                   dependencies       : benzina_skeletonDeps,
+                                   dependencies       : benzina_skeleton_deps,
                                    c_args             : [],
                                    build_rpath        : toolrpath,
                                    install_rpath      : toolrpath,
