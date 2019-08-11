@@ -52,8 +52,11 @@ BENZINA_PUBLIC int benz_init(void);
  *         as compiled at build time.
  */
 
-BENZINA_PUBLIC unsigned          benz_version(void);
-BENZINA_PUBLIC extern const char benz_version_str[];
+BENZINA_PUBLIC unsigned              benz_version(void);
+BENZINA_PUBLIC extern const unsigned benz_version_major;
+BENZINA_PUBLIC extern const unsigned benz_version_minor;
+BENZINA_PUBLIC extern const unsigned benz_version_patch;
+BENZINA_PUBLIC extern const char     benz_version_str[];
 
 
 /* End Extern "C" and Include Guard */
