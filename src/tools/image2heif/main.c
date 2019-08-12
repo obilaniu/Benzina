@@ -1,28 +1,161 @@
 /* Includes */
 #include <errno.h>
+#include <math.h>
+#include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include "main.h"
-#include "kernels.h"
-#include "utils.h"
-#include "benzina/bits.h"
+#include <libavcodec/avcodec.h>
+#include <libavfilter/avfilter.h>
+#include <libavformat/avformat.h>
+#include <libavfilter/buffersink.h>
+#include <libavfilter/buffersrc.h>
+#include <libavutil/opt.h>
+#include <libavutil/pixdesc.h>
+#include <libavutil/pixfmt.h>
+#if _OPENMP
+#include <omp.h>
+#endif
+
+#include "benzina/benzina.h"
+
+#include "geometry.h"
+
 
 
 /**
  * Defines
  */
 
+#define i2hmessage(fp, f, ...)                                          \
+    (i2hfprintf((fp), "%s:%d: " f, __FILE__, __LINE__, ## __VA_ARGS__))
+#define i2hmessageexit(code, fp, f, ...)     \
+    do{                                      \
+        i2hmessage(fp, f, ## __VA_ARGS__);   \
+        exit(code);                          \
+    }while(0)
+
+
+
+/* Data Structure Forward Declarations and Typedefs */
+typedef struct ITEM ITEM;
+typedef struct UNIVERSE UNIVERSE;
+
 
 
 /**
- * Functions.
+ * Data Structure Definitions
  */
 
-int      strendswith(const char* s, const char* e){
+/**
+ * @brief Item to be added.
+ */
+
+struct ITEM{
+    uint32_t    id;
+    const char* path;
+    const char* name;
+    const char* mime;
+    int         is_primary;
+    int         want_thumbnail;
+    uint32_t    width, height;
+    uint32_t    tile_width, tile_height;
+    AVFrame*    frame;
+    AVPacket*   packet;
+    ITEM*       thumbnail;
+    ITEM*       grid;
+    ITEM*       next;
+};
+
+/**
+ * @brief State of the program.
+ * 
+ * There's lots of crap here.
+ */
+
+struct UNIVERSE{
+    /* Args */
+    struct{
+        char*       urlIn;
+        char*       urlEmb;
+        char*       urlOut;
+        struct{
+            unsigned w,h;
+            int      chroma_fmt;
+            int      superscale;
+        } canvas;
+        unsigned    crf;
+        const char* x264params;
+    } args;
+    
+    /* Status */
+    int              ret;
+    
+    /* FFmpeg Encode/Decode */
+    struct{
+        AVFormatContext*   formatCtx;
+        int                formatStream;
+        AVCodecParameters* codecPar;
+        AVCodec*           codec;
+        AVCodecContext*    codecCtx;
+    } in;
+    struct{
+        FILE*              fp;
+    } emb;
+    struct{
+        BENZINA_GEOM       geom;
+    } tx;
+    struct{
+        AVCodec*           codec;
+        AVCodecContext*    codecCtx;
+        AVPacket*          packet;
+        FILE*              fp;
+    } out;
+};
+
+
+
+/* Static Inline Function Definitions */
+
+/**
+ * @brief String Equality (Inequality)
+ * @return 0 if the strings are the same (different); !0 otherwise.
+ */
+
+static inline int   streq        (const char* s, const char* t){
+    return !strcmp(s,t);
+}
+static inline int   strne        (const char* s, const char* t){
+    return !streq(s,t);
+}
+
+/**
+ * @brief Quick print of status message.
+ */
+
+static inline int   i2hfprintf   (FILE*            fp,
+                                  const char*      f,
+                                  ...){
+    va_list ap;
+    int     ret=0;
+    
+    fp = fp ? fp : stderr;
+    va_start(ap, f);
+    ret = vfprintf(fp, f, ap);
+    va_end  (ap);
+    return ret;
+}
+
+/**
+ * @brief Miscellaneous string testing and utility functions.
+ */
+
+static int strendswith(const char* s, const char* e){
     size_t ls = strlen(s), le = strlen(e);
     return ls<le ? 0 : !strcmp(s+ls-le, e);
 }
-int      str2chromafmt(const char* s){
+static int str2chromafmt(const char* s){
     if      (!strcmp(s, "yuv400")){return BENZINA_CHROMAFMT_YUV400;
     }else if(!strcmp(s, "yuv420")){return BENZINA_CHROMAFMT_YUV420;
     }else if(!strcmp(s, "yuv422")){return BENZINA_CHROMAFMT_YUV422;
@@ -31,16 +164,530 @@ int      str2chromafmt(const char* s){
         return -100;
     }
 }
-int      str2canvaschromafmt(const char* s){
+static int str2canvaschromafmt(const char* s){
     return !strcmp(s, "yuv420super") ? BENZINA_CHROMAFMT_YUV420 : str2chromafmt(s);
 }
-int      av2benzinachromaloc(enum AVChromaLocation chroma_loc){
+static int av2benzinachromaloc(enum AVChromaLocation chroma_loc){
     if(chroma_loc == AVCHROMA_LOC_UNSPECIFIED)
         return BENZINA_CHROMALOC_CENTER;
     return (int)chroma_loc - 1;
 }
-enum AVChromaLocation benzina2avchromaloc(int chroma_loc){
+static enum AVChromaLocation benzina2avchromaloc(int chroma_loc){
     return (enum AVChromaLocation)(chroma_loc + 1);
+}
+
+/**
+ * @brief Fixup several possible problems in frame metadata.
+ * 
+ * Some pixel formats are deprecated in favour of a combination with other
+ * attributes (such as color_range), so we fix them up.
+ * 
+ * The AV_CODEC_ID_MJPEG decoder still reports the pixel format using the
+ * obsolete pixel-format codes AV_PIX_FMT_YUVJxxxP. This causes problems
+ * while filtering with graph filters not aware of the deprecated pixel
+ * formats.
+ * 
+ * Fix this up by replacing the deprecated pixel formats with the
+ * corresponding AV_PIX_FMT_YUVxxxP code, and setting the color_range to
+ * full-range: AVCOL_RANGE_JPEG.
+ * 
+ * The color primary, transfer function and colorspace data may all be
+ * unspecified. Fill in with plausible data.
+ * 
+ * @param [in]  f   The AVFrame whose attributes are to be fixed up.
+ * @return 0.
+ */
+
+static int i2h_fixup_frame(AVFrame* f){
+    switch(f->format){
+        #define FIXUPFORMAT(p)                         \
+            case AV_PIX_FMT_YUVJ ## p:                 \
+                f->format      = AV_PIX_FMT_YUV ## p;  \
+                f->color_range = AVCOL_RANGE_JPEG;     \
+            break
+        FIXUPFORMAT(411P);
+        FIXUPFORMAT(420P);
+        FIXUPFORMAT(422P);
+        FIXUPFORMAT(440P);
+        FIXUPFORMAT(444P);
+        default: break;
+        #undef  FIXUPFORMAT
+    }
+    switch(f->color_primaries){
+        case AVCOL_PRI_RESERVED0:
+        case AVCOL_PRI_RESERVED:
+        case AVCOL_PRI_UNSPECIFIED:
+            f->color_primaries = AVCOL_PRI_BT709;
+        break;
+        default: break;
+    }
+    switch(f->color_trc){
+        case AVCOL_TRC_RESERVED0:
+        case AVCOL_TRC_RESERVED:
+        case AVCOL_TRC_UNSPECIFIED:
+            f->color_trc = AVCOL_TRC_IEC61966_2_1;
+        break;
+        default: break;
+    }
+    switch(f->colorspace){
+        case AVCOL_SPC_RESERVED:
+        case AVCOL_TRC_UNSPECIFIED:
+            f->colorspace = AVCOL_SPC_BT470BG;
+        break;
+        default: break;
+    }
+    return 0;
+}
+
+/**
+ * @brief Pick a canonical, losslessly compatible pixel format for given pixel
+ *        format.
+ * 
+ * By losslessly converting to one of a few canonical formats, we minimize the
+ * number of pixel formats to support.
+ * 
+ * @return The canonical destination pixel format for a given source format, or
+ *         AV_PIX_FMT_NONE if not supported.
+ */
+
+static enum AVPixelFormat i2h_pick_pix_fmt(enum AVPixelFormat src){
+    switch(src){
+        case AV_PIX_FMT_YUV420P:
+        case AV_PIX_FMT_YUVA420P:
+        case AV_PIX_FMT_GRAY8:
+        case AV_PIX_FMT_YA8:
+        case AV_PIX_FMT_MONOBLACK:
+        case AV_PIX_FMT_MONOWHITE:
+        case AV_PIX_FMT_NV12:
+        case AV_PIX_FMT_NV21:
+            return AV_PIX_FMT_YUV420P;
+        case AV_PIX_FMT_YUV444P:
+        case AV_PIX_FMT_YUVA444P:
+            return AV_PIX_FMT_YUV444P;
+        case AV_PIX_FMT_GBRP:
+        case AV_PIX_FMT_0BGR:
+        case AV_PIX_FMT_0RGB:
+        case AV_PIX_FMT_ABGR:
+        case AV_PIX_FMT_ARGB:
+        case AV_PIX_FMT_BGR0:
+        case AV_PIX_FMT_BGR24:
+        case AV_PIX_FMT_BGRA:
+        case AV_PIX_FMT_GBRAP:
+        case AV_PIX_FMT_PAL8:
+        case AV_PIX_FMT_RGB0:
+        case AV_PIX_FMT_RGB24:
+        case AV_PIX_FMT_RGBA:
+            return AV_PIX_FMT_GBRP;
+        case AV_PIX_FMT_YUV420P16LE:
+        case AV_PIX_FMT_YUV420P16BE:
+        case AV_PIX_FMT_YUVA420P16LE:
+        case AV_PIX_FMT_YUVA420P16BE:
+        case AV_PIX_FMT_YA16BE:
+        case AV_PIX_FMT_YA16LE:
+        case AV_PIX_FMT_GRAY16BE:
+        case AV_PIX_FMT_GRAY16LE:
+        case AV_PIX_FMT_P016BE:
+        case AV_PIX_FMT_P016LE:
+            return AV_PIX_FMT_YUV420P16LE;
+        case AV_PIX_FMT_YUV444P16LE:
+        case AV_PIX_FMT_YUV444P16BE:
+        case AV_PIX_FMT_YUVA444P16LE:
+        case AV_PIX_FMT_YUVA444P16BE:
+        case AV_PIX_FMT_AYUV64BE:
+        case AV_PIX_FMT_AYUV64LE:
+            return AV_PIX_FMT_YUV444P16LE;
+        case AV_PIX_FMT_GBRP16LE:
+        case AV_PIX_FMT_GBRP16BE:
+        case AV_PIX_FMT_GBRAP16LE:
+        case AV_PIX_FMT_GBRAP16BE:
+        case AV_PIX_FMT_BGRA64LE:
+        case AV_PIX_FMT_BGRA64BE:
+        case AV_PIX_FMT_RGBA64LE:
+        case AV_PIX_FMT_RGBA64BE:
+        case AV_PIX_FMT_BGR48BE:
+        case AV_PIX_FMT_BGR48LE:
+        case AV_PIX_FMT_RGB48BE:
+        case AV_PIX_FMT_RGB48LE:
+            return AV_PIX_FMT_GBRP16LE;
+        case AV_PIX_FMT_YUV410P:
+            return AV_PIX_FMT_NONE;
+        case AV_PIX_FMT_YUV411P:
+            return AV_PIX_FMT_NONE;
+        case AV_PIX_FMT_UYYVYY411:
+            return AV_PIX_FMT_NONE;
+        case AV_PIX_FMT_YUV420P9LE:
+        case AV_PIX_FMT_YUV420P9BE:
+        case AV_PIX_FMT_YUVA420P9LE:
+        case AV_PIX_FMT_YUVA420P9BE:
+            return AV_PIX_FMT_NONE;
+        case AV_PIX_FMT_YUV420P10LE:
+        case AV_PIX_FMT_YUV420P10BE:
+        case AV_PIX_FMT_YUVA420P10LE:
+        case AV_PIX_FMT_YUVA420P10BE:
+        case AV_PIX_FMT_P010LE:
+        case AV_PIX_FMT_P010BE:
+            return AV_PIX_FMT_NONE;
+        case AV_PIX_FMT_YUV420P12LE:
+        case AV_PIX_FMT_YUV420P12BE:
+            return AV_PIX_FMT_NONE;
+        case AV_PIX_FMT_YUV420P14LE:
+        case AV_PIX_FMT_YUV420P14BE:
+            return AV_PIX_FMT_NONE;
+        case AV_PIX_FMT_GBRP9LE:
+        case AV_PIX_FMT_GBRP9BE:
+        case AV_PIX_FMT_GRAY9LE:
+        case AV_PIX_FMT_GRAY9BE:
+            return AV_PIX_FMT_NONE;
+        case AV_PIX_FMT_GBRP10LE:
+        case AV_PIX_FMT_GBRP10BE:
+        case AV_PIX_FMT_GBRAP10LE:
+        case AV_PIX_FMT_GBRAP10BE:
+        case AV_PIX_FMT_GRAY10LE:
+        case AV_PIX_FMT_GRAY10BE:
+            return AV_PIX_FMT_NONE;
+        case AV_PIX_FMT_GBRP12LE:
+        case AV_PIX_FMT_GBRP12BE:
+        case AV_PIX_FMT_GBRAP12LE:
+        case AV_PIX_FMT_GBRAP12BE:
+        case AV_PIX_FMT_GRAY12LE:
+        case AV_PIX_FMT_GRAY12BE:
+            return AV_PIX_FMT_NONE;
+        case AV_PIX_FMT_GBRP14LE:
+        case AV_PIX_FMT_GBRP14BE:
+            return AV_PIX_FMT_NONE;
+        case AV_PIX_FMT_YUV422P:
+        case AV_PIX_FMT_YUVA422P:
+        case AV_PIX_FMT_UYVY422:
+        case AV_PIX_FMT_YVYU422:
+        case AV_PIX_FMT_YUYV422:
+        case AV_PIX_FMT_NV16:
+            return AV_PIX_FMT_NONE;
+        case AV_PIX_FMT_YUV422P9LE:
+        case AV_PIX_FMT_YUV422P9BE:
+        case AV_PIX_FMT_YUVA422P9LE:
+        case AV_PIX_FMT_YUVA422P9BE:
+            return AV_PIX_FMT_NONE;
+        case AV_PIX_FMT_YUV422P10LE:
+        case AV_PIX_FMT_YUV422P10BE:
+        case AV_PIX_FMT_YUVA422P10LE:
+        case AV_PIX_FMT_YUVA422P10BE:
+        case AV_PIX_FMT_NV20LE:
+        case AV_PIX_FMT_NV20BE:
+            return AV_PIX_FMT_NONE;
+        case AV_PIX_FMT_YUV422P12LE:
+        case AV_PIX_FMT_YUV422P12BE:
+            return AV_PIX_FMT_NONE;
+        case AV_PIX_FMT_YUV422P14LE:
+        case AV_PIX_FMT_YUV422P14BE:
+            return AV_PIX_FMT_NONE;
+        case AV_PIX_FMT_YUV422P16LE:
+        case AV_PIX_FMT_YUV422P16BE:
+        case AV_PIX_FMT_YUVA422P16LE:
+        case AV_PIX_FMT_YUVA422P16BE:
+            return AV_PIX_FMT_NONE;
+        case AV_PIX_FMT_YUV440P:
+            return AV_PIX_FMT_NONE;
+        case AV_PIX_FMT_YUV440P10LE:
+        case AV_PIX_FMT_YUV440P10BE:
+            return AV_PIX_FMT_NONE;
+        case AV_PIX_FMT_YUV440P12LE:
+        case AV_PIX_FMT_YUV440P12BE:
+            return AV_PIX_FMT_NONE;
+        case AV_PIX_FMT_YUV444P9LE:
+        case AV_PIX_FMT_YUV444P9BE:
+        case AV_PIX_FMT_YUVA444P9LE:
+        case AV_PIX_FMT_YUVA444P9BE:
+            return AV_PIX_FMT_NONE;
+        case AV_PIX_FMT_YUV444P10LE:
+        case AV_PIX_FMT_YUV444P10BE:
+        case AV_PIX_FMT_YUVA444P10LE:
+        case AV_PIX_FMT_YUVA444P10BE:
+            return AV_PIX_FMT_NONE;
+        case AV_PIX_FMT_YUV444P12LE:
+        case AV_PIX_FMT_YUV444P12BE:
+            return AV_PIX_FMT_NONE;
+        case AV_PIX_FMT_YUV444P14LE:
+        case AV_PIX_FMT_YUV444P14BE:
+            return AV_PIX_FMT_NONE;
+        case AV_PIX_FMT_GBRPF32LE:
+        case AV_PIX_FMT_GBRPF32BE:
+        case AV_PIX_FMT_GBRAPF32LE:
+        case AV_PIX_FMT_GBRAPF32BE:
+            return AV_PIX_FMT_NONE;
+        default:
+            return AV_PIX_FMT_NONE;
+#if FF_API_VAAPI
+        case AV_PIX_FMT_VAAPI_MOCO:
+        case AV_PIX_FMT_VAAPI_IDCT:
+#endif
+        case AV_PIX_FMT_CUDA:
+        case AV_PIX_FMT_D3D11:
+        case AV_PIX_FMT_D3D11VA_VLD:
+        case AV_PIX_FMT_DRM_PRIME:
+        case AV_PIX_FMT_MEDIACODEC:
+        case AV_PIX_FMT_MMAL:
+        case AV_PIX_FMT_OPENCL:
+        case AV_PIX_FMT_QSV:
+        case AV_PIX_FMT_VAAPI:
+        case AV_PIX_FMT_VDPAU:
+        case AV_PIX_FMT_VIDEOTOOLBOX:
+        case AV_PIX_FMT_XVMC:
+            return AV_PIX_FMT_NONE;
+    }
+}
+
+/**
+ * @brief Convert input frame to output with canonical pixel format.
+ * 
+ * @param [out]  out  Output frame, with canonical pixel format.
+ * @param [in]   in   Input frame.
+ * @return 0 if successful; !0 otherwise.
+ */
+
+static int i2h_canonicalize_pixfmt(AVFrame* out, AVFrame* in){
+    enum AVPixelFormat canonical     = i2h_pick_pix_fmt(in->format);
+    AVFilterGraph*     graph         = NULL;
+    AVFilterInOut*     inputs        = NULL;
+    AVFilterInOut*     outputs       = NULL;
+    AVFilterContext*   buffersrcctx  = NULL;
+    AVFilterContext*   buffersinkctx = NULL;
+    const AVFilter*    buffersrc     = NULL;
+    const AVFilter*    buffersink    = NULL;
+    char               graphstr     [512] = {0};
+    char               buffersrcargs[512] = {0};
+    int                ret           = -EINVAL;
+    
+    
+    /**
+     * Fast Check
+     */
+    
+    if(canonical == AV_PIX_FMT_NONE){
+        i2hmessage(stderr, "Pixel format %s unsupported!\n",
+                   av_get_pix_fmt_name(in->format));
+        return -EINVAL;
+    }
+    
+    
+    /**
+     * Graph Init
+     */
+    
+    
+    buffersrc  = avfilter_get_by_name("buffer");
+    buffersink = avfilter_get_by_name("buffersink");
+    if(!buffersrc || !buffersink){
+        i2hmessage(stderr, "Failed to find buffer or buffersink filter objects!\n");
+        return -EINVAL;
+    }
+    graph = avfilter_graph_alloc();
+    if(!graph){
+        i2hmessage(stderr, "Failed to allocate graph object!\n");
+        return -ENOMEM;
+    }
+    avfilter_graph_set_auto_convert(graph, AVFILTER_AUTO_CONVERT_NONE);
+    outputs = avfilter_inout_alloc();
+    inputs  = avfilter_inout_alloc();
+    if(!outputs   || !inputs){
+        i2hmessage(stderr, "Failed to allocate inout objects!\n");
+        avfilter_graph_free(&graph);
+        avfilter_inout_free(&outputs);
+        avfilter_inout_free(&inputs);
+        return -ENOMEM;
+    }
+    inputs ->name       = av_strdup("out");
+    inputs ->filter_ctx = NULL;
+    inputs ->pad_idx    = 0;
+    inputs ->next       = NULL;
+    outputs->name       = av_strdup("in");
+    outputs->filter_ctx = NULL;
+    outputs->pad_idx    = 0;
+    outputs->next       = NULL;
+    if(!inputs->name || !outputs->name){
+        i2hmessage(stderr, "Failed to allocate name for filter input/output!\n");
+        ret = -ENOMEM;
+        goto fail;
+    }
+    
+    
+    /**
+     * The arguments for the buffersrc filter, buffersink filter, and the
+     * creation of the graph must be done as follows. Even if other ways are
+     * documented, they will *NOT* work.
+     * 
+     *   - buffersrc:  snprintf() a minimal set of arguments into a string.
+     *   - buffersink: av_opt_set_int_list() a list of admissible pixel formats.
+     *                   -> Avoided by use of the "format" filter in graph.
+     *   - graph:      1) snprintf() the graph description into a string.
+     *                 2) avfilter_graph_parse_ptr() parse it.
+     *                 3) avfilter_graph_config() configure it.
+     */
+    
+    snprintf(buffersrcargs, sizeof(buffersrcargs),
+             "video_size=%dx%d:pix_fmt=%d:sar=%d/%d:time_base=1/30:frame_rate=30",
+             in->width, in->height, in->format,
+             in->sample_aspect_ratio.num,
+             in->sample_aspect_ratio.den);
+    
+    snprintf(graphstr, sizeof(graphstr),
+             "scale=in_range=jpeg:out_range=jpeg,format=pix_fmts=%s",
+             av_get_pix_fmt_name(canonical));
+    ret = avfilter_graph_create_filter(&outputs->filter_ctx,
+                                       buffersrc,
+                                       "in",
+                                       buffersrcargs,
+                                       NULL,
+                                       graph);
+    if(ret < 0){
+        i2hmessage(stderr, "Failed to allocate buffersrc filter instance!\n");
+        goto fail;
+    }
+    ret = avfilter_graph_create_filter(&inputs->filter_ctx,
+                                       buffersink,
+                                       "out",
+                                       NULL,
+                                       NULL,
+                                       graph);
+    if(ret < 0){
+        i2hmessage(stderr, "Failed to allocate buffersink filter instance!\n");
+        goto fail;
+    }
+    buffersrcctx  = outputs->filter_ctx;
+    buffersinkctx = inputs ->filter_ctx;
+    ret = avfilter_graph_parse_ptr(graph, graphstr, &inputs, &outputs, NULL);
+    if(ret < 0){
+        i2hmessage(stderr, "Error parsing graph! (%d)\n", ret);
+        goto fail;
+    }
+    ret = avfilter_graph_config(graph, NULL);
+    if(ret < 0){
+        i2hmessage(stderr, "Error configuring graph! (%d)\n", ret);
+        goto fail;
+    }
+    
+#if 0
+    char* str = avfilter_graph_dump(graph, "");
+    if(str){
+        i2hmessage(stdout, "%s\n", str);
+    }
+    i2hmessage(stdout, "%s\n", graphstr);
+    av_free(str);
+#endif
+    
+    
+    /**
+     * Push the input  frame into the graph.
+     * Pull the to-be-filtered frame from the graph.
+     * 
+     * Flushing the input pipeline requires either closing the buffer source
+     * or pushing in a NULL frame.
+     */
+    
+    ret = av_buffersrc_add_frame_flags(buffersrcctx, in, AV_BUFFERSRC_FLAG_KEEP_REF);
+    av_buffersrc_close(buffersrcctx, 0, 0);
+    if(ret < 0){
+        i2hmessage(stderr, "Error pushing frame into graph! (%d)\n", ret);
+        goto fail;
+    }
+    ret = av_buffersink_get_frame(buffersinkctx, out);
+    if(ret < 0){
+        i2hmessage(stderr, "Error pulling frame from graph! (%d)\n", ret);
+        goto fail;
+    }
+    
+    
+    /**
+     * Destroy graph and return.
+     */
+    
+    ret = 0;
+    fail:
+    avfilter_free      (buffersrcctx);
+    avfilter_free      (buffersinkctx);
+    avfilter_inout_free(&outputs);
+    avfilter_inout_free(&inputs);
+    avfilter_graph_free(&graph);
+    return ret;
+}
+
+/**
+ * @brief Return whether the stream is of image/video type (contains pixel data).
+ * 
+ * @param [in]  avfctx  Format context whose streams we are inspecting.
+ * @param [in]  stream  Integer number of the stream we are inspecting.
+ * @return 0 if not a valid stream or not of image/video type; 1 otherwise.
+ */
+
+static int i2h_is_imagelike_stream(AVFormatContext* avfctx, int stream){
+    if(stream < 0 || stream >= (int)avfctx->nb_streams){
+        return 0;
+    }
+    return avfctx->streams[stream]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO;
+}
+
+/**
+ * @brief Convert to x264-expected string the integer code for color primaries,
+ *        transfer characteristics and color space.
+ * 
+ * @return A string representation of the code, as named by x264; Otherwise NULL.
+ */
+
+static const char* i2h_x264_color_primaries(enum AVColorPrimaries color_primaries){
+    switch(color_primaries){
+        case AVCOL_PRI_BT709:         return "bt709";
+        case AVCOL_PRI_BT470M:        return "bt470m";
+        case AVCOL_PRI_BT470BG:       return "bt470bg";
+        case AVCOL_PRI_SMPTE170M:     return "smpte170m";
+        case AVCOL_PRI_SMPTE240M:     return "smpte240m";
+        case AVCOL_PRI_FILM:          return "film";
+        case AVCOL_PRI_BT2020:        return "bt2020";
+        case AVCOL_PRI_SMPTE428:      return "smpte428";
+        case AVCOL_PRI_SMPTE431:      return "smpte431";
+        case AVCOL_PRI_SMPTE432:      return "smpte432";
+        default:                      return NULL;
+    }
+}
+static const char* i2h_x264_color_trc(enum AVColorTransferCharacteristic color_trc){
+    switch(color_trc){
+        case AVCOL_TRC_BT709:         return "bt709";
+        case AVCOL_TRC_GAMMA22:       return "bt470m";
+        case AVCOL_TRC_GAMMA28:       return "bt470bg";
+        case AVCOL_TRC_SMPTE170M:     return "smpte170m";
+        case AVCOL_TRC_SMPTE240M:     return "smpte240m";
+        case AVCOL_TRC_LINEAR:        return "linear";
+        case AVCOL_TRC_LOG:           return "log100";
+        case AVCOL_TRC_LOG_SQRT:      return "log316";
+        case AVCOL_TRC_IEC61966_2_4:  return "iec61966-2-4";
+        case AVCOL_TRC_BT1361_ECG:    return "bt1361e";
+        case AVCOL_TRC_IEC61966_2_1:  return "iec61966-2-1";
+        case AVCOL_TRC_BT2020_10:     return "bt2020-10";
+        case AVCOL_TRC_BT2020_12:     return "bt2020-12";
+        case AVCOL_TRC_SMPTE2084:     return "smpte2084";
+        case AVCOL_TRC_SMPTE428:      return "smpte428";
+        case AVCOL_TRC_ARIB_STD_B67:  return "arib-std-b67";
+        default:                      return NULL;
+    }
+}
+static const char* i2h_x264_color_space(enum AVColorSpace color_space){
+    switch(color_space){
+        case AVCOL_SPC_BT709:              return "bt709";
+        case AVCOL_SPC_FCC:                return "fcc";
+        case AVCOL_SPC_BT470BG:            return "bt470bg";
+        case AVCOL_SPC_SMPTE170M:          return "smpte170m";
+        case AVCOL_SPC_SMPTE240M:          return "smpte240m";
+        case AVCOL_SPC_RGB:                return "GBR";
+        case AVCOL_SPC_YCGCO:              return "YCgCo";
+        case AVCOL_SPC_BT2020_NCL:         return "bt2020nc";
+        case AVCOL_SPC_BT2020_CL:          return "bt2020c";
+        case AVCOL_SPC_CHROMA_DERIVED_NCL: return "chroma-derived-nc";
+        case AVCOL_SPC_CHROMA_DERIVED_CL:  return "chroma-derived-c";
+        case AVCOL_SPC_SMPTE2085:          return "smpte2085";
+        default:                           return NULL;
+    }
+}
+
+static int  i2h_cuda_filter(UNIVERSE* u, AVFrame* dst, AVFrame* src, BENZINA_GEOM* geom){
+    return 0;
 }
 
 /**
@@ -51,7 +698,7 @@ enum AVChromaLocation benzina2avchromaloc(int chroma_loc){
  * @return 0 if successful; !0 otherwise.
  */
 
-static int  i2v_configure_encoder(UNIVERSE* u, AVFrame* frame){
+static int  i2h_configure_encoder(UNIVERSE* u, AVFrame* frame){
     char          x264params[1024];
     const char*   colorprimStr;
     const char*   transferStr;
@@ -67,12 +714,12 @@ static int  i2v_configure_encoder(UNIVERSE* u, AVFrame* frame){
     
     u->out.codec = avcodec_find_encoder(AV_CODEC_ID_H264);
     if(!u->out.codec)
-        i2vmessageexit(EINVAL, stderr, "Cannot transcode to H264! Please rebuild with an "
+        i2hmessageexit(EINVAL, stderr, "Cannot transcode to H264! Please rebuild with an "
                                        "FFmpeg configured with --enable-libx264.\n");
     
     u->out.codecCtx = avcodec_alloc_context3(u->out.codec);
     if(!u->out.codecCtx)
-        i2vmessageexit(ENOMEM, stderr, "Could not allocate encoder!\n");
+        i2hmessageexit(ENOMEM, stderr, "Could not allocate encoder!\n");
     
     u->out.codecCtx->width                  = frame->width;
     u->out.codecCtx->height                 = frame->height;
@@ -89,14 +736,14 @@ static int  i2v_configure_encoder(UNIVERSE* u, AVFrame* frame){
     u->out.codecCtx->flags                 |= AV_CODEC_FLAG_LOOP_FILTER;
     u->out.codecCtx->thread_count           = 1;
     u->out.codecCtx->slices                 = 1;
-    colorprimStr   = i2v_x264_color_primaries(frame->color_primaries);
-    colorprimStr   = colorprimStr   ? colorprimStr   : i2v_x264_color_primaries(
+    colorprimStr   = i2h_x264_color_primaries(frame->color_primaries);
+    colorprimStr   = colorprimStr   ? colorprimStr   : i2h_x264_color_primaries(
                                       frame->color_primaries = AVCOL_PRI_BT709);
-    transferStr    = i2v_x264_color_trc      (frame->color_trc);
-    transferStr    = transferStr    ? transferStr    : i2v_x264_color_trc(
+    transferStr    = i2h_x264_color_trc      (frame->color_trc);
+    transferStr    = transferStr    ? transferStr    : i2h_x264_color_trc(
                                       frame->color_trc       = AVCOL_TRC_IEC61966_2_1);
-    colormatrixStr = i2v_x264_color_space    (frame->colorspace);
-    colormatrixStr = colormatrixStr ? colormatrixStr : i2v_x264_color_space(
+    colormatrixStr = i2h_x264_color_space    (frame->colorspace);
+    colormatrixStr = colormatrixStr ? colormatrixStr : i2h_x264_color_space(
                                       frame->colorspace      = AVCOL_SPC_BT470BG);
     snprintf(x264params, sizeof(x264params),
              "ref=1:chromaloc=1:log=-1:slices-max=32:fullrange=on:stitchable=1:"
@@ -113,15 +760,15 @@ static int  i2v_configure_encoder(UNIVERSE* u, AVFrame* frame){
     u->ret = avcodec_open2(u->out.codecCtx, u->out.codec, &codecCtxOpt);
     if(av_dict_count(codecCtxOpt)){
         AVDictionaryEntry* entry = NULL;
-        i2vmessage(stderr, "Warning: codec ignored %d options!\n",
+        i2hmessage(stderr, "Warning: codec ignored %d options!\n",
                            av_dict_count(codecCtxOpt));
         while((entry=av_dict_get(codecCtxOpt, "", entry, AV_DICT_IGNORE_SUFFIX))){
-            i2vmessage(stderr, "    %20s: %s\n", entry->key, entry->value);
+            i2hmessage(stderr, "    %20s: %s\n", entry->key, entry->value);
         }
     }
     av_dict_free(&codecCtxOpt);
     if(u->ret < 0)
-        i2vmessageexit(u->ret, stderr, "Could not open encoder! (%d)\n", u->ret);
+        i2hmessageexit(u->ret, stderr, "Could not open encoder! (%d)\n", u->ret);
     
     
     /* Return */
@@ -134,7 +781,7 @@ static int  i2v_configure_encoder(UNIVERSE* u, AVFrame* frame){
  * @param [in,out]  u     The universe we're operating over.
  */
 
-static void i2v_deconfigure_encoder(UNIVERSE* u){
+static void i2h_deconfigure_encoder(UNIVERSE* u){
     avcodec_free_context(&u->out.codecCtx);
     u->out.codec = NULL;
 }
@@ -153,28 +800,28 @@ static void i2v_deconfigure_encoder(UNIVERSE* u){
  *   - Writing it out.
  */
 
-static int  i2v_do_frame        (UNIVERSE*        u, AVFrame* frame){
+static int  i2h_do_frame        (UNIVERSE*        u, AVFrame* frame){
     AVFrame*     graphfiltframe = NULL;
     AVFrame*     cudafiltframe  = NULL;
     
     /* Graph & CUDA Filtering Init */
     graphfiltframe = av_frame_alloc();
     if(!graphfiltframe)
-        i2vmessageexit(ENOMEM, stderr, "Error allocating frame!\n");
+        i2hmessageexit(ENOMEM, stderr, "Error allocating frame!\n");
     
     cudafiltframe = av_frame_alloc();
     if(!cudafiltframe)
-        i2vmessageexit(ENOMEM, stderr, "Error allocating frame!\n");
+        i2hmessageexit(ENOMEM, stderr, "Error allocating frame!\n");
     
     
     /**
      * Fixup and graph-filter to canonicalize input frame
      */
     
-    i2v_fixup_frame(frame);
-    u->ret = i2v_canonicalize_pixfmt(graphfiltframe, frame);
+    i2h_fixup_frame(frame);
+    u->ret = i2h_canonicalize_pixfmt(graphfiltframe, frame);
     if(u->ret < 0)
-        i2vmessageexit(u->ret, stderr, "Failed to canonicalize pixel format! (%d)\n", u->ret);
+        i2hmessageexit(u->ret, stderr, "Failed to canonicalize pixel format! (%d)\n", u->ret);
     
     
     /**
@@ -195,7 +842,7 @@ static int  i2v_do_frame        (UNIVERSE*        u, AVFrame* frame){
         case AV_PIX_FMT_GBRP:
         case AV_PIX_FMT_YUV444P: u->tx.geom.i.source.chroma_fmt = BENZINA_CHROMAFMT_YUV444; break;
         default:
-            i2vmessageexit(EINVAL, stderr, "Unsupported pixel format %s!\n",
+            i2hmessageexit(EINVAL, stderr, "Unsupported pixel format %s!\n",
                                            av_get_pix_fmt_name(graphfiltframe->format));
     }
     u->tx.geom.i.canvas.w          = u->args.canvas.w;
@@ -217,7 +864,7 @@ static int  i2v_do_frame        (UNIVERSE*        u, AVFrame* frame){
         case BENZINA_CHROMAFMT_YUV422: cudafiltframe->format = AV_PIX_FMT_YUV422P; break;
         case BENZINA_CHROMAFMT_YUV444: cudafiltframe->format = AV_PIX_FMT_YUV444P; break;
         default:
-            i2vmessageexit(EINVAL, stderr, "Unsupported canvas chroma_fmt %d!\n",
+            i2hmessageexit(EINVAL, stderr, "Unsupported canvas chroma_fmt %d!\n",
                                            u->args.canvas.chroma_fmt);
     }
     cudafiltframe->chroma_location = benzina2avchromaloc(u->tx.geom.o.chroma_loc);
@@ -227,17 +874,17 @@ static int  i2v_do_frame        (UNIVERSE*        u, AVFrame* frame){
     cudafiltframe->colorspace      = graphfiltframe->colorspace;
     u->ret = av_frame_get_buffer(cudafiltframe, 0);
     if(u->ret != 0)
-        i2vmessageexit(ENOMEM, stderr, "Error allocating frame! (%d)\n", u->ret);
+        i2hmessageexit(ENOMEM, stderr, "Error allocating frame! (%d)\n", u->ret);
     
-    u->ret = i2v_cuda_filter(u, cudafiltframe, graphfiltframe, &u->tx.geom);
+    u->ret = i2h_cuda_filter(u, cudafiltframe, graphfiltframe, &u->tx.geom);
     if(u->ret < 0)
-        i2vmessageexit(u->ret, stderr, "Failed to filter image! (%d)\n", u->ret);
+        i2hmessageexit(u->ret, stderr, "Failed to filter image! (%d)\n", u->ret);
     
     
     /* Encoding Init */
     u->out.packet = av_packet_alloc();
     if(!u->out.packet)
-        i2vmessageexit(ENOMEM, stderr, "Failed to allocate packet object!\n");
+        i2hmessageexit(ENOMEM, stderr, "Failed to allocate packet object!\n");
     
     
     /**
@@ -247,24 +894,24 @@ static int  i2v_do_frame        (UNIVERSE*        u, AVFrame* frame){
      * Flushing the input encode pipeline requires pushing in a NULL frame.
      */
     
-    u->ret = i2v_configure_encoder(u, cudafiltframe);
+    u->ret = i2h_configure_encoder(u, cudafiltframe);
     if(u->ret)
-        i2vmessageexit(u->ret, stderr, "Failed to configure x264 encoder! (%d)\n", u->ret);
+        i2hmessageexit(u->ret, stderr, "Failed to configure x264 encoder! (%d)\n", u->ret);
     
     cudafiltframe->pts = frame->best_effort_timestamp;
     u->ret = avcodec_send_frame(u->out.codecCtx, cudafiltframe);
     if(u->ret < 0)
-        i2vmessageexit(u->ret, stderr, "Error pushing frame into encoder! (%d)\n", u->ret);
+        i2hmessageexit(u->ret, stderr, "Error pushing frame into encoder! (%d)\n", u->ret);
     
     u->ret = avcodec_send_frame(u->out.codecCtx, NULL);
     if(u->ret < 0)
-        i2vmessageexit(u->ret, stderr, "Error flushing encoder input! (%d)\n", u->ret);
+        i2hmessageexit(u->ret, stderr, "Error flushing encoder input! (%d)\n", u->ret);
     
     u->ret = avcodec_receive_packet(u->out.codecCtx, u->out.packet);
     if(u->ret < 0)
-        i2vmessageexit(u->ret, stderr, "Error pulling packet from encoder! (%d)\n", u->ret);
+        i2hmessageexit(u->ret, stderr, "Error pulling packet from encoder! (%d)\n", u->ret);
     
-    i2v_deconfigure_encoder(u);
+    i2h_deconfigure_encoder(u);
     
     
     /* Write Out */
@@ -290,33 +937,33 @@ static int  i2v_do_frame        (UNIVERSE*        u, AVFrame* frame){
  * In-between, handle frames.
  */
 
-static int  i2v_main            (UNIVERSE* u){
+static int  i2h_main            (UNIVERSE* u){
     /* Input Init */
     u->ret              = avformat_open_input         (&u->in.formatCtx,
                                                        u->args.urlIn,
                                                        NULL, NULL);
     if(u->ret < 0)
-        i2vmessageexit(u->ret, stderr, "Cannot open input media \"%s\"! (%d)\n", u->args.urlIn, u->ret);
+        i2hmessageexit(u->ret, stderr, "Cannot open input media \"%s\"! (%d)\n", u->args.urlIn, u->ret);
     
     u->ret              = avformat_find_stream_info   (u->in.formatCtx, NULL);
     if(u->ret < 0)
-        i2vmessageexit(EIO,    stderr, "Cannot understand input media \"%s\"! (%d)\n", u->args.urlIn, u->ret);
+        i2hmessageexit(EIO,    stderr, "Cannot understand input media \"%s\"! (%d)\n", u->args.urlIn, u->ret);
     
     u->in.formatStream  = av_find_default_stream_index(u->in.formatCtx);
-    if(!i2v_is_imagelike_stream(u->in.formatCtx, u->in.formatStream))
-        i2vmessageexit(EINVAL, stderr, "No image data in media \"%s\"!\n", u->args.urlIn);
+    if(!i2h_is_imagelike_stream(u->in.formatCtx, u->in.formatStream))
+        i2hmessageexit(EINVAL, stderr, "No image data in media \"%s\"!\n", u->args.urlIn);
     
     u->in.codecPar      = u->in.formatCtx->streams[u->in.formatStream]->codecpar;
     u->in.codec         = avcodec_find_decoder        (u->in.codecPar->codec_id);
     u->in.codecCtx      = avcodec_alloc_context3      (u->in.codec);
     if(!u->in.codecCtx)
-        i2vmessageexit(EINVAL, stderr, "Could not allocate decoder!\n");
+        i2hmessageexit(EINVAL, stderr, "Could not allocate decoder!\n");
     
     u->ret              = avcodec_open2               (u->in.codecCtx,
                                                        u->in.codec,
                                                        NULL);
     if(u->ret < 0)
-        i2vmessageexit(u->ret, stderr, "Could not open decoder! (%d)\n", u->ret);
+        i2hmessageexit(u->ret, stderr, "Could not open decoder! (%d)\n", u->ret);
     
     
     /**
@@ -326,11 +973,11 @@ static int  i2v_main            (UNIVERSE* u){
     do{
         AVPacket* packet = av_packet_alloc();
         if(!packet)
-            i2vmessageexit(ENOMEM, stderr, "Failed to allocate packet object!\n");
+            i2hmessageexit(ENOMEM, stderr, "Failed to allocate packet object!\n");
         
         u->ret = av_read_frame(u->in.formatCtx, packet);
         if(u->ret < 0)
-            i2vmessageexit(u->ret, stderr, "Error or end-of-file reading media \"%s\" (%d)!\n",
+            i2hmessageexit(u->ret, stderr, "Error or end-of-file reading media \"%s\" (%d)!\n",
                                            u->args.urlIn, u->ret);
         
         if(packet->stream_index != u->in.formatStream){
@@ -339,17 +986,17 @@ static int  i2v_main            (UNIVERSE* u){
             u->ret = avcodec_send_packet(u->in.codecCtx, packet);
             av_packet_free(&packet);
             if(u->ret){
-                i2vmessageexit(u->ret, stderr, "Error pushing packet! (%d)\n", u->ret);
+                i2hmessageexit(u->ret, stderr, "Error pushing packet! (%d)\n", u->ret);
             }else{
                 AVFrame* frame = av_frame_alloc();
                 if(!frame)
-                    i2vmessageexit(ENOMEM, stderr, "Error allocating frame!\n");
+                    i2hmessageexit(ENOMEM, stderr, "Error allocating frame!\n");
                 
                 u->ret = avcodec_receive_frame(u->in.codecCtx, frame);
                 if(u->ret)
-                    i2vmessageexit(u->ret, stderr, "Error pulling frame! (%d)\n",  u->ret);
+                    i2hmessageexit(u->ret, stderr, "Error pulling frame! (%d)\n",  u->ret);
                 
-                u->ret = i2v_do_frame(u, frame);
+                u->ret = i2h_do_frame(u, frame);
                 av_frame_free(&frame);
             }
             break;
@@ -378,8 +1025,8 @@ static int  i2v_main            (UNIVERSE* u){
  * @param [in,out]  u     The universe we're operating over.
  */
 
-static void i2v_do_one_group(UNIVERSE* u){
-    i2v_main(u);
+static void i2h_do_one_group(UNIVERSE* u){
+    i2h_main(u);
 }
 
 /**
@@ -393,25 +1040,25 @@ static void i2v_do_one_group(UNIVERSE* u){
  * @param [out]    pOut    Pointer to next argument we should handle.
  */
 
-static void i2v_parse_input (UNIVERSE* u, char** p, char*** pOut){
+static void i2h_parse_input (UNIVERSE* u, char** p, char*** pOut){
     if(p[1]){
         u->args.urlIn = p[1];
         p += 2;
     }else{
-        i2vmessageexit(EINVAL, stderr, "Error: Missing argument to -i\n");
+        i2hmessageexit(EINVAL, stderr, "Error: Missing argument to -i\n");
     }
     *pOut = p;
 }
-static void i2v_parse_embed (UNIVERSE* u, char** p, char*** pOut){
+static void i2h_parse_embed (UNIVERSE* u, char** p, char*** pOut){
     if(p[1]){
         u->args.urlEmb = p[1];
         p += 2;
     }else{
-        i2vmessageexit(EINVAL, stderr, "Error: Missing argument to -e\n");
+        i2hmessageexit(EINVAL, stderr, "Error: Missing argument to -e\n");
     }
     *pOut = p;
 }
-static void i2v_parse_canvas(UNIVERSE* u, char** p, char*** pOut){
+static void i2h_parse_canvas(UNIVERSE* u, char** p, char*** pOut){
     char canvasChromaFmt[21] = "yuv420";
     if(p[1]){
         switch(sscanf(p[1], "%u:%u:%20[yuv420super]",
@@ -425,32 +1072,32 @@ static void i2v_parse_canvas(UNIVERSE* u, char** p, char*** pOut){
         u->args.canvas.superscale = strendswith(canvasChromaFmt, "super");
         u->args.canvas.chroma_fmt = str2canvaschromafmt(canvasChromaFmt);
         if(u->args.canvas.w < 48 || u->args.canvas.w > 4096 || u->args.canvas.w % 16 != 0)
-            i2vmessageexit(EINVAL, stderr, "Coded width must be 48-4096 pixels in multiples of 16!\n");
+            i2hmessageexit(EINVAL, stderr, "Coded width must be 48-4096 pixels in multiples of 16!\n");
         if(u->args.canvas.h < 48 || u->args.canvas.h > 4096 || u->args.canvas.h % 16 != 0)
-            i2vmessageexit(EINVAL, stderr, "Coded height must be 48-4096 pixels in multiples of 16!\n");
+            i2hmessageexit(EINVAL, stderr, "Coded height must be 48-4096 pixels in multiples of 16!\n");
         if(u->args.canvas.chroma_fmt < 0)
-            i2vmessageexit(EINVAL, stderr, "Unknown chroma format \"%s\"!\n", canvasChromaFmt);
+            i2hmessageexit(EINVAL, stderr, "Unknown chroma format \"%s\"!\n", canvasChromaFmt);
         
         p += 2;
     }else{
-        i2vmessageexit(EINVAL, stderr, "Error: Missing argument to --canvas\n");
+        i2hmessageexit(EINVAL, stderr, "Error: Missing argument to --canvas\n");
     }
     *pOut = p;
 }
-static void i2v_parse_crf   (UNIVERSE* u, char** p, char*** pOut){
+static void i2h_parse_crf   (UNIVERSE* u, char** p, char*** pOut){
     char* s;
     if(p[1]){
         u->args.crf = strtoull(p[1], &s, 0);
         if((u->args.crf > 51) || (*s != '\0')){
-            i2vmessageexit(EINVAL, stderr, "Error: --crf must be integer in range [0, 51]!\n");
+            i2hmessageexit(EINVAL, stderr, "Error: --crf must be integer in range [0, 51]!\n");
         }
         p += 2;
     }else{
-        i2vmessageexit(EINVAL, stderr, "Error: Missing argument to --crf\n");
+        i2hmessageexit(EINVAL, stderr, "Error: Missing argument to --crf\n");
     }
     *pOut = p;
 }
-static void i2v_parse_x264  (UNIVERSE* u, char** p, char*** pOut){
+static void i2h_parse_x264  (UNIVERSE* u, char** p, char*** pOut){
     if(p[1]){
         if(p[1][0] != '-'){
             u->args.x264params = p[1];
@@ -461,10 +1108,10 @@ static void i2v_parse_x264  (UNIVERSE* u, char** p, char*** pOut){
     }
     *pOut = p;
 }
-static void i2v_parse_output(UNIVERSE* u, char** p, char*** pOut){
+static void i2h_parse_output(UNIVERSE* u, char** p, char*** pOut){
     if(streq(*p, "-o")){
         if(!*++p){
-            i2vmessageexit(EINVAL, stderr, "Error: Missing argument to -o\n");
+            i2hmessageexit(EINVAL, stderr, "Error: Missing argument to -o\n");
         }
     }
     u->args.urlOut = *p++;
@@ -483,7 +1130,7 @@ static void i2v_parse_output(UNIVERSE* u, char** p, char*** pOut){
  *                         or NULL if there isn't one.
  */
 
-static void i2v_parse_one_group(UNIVERSE* u, char** argv, char*** argvOut){
+static void i2h_parse_one_group(UNIVERSE* u, char** argv, char*** argvOut){
     /* Set defaults for argument group */
     u->args.urlIn             =                     NULL;
     u->args.urlEmb            =                     NULL;
@@ -498,20 +1145,20 @@ static void i2v_parse_one_group(UNIVERSE* u, char** argv, char*** argvOut){
     /* Iterate over arguments group */
     while(*argv && u->ret == 0){
         if      (streq(*argv, "-i")){
-            i2v_parse_input (u, argv, &argv);
+            i2h_parse_input (u, argv, &argv);
         }else if(streq(*argv, "-e")){
-            i2v_parse_embed (u, argv, &argv);
+            i2h_parse_embed (u, argv, &argv);
         }else if(streq(*argv, "--canvas")){
-            i2v_parse_canvas(u, argv, &argv);
+            i2h_parse_canvas(u, argv, &argv);
         }else if(streq(*argv, "--crf")){
-            i2v_parse_crf   (u, argv, &argv);
+            i2h_parse_crf   (u, argv, &argv);
         }else if(streq(*argv, "--x264")){
-            i2v_parse_x264  (u, argv, &argv);
+            i2h_parse_x264  (u, argv, &argv);
         }else if(streq(*argv, "-o") || **argv != '-'){
-            i2v_parse_output(u, argv, &argv);
+            i2h_parse_output(u, argv, &argv);
             break;
         }else{
-            i2vmessageexit(EINVAL, stderr, "Error: Unknown option %s!\n", *argv);
+            i2hmessageexit(EINVAL, stderr, "Error: Unknown option %s!\n", *argv);
         }
     }
     
@@ -525,9 +1172,9 @@ static void i2v_parse_one_group(UNIVERSE* u, char** argv, char*** argvOut){
  * @param [in,out]  u     The universe we're operating over.
  */
 
-static void i2v_validate_one_group(UNIVERSE* u){
+static void i2h_validate_one_group(UNIVERSE* u){
     if(!u->args.urlIn || !*u->args.urlIn){
-        i2vmessageexit(EINVAL, stderr, "No input media provided as argument!\n");
+        i2hmessageexit(EINVAL, stderr, "No input media provided as argument!\n");
     }
     
     if(!u->args.urlEmb          ||
@@ -536,7 +1183,7 @@ static void i2v_validate_one_group(UNIVERSE* u){
     }else{
         u->emb.fp = fopen(u->args.urlEmb, "r");
         if(!u->emb.fp)
-            i2vmessageexit(EPERM, stderr, "Cannot open embedded data file!\n");
+            i2hmessageexit(EPERM, stderr, "Cannot open embedded data file!\n");
     }
     
     if(!u->args.urlOut           ||
@@ -546,7 +1193,7 @@ static void i2v_validate_one_group(UNIVERSE* u){
     }else{
         u->out.fp = fopen(u->args.urlOut, "a+b");
         if(!u->out.fp)
-            i2vmessageexit(EPERM, stderr, "Cannot open output media!\n");
+            i2hmessageexit(EPERM, stderr, "Cannot open output media!\n");
     }
 }
 
@@ -564,14 +1211,14 @@ static void i2v_validate_one_group(UNIVERSE* u){
  * @return Exit code.
  */
 
-static int  i2v_interpret_args  (UNIVERSE*        u,
+static int  i2h_interpret_args  (UNIVERSE*        u,
                                  int              argc,
                                  char**           argv){
     (void)argc;
     while(*argv){
-        i2v_parse_one_group(u, argv, &argv);
-        i2v_validate_one_group(u);
-        i2v_do_one_group(u);
+        i2h_parse_one_group(u, argv, &argv);
+        i2h_validate_one_group(u);
+        i2h_do_one_group(u);
     }
     return u->ret;
 }
@@ -582,5 +1229,748 @@ static int  i2v_interpret_args  (UNIVERSE*        u,
 
 int main(int argc, char* argv[]){
     static UNIVERSE ustack = {0}, *u = &ustack;
-    return i2v_interpret_args(u, argc-1, argv+1);
+    return i2h_interpret_args(u, argc-1, argv+1);
 }
+
+
+
+#if 0
+/**
+ * Collection of CUDA kernels that accurately resamples and convert from
+ * FFmpeg's better-supported pixel formats to full-range YUV420P.
+ * 
+ * 
+ * Not supported:
+ *   - Bayer Pattern:    bayer_*
+ *   - Sub-8-bit RGB:    bgr4, rgb4, bgr8, rgb8, bgr4_byte, rgb4_byte,
+ *                       bgr444be, bgr444le, rgb444be, rgb444le,
+ *                       bgr555be, bgr555le, rgb555be, rgb555le,
+ *                       bgr565be, bgr565le, rgb565be, rgb565le
+ *   - Hardware formats: ...
+ *   - XYZ:              xyz12be, xyz12le
+ */
+
+
+
+/* CUDA kernels */
+
+/**
+ * @brief Floating-point clamp
+ */
+
+static float  fclampf(float lo, float x, float hi){
+    return fmaxf(lo, fminf(x, hi));
+}
+
+/**
+ * @brief Elementwise math Functions
+ */
+
+static float3 lerps3(float3 a, float3 b, float m){
+    return make_float3((1.0f-m)*a.x + (m)*b.x,
+                       (1.0f-m)*a.y + (m)*b.y,
+                       (1.0f-m)*a.z + (m)*b.z);
+}
+static float3 lerpv3(float3 a, float3 b, float3 m){
+    return make_float3((1.0f-m.x)*a.x + (m.x)*b.x,
+                       (1.0f-m.y)*a.y + (m.y)*b.y,
+                       (1.0f-m.z)*a.z + (m.z)*b.z);
+}
+
+/**
+ * @brief Forward/Backward Transfer Functions
+ * 
+ * Some of the backward functions are not yet implemented, because
+ * deriving them is non-trivial.
+ * 
+ * Reference:
+ *     ITU-T Rec. H.264   (10/2016)
+ *     http://avisynth.nl/index.php/Colorimetry
+ */
+
+static float  fwXfrFn (float  L, unsigned fn){
+    float a, b, g, c1, c2, c3, n, m, p;
+    
+    switch(fn){
+        case BENZINA_XFR_BT_709:
+        case BENZINA_XFR_SMPTE_ST_170M:
+        case BENZINA_XFR_BT_2020_10BIT:
+        case BENZINA_XFR_BT_2020_12BIT:
+            a = 1.099296826809442f;
+            b = 0.018053968510807f;
+            return L >= b ? a*powf(L, 0.45f) - (a-1.f) : 4.500f*L;
+        case BENZINA_XFR_GAMMA22: return powf(fmaxf(L, 0.f), 1.f/2.2f);
+        case BENZINA_XFR_GAMMA28: return powf(fmaxf(L, 0.f), 1.f/2.8f);
+        case BENZINA_XFR_SMPTE_ST_240M:
+            a = 1.111572195921731f;
+            b = 0.022821585529445f;
+            return L >= b ? a*powf(L, 0.45f) - (a-1.f) : 4.0f*L;
+        case BENZINA_XFR_LINEAR:  return L;
+        case BENZINA_XFR_LOG20:   return L < sqrtf(1e-4) ? 0.f : 1.f + log10f(L)/2.0f;
+        case BENZINA_XFR_LOG25:   return L < sqrtf(1e-5) ? 0.f : 1.f + log10f(L)/2.5f;
+        case BENZINA_XFR_IEC_61966_2_4:
+            a = 1.099296826809442f;
+            b = 0.018053968510807f;
+            if      (L >= +b){return +a*powf(+L, 0.45f) - (a-1.f);
+            }else if(L <= -b){return -a*powf(-L, 0.45f) + (a-1.f);
+            }else{            return 4.5f*L;
+            }
+        case BENZINA_XFR_BT_1361:
+            a = 1.099296826809442f;
+            b = 0.018053968510807f;
+            g = b/4.f;
+            if      (L >= +b){return +(a*powf(+1.f*L, 0.45f) - (a-1.f));
+            }else if(L <= -g){return -(a*powf(-4.f*L, 0.45f) - (a-1.f))/4.f;
+            }else{            return 4.5f*L;
+            }
+        case BENZINA_XFR_UNSPECIFIED:
+        case BENZINA_XFR_IEC_61966_2_1:
+        default:
+            a = 1.055f;
+            b = 0.0031308f;
+            return L > b ? a*powf(L, 1.f/2.4f) - (a-1.f) : 12.92f*L;
+        case BENZINA_XFR_BT_2100_PQ:
+            c1 =  107.f/  128.f;
+            c2 = 2413.f/  128.f;
+            c3 = 2392.f/  128.f;
+            m  = 2523.f/   32.f;
+            n  = 2610.f/16384.f;
+            p  = powf(fmaxf(L, 0.f), n);
+            return powf((c1+c2*p)/(1.f+c3*p), m);
+        case BENZINA_XFR_SMPTE_ST_428: return powf(48.f*fmaxf(L, 0.f)/52.37f, 1.f/2.6f);
+    }
+}
+static float  bwXfrFn (float  V, unsigned fn){
+    float a, b;
+    
+    switch(fn){
+        case BENZINA_XFR_BT_709:
+        case BENZINA_XFR_SMPTE_ST_170M:
+        case BENZINA_XFR_BT_2020_10BIT:
+        case BENZINA_XFR_BT_2020_12BIT:
+            a = 0.099296826809442f;
+            b = 0.08124285829863229f;
+            return V >= b ? powf((V+a)/(1.f+a), 1.f/0.45f) : V/4.500f;
+        case BENZINA_XFR_GAMMA22: return powf(V, 2.2f);
+        case BENZINA_XFR_GAMMA28: return powf(V, 2.8f);
+        case BENZINA_XFR_SMPTE_ST_240M:
+            a = 1.111572195921731f;
+            b = 0.09128634211778018f;
+            return V >= b ? powf((V+a)/(1.f+a), 1.f/0.45f) : V/4.0f;
+        case BENZINA_XFR_LINEAR:  return V;
+        case BENZINA_XFR_LOG20:   return powf(10.f, (V-1.f)*2.0f);
+        case BENZINA_XFR_LOG25:   return powf(10.f, (V-1.f)*2.5f);
+        case BENZINA_XFR_IEC_61966_2_4:  return 0.0f;/* FIXME: Implement me! */
+        case BENZINA_XFR_BT_1361:      return 0.0f;/* FIXME: Implement me! */
+        case BENZINA_XFR_UNSPECIFIED:
+        case BENZINA_XFR_IEC_61966_2_1:
+        default:
+            a = 0.055f;
+            b = 0.04045f;
+            return V >  b ? powf((V+a)/(1.f+a),      2.4f) : V/12.92f;
+        case BENZINA_XFR_BT_2100_PQ:      return 0.0f;/* FIXME: Implement me! */
+        case BENZINA_XFR_SMPTE_ST_428: return powf(V, 2.6f)*52.37f/48.f;
+    }
+}
+static float3 fwXfrCol(float3   p,
+                       unsigned cm,
+                       unsigned fn,
+                       unsigned fullRange,
+                       unsigned YDepth,
+                       unsigned CDepth){
+    float Eg=p.x, Eb=p.y, Er=p.z;
+    float Ey;
+    float Epy, Eppb, Eppr;
+    float Epr, Epg,  Epb;
+    float Kr, Kb;
+    float Y,  Cb, Cr;
+    float R,  G,  B;
+    float Nb, Pb, Nr, Pr;
+    float YClamp, YSwing, YShift;
+    float CClamp, CSwing, CShift;
+    
+    if(fullRange){
+        switch(cm){
+            case 0:
+            case 8:
+                YClamp=(1<<YDepth)-1;
+                YSwing=(1<<YDepth)-1;
+                YShift=0;
+                CClamp=(1<<CDepth)-1;
+                CSwing=(1<<CDepth)-1;
+                CShift=0;
+            break;
+            default:
+                YClamp=(1<<YDepth)-1;
+                YSwing=(1<<YDepth)-1;
+                YShift=0;
+                CClamp=(1<<CDepth)-1;
+                CSwing=(1<<CDepth)-1;
+                CShift=(1<<(CDepth-1));
+            break;
+        }
+    }else{
+        switch(cm){
+            case 0:
+            case 8:
+                YClamp=(1<<YDepth)-1;
+                YSwing=219<<(YDepth-8);
+                YShift= 16<<(YDepth-8);
+                CClamp=(1<<CDepth)-1;
+                CSwing=219<<(CDepth-8);
+                CShift= 16<<(CDepth-8);
+            break;
+            default:
+                YClamp=(1<<YDepth)-1;
+                YSwing=219<<(YDepth-8);
+                YShift= 16<<(YDepth-8);
+                CClamp=(1<<CDepth)-1;
+                CSwing=224<<(CDepth-8);
+                CShift=(1<<(CDepth-1));
+            break;
+        }
+    }
+    switch(cm){
+        case  1: Kr=0.2126, Kb=0.0722; break;
+        case  4: Kr=0.30,   Kb=0.11;   break;
+        case  5:
+        case  6:
+        default: Kr=0.299,  Kb=0.114;  break;
+        case  7: Kr=0.212,  Kb=0.087;  break;
+        case  9:
+        case 10: Kr=0.2627, Kb=0.0593; break;
+    }
+    switch(cm){
+        case  2:
+            /* Unknown. Fall-through to common case. */
+        case  1:
+        case  4:
+        case  5:
+        case  6:
+        case  7:
+        case  9:
+        default:
+            Epr  = fwXfrFn(Er, fn);                                    /* E-1. Nominal range [0,1]. */
+            Epg  = fwXfrFn(Eg, fn);                                    /* E-2. Nominal range [0,1]. */
+            Epb  = fwXfrFn(Eb, fn);                                    /* E-3. Nominal range [0,1]. */
+            Epy  = Kr*Epr + (1-Kr-Kb)*Epg + Kb*Epb;                    /* E-16 */
+            Eppb = 0.5f*(Epb-Epy)/(1-Kb);                              /* E-17 */
+            Eppr = 0.5f*(Epr-Epy)/(1-Kr);                              /* E-18 */
+            Y    = fclampf(0, YSwing*Epy  + YShift, YClamp);           /* E-4 */
+            Cb   = fclampf(0, CSwing*Eppb + CShift, CClamp);           /* E-5 */
+            Cr   = fclampf(0, CSwing*Eppr + CShift, CClamp);           /* E-6 */
+        break;
+        case 10:
+            Nb   = fwXfrFn(1-Kb, fn);                                  /* E-43 */
+            Pb   = 1-fwXfrFn(Kb, fn);                                  /* E-44 */
+            Nr   = fwXfrFn(1-Kr, fn);                                  /* E-45 */
+            Pr   = 1-fwXfrFn(Kr, fn);                                  /* E-46 */
+            Ey   = Kr*Er + (1-Kr-Kb)*Eg + Kb*Eb;                       /* E-37 */
+            Epy  = fwXfrFn(Ey, fn);                                    /* E-38 */
+            Epr  = fwXfrFn(Er, fn);                                    /* E-1. Nominal range [0,1]. */
+            Epb  = fwXfrFn(Eb, fn);                                    /* E-3. Nominal range [0,1]. */
+            Eppb = (Epb-Epy)<0 ? (Epb-Epy)/(2*Nb) : (Epb-Epy)/(2*Pb);  /* E-39, E-40 */
+            Eppr = (Epr-Epy)<0 ? (Epr-Epy)/(2*Nr) : (Epr-Epy)/(2*Pr);  /* E-41, E-42 */
+            Y    = fclampf(0, YSwing*Epy  + YShift, YClamp);           /* E-4 */
+            Cb   = fclampf(0, CSwing*Eppb + CShift, CClamp);           /* E-5 */
+            Cr   = fclampf(0, CSwing*Eppr + CShift, CClamp);           /* E-6 */
+        break;
+        case 11:
+            Epr  = fwXfrFn(Er, fn);                                    /* E-1. Nominal range [0,1]. */
+            Epg  = fwXfrFn(Eg, fn);                                    /* E-2. Nominal range [0,1]. */
+            Epb  = fwXfrFn(Eb, fn);                                    /* E-3. Nominal range [0,1]. */
+            Epy  = Epg;                                                /* E-47. Y'  */
+            Eppb = (0.986566f*Epb - Epy) * 0.5f;                       /* E-48. D'z */
+            Eppr = (Epr - 0.991902f*Epy) * 0.5f;                       /* E-49. D'x */
+            Y    = fclampf(0, YSwing*Epy  + YShift, YClamp);           /* E-4 */
+            Cb   = fclampf(0, CSwing*Eppb + CShift, CClamp);           /* E-5 */
+            Cr   = fclampf(0, CSwing*Eppr + CShift, CClamp);           /* E-6 */
+        break;
+        case  0:
+            Epr  = fwXfrFn(Er, fn);                                    /* E-1. Nominal range [0,1]. */
+            Epg  = fwXfrFn(Eg, fn);                                    /* E-2. Nominal range [0,1]. */
+            Epb  = fwXfrFn(Eb, fn);                                    /* E-3. Nominal range [0,1]. */
+            R    = fclampf(0, YSwing*Epr + YShift, YClamp);            /* E-7 */
+            G    = fclampf(0, CSwing*Epg + CShift, CClamp);            /* E-8 */
+            B    = fclampf(0, CSwing*Epb + CShift, CClamp);            /* E-9 */
+            Y    = G;                                                  /* E-19 */
+            Cb   = B;                                                  /* E-20 */
+            Cr   = R;                                                  /* E-21 */
+        break;
+        case  8:
+            Epr  = fwXfrFn(Er, fn);                                    /* E-1. Nominal range [0,1]. */
+            Epg  = fwXfrFn(Eg, fn);                                    /* E-2. Nominal range [0,1]. */
+            Epb  = fwXfrFn(Eb, fn);                                    /* E-3. Nominal range [0,1]. */
+            R    = fclampf(0, YSwing*Epr + YShift, YClamp);            /* E-7 */
+            G    = fclampf(0, YSwing*Epg + YShift, CClamp);            /* E-8 */
+            B    = fclampf(0, YSwing*Epb + YShift, CClamp);            /* E-9 */
+            Y    = 0.5f*G + 0.25f*(R+B);                               /* E-22. Y  */
+            Cb   = 0.5f*G - 0.25f*(R+B) + (1<<(CDepth-1));             /* E-23. Cg */
+            Cr   = 0.5f*(R-B)           + (1<<(CDepth-1));             /* E-24. Co */
+        break;
+    }
+    
+    return make_float3(Y, Cb, Cr);
+}
+static float3 bwXfrCol(float3 p,
+                       unsigned cm,
+                       unsigned fn,
+                       unsigned fullRange,
+                       unsigned YDepth,
+                       unsigned CDepth){
+    float Y=p.x,  Cb=p.y, Cr=p.z;
+    float Epy, Eppb, Eppr;
+    float Epr, Epg,  Epb;
+    float Er,  Eg,   Eb;
+    float Ey;
+    float Kr, Kb;
+    float R,  G,  B,  t;
+    float Nb, Pb, Nr, Pr;
+    float YSwing, YShift;
+    float CSwing, CShift;
+    
+    if(fullRange){
+        switch(cm){
+            case 0:
+            case 8:
+                YSwing=(1<<YDepth)-1;
+                YShift=0;
+                CSwing=(1<<CDepth)-1;
+                CShift=0;
+            break;
+            default:
+                YSwing=(1<<YDepth)-1;
+                YShift=0;
+                CSwing=(1<<CDepth)-1;
+                CShift=(1<<(CDepth-1));
+            break;
+        }
+    }else{
+        switch(cm){
+            case 0:
+            case 8:
+                YSwing=219<<(YDepth-8);
+                YShift= 16<<(YDepth-8);
+                CSwing=219<<(CDepth-8);
+                CShift= 16<<(CDepth-8);
+            break;
+            default:
+                YSwing=219<<(YDepth-8);
+                YShift= 16<<(YDepth-8);
+                CSwing=224<<(CDepth-8);
+                CShift=(1<<(CDepth-1));
+            break;
+        }
+    }
+    switch(cm){
+        case  1: Kr=0.2126, Kb=0.0722; break;
+        case  4: Kr=0.30,   Kb=0.11;   break;
+        case  5:
+        case  6:
+        default: Kr=0.299,  Kb=0.114;  break;
+        case  7: Kr=0.212,  Kb=0.087;  break;
+        case  9:
+        case 10: Kr=0.2627, Kb=0.0593; break;
+    }
+    switch(cm){
+        case  2:
+            /* Unknown. Fall-through to common case. */
+        case  1:
+        case  4:
+        case  5:
+        case  6:
+        case  7:
+        case  9:
+        default:
+            Epy  = fclampf(0, (Y -YShift)/YSwing, 1);                  /* E-4 */
+            Eppb = fclampf(0, (Cb-CShift)/CSwing, 1);                  /* E-5 */
+            Eppr = fclampf(0, (Cr-CShift)/CSwing, 1);                  /* E-6 */
+            Epr  = Epy + (1-Kr)*2*Eppr;                                /* E-16,17,18 Inverse */
+            Epg  = Epy - (1-Kb)*Kb/(1-Kb-Kr)*2*Eppb                    /* E-16,17,18 Inverse */
+                       - (1-Kr)*Kr/(1-Kb-Kr)*2*Eppr;                   /* E-16,17,18 Inverse */
+            Epb  = Epy + (1-Kb)*2*Eppb;                                /* E-16,17,18 Inverse */
+            Er   = bwXfrFn(Epr, fn);                                   /* E-1. Nominal range [0,1]. */
+            Eg   = bwXfrFn(Epg, fn);                                   /* E-2. Nominal range [0,1]. */
+            Eb   = bwXfrFn(Epb, fn);                                   /* E-3. Nominal range [0,1]. */
+        break;
+        case 10:
+            Nb   = fwXfrFn(1-Kb, fn);                                  /* E-43 */
+            Pb   = 1-fwXfrFn(Kb, fn);                                  /* E-44 */
+            Nr   = fwXfrFn(1-Kr, fn);                                  /* E-45 */
+            Pr   = 1-fwXfrFn(Kr, fn);                                  /* E-46 */
+            Epy  = fclampf(0, (Y -YShift)/YSwing, 1);                  /* E-4 */
+            Eppb = fclampf(0, (Cb-CShift)/CSwing, 1);                  /* E-5 */
+            Eppr = fclampf(0, (Cr-CShift)/CSwing, 1);                  /* E-6 */
+            Epb  = Eppb<0 ? Eppb*2*Nb+Epy : Eppb*2*Pb+Epy;             /* E-39, E-40 */
+            Epr  = Eppr<0 ? Eppr*2*Nr+Epy : Eppr*2*Pr+Epy;             /* E-39, E-40 */
+            Ey   = bwXfrFn(Epy, fn);                                   /* E-38 */
+            Er   = bwXfrFn(Epr, fn);                                   /* E-1. Nominal range [0,1]. */
+            Eb   = bwXfrFn(Epb, fn);                                   /* E-3. Nominal range [0,1]. */
+            Eg   = (Ey - Kr*Er - Kb*Eb)/(1-Kr-Kb);                     /* E-37 */
+        break;
+        case 11:
+            Epy  = fclampf(0, (Y -YShift)/YSwing, 1);                  /* E-4 */
+            Eppb = fclampf(0, (Cb-CShift)/CSwing, 1);                  /* E-5 */
+            Eppr = fclampf(0, (Cr-CShift)/CSwing, 1);                  /* E-6 */
+            Epg  = Epy;                                                /* E-47. Y'  */
+            Epb  = (2*Eppb + Epg)/0.986566f;                           /* E-48. D'z */
+            Epr  = 2*Eppr + 0.991902f*Epg;                             /* E-49. D'x */
+            Er   = bwXfrFn(Epr, fn);                                   /* E-1. Nominal range [0,1]. */
+            Eg   = bwXfrFn(Epg, fn);                                   /* E-2. Nominal range [0,1]. */
+            Eb   = bwXfrFn(Epb, fn);                                   /* E-3. Nominal range [0,1]. */
+        break;
+        case  0:
+            G    = Y;                                                  /* E-19 */
+            B    = Cb;                                                 /* E-20 */
+            R    = Cr;                                                 /* E-21 */
+            Epr  = fclampf(0, (R-YShift)/YSwing, 1);                   /* E-7 */
+            Epg  = fclampf(0, (G-YShift)/YSwing, 1);                   /* E-8 */
+            Epb  = fclampf(0, (B-YShift)/YSwing, 1);                   /* E-9 */
+            Er   = bwXfrFn(Epr, fn);                                   /* E-1. Nominal range [0,1]. */
+            Eg   = bwXfrFn(Epg, fn);                                   /* E-2. Nominal range [0,1]. */
+            Eb   = bwXfrFn(Epb, fn);                                   /* E-3. Nominal range [0,1]. */
+        break;
+        case  8:
+            t    = Y - (Cb-(1<<(CDepth-1)));                           /* E-25 */
+            G    = fclampf(0, Y+(Cb-(1<<(CDepth-1))), ((1<<CDepth)-1));/* E-26 */
+            B    = fclampf(0, t-(Cr-(1<<(CDepth-1))), ((1<<CDepth)-1));/* E-27 */
+            R    = fclampf(0, t+(Cr-(1<<(CDepth-1))), ((1<<CDepth)-1));/* E-28 */
+            Epr  = fclampf(0, (R-YShift)/YSwing, 1);                   /* E-7 */
+            Epg  = fclampf(0, (G-YShift)/YSwing, 1);                   /* E-8 */
+            Epb  = fclampf(0, (B-YShift)/YSwing, 1);                   /* E-9 */
+            Er   = bwXfrFn(Epr, fn);                                   /* E-1. Nominal range [0,1]. */
+            Eg   = bwXfrFn(Epg, fn);                                   /* E-2. Nominal range [0,1]. */
+            Eb   = bwXfrFn(Epb, fn);                                   /* E-3. Nominal range [0,1]. */
+        break;
+    }
+    
+    return make_float3(Eg, Eb, Er);
+}
+
+
+
+
+/**
+ * @brief Conversion Kernels
+ */
+
+/**
+ * @brief Conversion from gbrp to yuv420p
+ * 
+ * Every thread handles a 2x2 pixel block, due to yuv420p's inherent chroma
+ * subsampling.
+ */
+
+template<int  DST_CM         = AVCOL_SPC_BT470BG,
+         int  SRC_CM         = AVCOL_SPC_BT470BG,
+         int  FN             = AVCOL_TRC_IEC61966_2_1,
+         bool SRC_FULL_SWING = true,
+         bool DST_FULL_SWING = true,
+         bool LERP           = true,
+         unsigned SRC_YDEPTH = 8,
+         unsigned SRC_CDEPTH = 8,
+         unsigned DST_YDEPTH = 8,
+         unsigned DST_CDEPTH = 8>
+static __global__ void KERNEL_BOUNDS
+i2hKernel_gbrp_to_yuv420p(void* __restrict const dstYPtr,
+                          void* __restrict const dstCbPtr,
+                          void* __restrict const dstCrPtr,
+                          const unsigned         dstH,
+                          const unsigned         dstW,
+                          const unsigned         embedX, const unsigned embedY, const unsigned embedW, const unsigned embedH,
+                          const unsigned         cropX,  const unsigned cropY,  const unsigned cropW,  const unsigned cropH,
+                          const float            kx,     const float    ky,
+                          const float            subX0,  const float    subY0,
+                          const float            subX1,  const float    subY1,
+                          const float            subX2,  const float    subY2,
+                          const float            offX0,  const float    offY0,
+                          const float            offX1,  const float    offY1,
+                          const float            offX2,  const float    offY2,
+                          cudaTextureObject_t    srcGPlane,
+                          cudaTextureObject_t    srcBPlane,
+                          cudaTextureObject_t    srcRPlane){
+    /* Compute Destination Coordinates */
+    const unsigned x = 2*(blockDim.x*blockIdx.x + threadIdx.x);
+    const unsigned y = 2*(blockDim.y*blockIdx.y + threadIdx.y);
+    if(x >= dstW || y >= dstH){return;}
+    
+    /* Compute Destination Y,U,V Pointers */
+    uchar1* const __restrict__ dstPtr0 = (uchar1*)dstYPtr  + (y/1)*dstW/1 + (x/1);
+    uchar1* const __restrict__ dstPtr1 = (uchar1*)dstCbPtr + (y/2)*dstW/2 + (x/2);
+    uchar1* const __restrict__ dstPtr2 = (uchar1*)dstCrPtr + (y/2)*dstW/2 + (x/2);
+    
+    /**
+     * Compute Master Quad Source Coordinates
+     * 
+     * The points (X0,Y0), (X1,Y1), (X2,Y2), (X3,Y3) represent the exact
+     * coordinates at which we must sample for the Y samples 0,1,2,3 respectively.
+     * The Cb/Cr sample corresponding to this quad is interpolated from the
+     * samples drawn above.
+     * 
+     * The destination image is padded and the source image is cropped. This
+     * means that when starting from the raw destination coordinates, we must:
+     * 
+     *    1. Subtract (embedX, embedY), since those are the destination embedding
+     *       offsets in the target buffer.
+     *    2. Clamp to (embedW-1, embedH-1), since those are the true destination
+     *       bounds into the target buffer and any pixel beyond that limit
+     *       should replicate the value found at the edge.
+     *    3. Scale by the factors (kx, ky).
+     *    4. Clamp to (cropW-1, cropH-1), since those are the bounds of the
+     *       cropped source image.
+     *    5. Add (cropX, cropY), since those are the source offsets into the
+     *       cropped source buffer that should correspond to (embedX, embedY)
+     *       in the destination buffer.
+     */
+    
+    /* Plane 0: Y */
+    const float X0p0=(fclampf(0, fclampf(0, x-embedX+0, embedW-1)*kx, cropW-1)+cropX)*subX0+offX0;
+    const float X1p0=(fclampf(0, fclampf(0, x-embedX+1, embedW-1)*kx, cropW-1)+cropX)*subX0+offX0;
+    const float X2p0=(fclampf(0, fclampf(0, x-embedX+0, embedW-1)*kx, cropW-1)+cropX)*subX0+offX0;
+    const float X3p0=(fclampf(0, fclampf(0, x-embedX+1, embedW-1)*kx, cropW-1)+cropX)*subX0+offX0;
+    const float Y0p0=(fclampf(0, fclampf(0, y-embedY+0, embedH-1)*ky, cropH-1)+cropY)*subY0+offY0;
+    const float Y1p0=(fclampf(0, fclampf(0, y-embedY+0, embedH-1)*ky, cropH-1)+cropY)*subY0+offY0;
+    const float Y2p0=(fclampf(0, fclampf(0, y-embedY+1, embedH-1)*ky, cropH-1)+cropY)*subY0+offY0;
+    const float Y3p0=(fclampf(0, fclampf(0, y-embedY+1, embedH-1)*ky, cropH-1)+cropY)*subY0+offY0;
+    /* Plane 1: Cb */
+    const float X0p1=(fclampf(0, fclampf(0, x-embedX+0, embedW-1)*kx, cropW-1)+cropX)*subX1+offX1;
+    const float X1p1=(fclampf(0, fclampf(0, x-embedX+1, embedW-1)*kx, cropW-1)+cropX)*subX1+offX1;
+    const float X2p1=(fclampf(0, fclampf(0, x-embedX+0, embedW-1)*kx, cropW-1)+cropX)*subX1+offX1;
+    const float X3p1=(fclampf(0, fclampf(0, x-embedX+1, embedW-1)*kx, cropW-1)+cropX)*subX1+offX1;
+    const float Y0p1=(fclampf(0, fclampf(0, y-embedY+0, embedH-1)*ky, cropH-1)+cropY)*subY1+offY1;
+    const float Y1p1=(fclampf(0, fclampf(0, y-embedY+0, embedH-1)*ky, cropH-1)+cropY)*subY1+offY1;
+    const float Y2p1=(fclampf(0, fclampf(0, y-embedY+1, embedH-1)*ky, cropH-1)+cropY)*subY1+offY1;
+    const float Y3p1=(fclampf(0, fclampf(0, y-embedY+1, embedH-1)*ky, cropH-1)+cropY)*subY1+offY1;
+    /* Plane 2: Cr */
+    const float X0p2=(fclampf(0, fclampf(0, x-embedX+0, embedW-1)*kx, cropW-1)+cropX)*subX2+offX2;
+    const float X1p2=(fclampf(0, fclampf(0, x-embedX+1, embedW-1)*kx, cropW-1)+cropX)*subX2+offX2;
+    const float X2p2=(fclampf(0, fclampf(0, x-embedX+0, embedW-1)*kx, cropW-1)+cropX)*subX2+offX2;
+    const float X3p2=(fclampf(0, fclampf(0, x-embedX+1, embedW-1)*kx, cropW-1)+cropX)*subX2+offX2;
+    const float Y0p2=(fclampf(0, fclampf(0, y-embedY+0, embedH-1)*ky, cropH-1)+cropY)*subY2+offY2;
+    const float Y1p2=(fclampf(0, fclampf(0, y-embedY+0, embedH-1)*ky, cropH-1)+cropY)*subY2+offY2;
+    const float Y2p2=(fclampf(0, fclampf(0, y-embedY+1, embedH-1)*ky, cropH-1)+cropY)*subY2+offY2;
+    const float Y3p2=(fclampf(0, fclampf(0, y-embedY+1, embedH-1)*ky, cropH-1)+cropY)*subY2+offY2;
+    
+    
+    /* Compute and output pixel depending on interpolation policy. */
+    if(LERP){
+        /**
+         * We will perform linear interpolation manually between sample points.
+         * For this reason we need the coordinates and values of 4 samples for
+         * each of the 4 YUV pixels this thread is computing. In ASCII art:
+         * 
+         *  (0,0)
+         *      +-----------> X
+         *      |           Xb
+         *      |
+         *      |
+         *      v Yb        0  1
+         *      Y             P
+         *                  2  3
+         * 
+         * We must consider three planes separately:
+         * 
+         *   - Plane 0 is luma                   or G
+         *   - Plane 1 is chroma blue-difference or B
+         *   - Plane 2 is chroma red -difference or R
+         * 
+         * If sample i's plane j sample is at (Xipj, Yipj), the quad used to
+         * manually interpolate it has coordinates
+         * 
+         *   - (Xipjq0, Yipjq0)
+         *   - (Xipjq1, Yipjq1)
+         *   - (Xipjq2, Yipjq2)
+         *   - (Xipjq3, Yipjq3)
+         * 
+         * And the interpolation within the quad is done using the scalar pair
+         * 
+         *   - (Xipjf, Yipjf)
+         * 
+         * or for an entire pixel, with the vector pair
+         * 
+         *   - (Xipf, Yipf)
+         */
+        
+        const float X0p0b=floorf(X0p0), X0p0f=X0p0-X0p0b;
+        const float X1p0b=floorf(X1p0), X1p0f=X1p0-X1p0b;
+        const float X2p0b=floorf(X2p0), X2p0f=X2p0-X2p0b;
+        const float X3p0b=floorf(X3p0), X3p0f=X3p0-X3p0b;
+        const float X0p1b=floorf(X0p1), X0p1f=X0p1-X0p1b;
+        const float X1p1b=floorf(X1p1), X1p1f=X1p1-X1p1b;
+        const float X2p1b=floorf(X2p1), X2p1f=X2p1-X2p1b;
+        const float X3p1b=floorf(X3p1), X3p1f=X3p1-X3p1b;
+        const float X0p2b=floorf(X0p2), X0p2f=X0p2-X0p2b;
+        const float X1p2b=floorf(X1p2), X1p2f=X1p2-X1p2b;
+        const float X2p2b=floorf(X2p2), X2p2f=X2p2-X2p2b;
+        const float X3p2b=floorf(X3p2), X3p2f=X3p2-X3p2b;
+        
+        const float Y0p0b=floorf(Y0p0), Y0p0f=Y0p0-Y0p0b;
+        const float Y1p0b=floorf(Y1p0), Y1p0f=Y1p0-Y1p0b;
+        const float Y2p0b=floorf(Y2p0), Y2p0f=Y2p0-Y2p0b;
+        const float Y3p0b=floorf(Y3p0), Y3p0f=Y3p0-Y3p0b;
+        const float Y0p1b=floorf(Y0p1), Y0p1f=Y0p1-Y0p1b;
+        const float Y1p1b=floorf(Y1p1), Y1p1f=Y1p1-Y1p1b;
+        const float Y2p1b=floorf(Y2p1), Y2p1f=Y2p1-Y2p1b;
+        const float Y3p1b=floorf(Y3p1), Y3p1f=Y3p1-Y3p1b;
+        const float Y0p2b=floorf(Y0p2), Y0p2f=Y0p2-Y0p2b;
+        const float Y1p2b=floorf(Y1p2), Y1p2f=Y1p2-Y1p2b;
+        const float Y2p2b=floorf(Y2p2), Y2p2f=Y2p2-Y2p2b;
+        const float Y3p2b=floorf(Y3p2), Y3p2f=Y3p2-Y3p2b;
+        
+        
+        /* Sample from texture at the computed coordinates. */
+        const float3 srcPix00 = make_float3(tex2D<unsigned char>(srcGPlane, X0p0b+0, Y0p0b+0), tex2D<unsigned char>(srcBPlane, X0p1b+0, Y0p1b+0), tex2D<unsigned char>(srcRPlane, X0p2b+0, Y0p2b+0));
+        const float3 srcPix01 = make_float3(tex2D<unsigned char>(srcGPlane, X0p0b+1, Y0p0b+0), tex2D<unsigned char>(srcBPlane, X0p1b+1, Y0p1b+0), tex2D<unsigned char>(srcRPlane, X0p2b+1, Y0p2b+0));
+        const float3 srcPix02 = make_float3(tex2D<unsigned char>(srcGPlane, X0p0b+0, Y0p0b+1), tex2D<unsigned char>(srcBPlane, X0p1b+0, Y0p1b+1), tex2D<unsigned char>(srcRPlane, X0p2b+0, Y0p2b+1));
+        const float3 srcPix03 = make_float3(tex2D<unsigned char>(srcGPlane, X0p0b+1, Y0p0b+1), tex2D<unsigned char>(srcBPlane, X0p1b+1, Y0p1b+1), tex2D<unsigned char>(srcRPlane, X0p2b+1, Y0p2b+1));
+        const float3 srcPix10 = make_float3(tex2D<unsigned char>(srcGPlane, X1p0b+0, Y1p0b+0), tex2D<unsigned char>(srcBPlane, X1p1b+0, Y1p1b+0), tex2D<unsigned char>(srcRPlane, X1p2b+0, Y1p2b+0));
+        const float3 srcPix11 = make_float3(tex2D<unsigned char>(srcGPlane, X1p0b+1, Y1p0b+0), tex2D<unsigned char>(srcBPlane, X1p1b+1, Y1p1b+0), tex2D<unsigned char>(srcRPlane, X1p2b+1, Y1p2b+0));
+        const float3 srcPix12 = make_float3(tex2D<unsigned char>(srcGPlane, X1p0b+0, Y1p0b+1), tex2D<unsigned char>(srcBPlane, X1p1b+0, Y1p1b+1), tex2D<unsigned char>(srcRPlane, X1p2b+0, Y1p2b+1));
+        const float3 srcPix13 = make_float3(tex2D<unsigned char>(srcGPlane, X1p0b+1, Y1p0b+1), tex2D<unsigned char>(srcBPlane, X1p1b+1, Y1p1b+1), tex2D<unsigned char>(srcRPlane, X1p2b+1, Y1p2b+1));
+        const float3 srcPix20 = make_float3(tex2D<unsigned char>(srcGPlane, X2p0b+0, Y2p0b+0), tex2D<unsigned char>(srcBPlane, X2p1b+0, Y2p1b+0), tex2D<unsigned char>(srcRPlane, X2p2b+0, Y2p2b+0));
+        const float3 srcPix21 = make_float3(tex2D<unsigned char>(srcGPlane, X2p0b+1, Y2p0b+0), tex2D<unsigned char>(srcBPlane, X2p1b+1, Y2p1b+0), tex2D<unsigned char>(srcRPlane, X2p2b+1, Y2p2b+0));
+        const float3 srcPix22 = make_float3(tex2D<unsigned char>(srcGPlane, X2p0b+0, Y2p0b+1), tex2D<unsigned char>(srcBPlane, X2p1b+0, Y2p1b+1), tex2D<unsigned char>(srcRPlane, X2p2b+0, Y2p2b+1));
+        const float3 srcPix23 = make_float3(tex2D<unsigned char>(srcGPlane, X2p0b+1, Y2p0b+1), tex2D<unsigned char>(srcBPlane, X2p1b+1, Y2p1b+1), tex2D<unsigned char>(srcRPlane, X2p2b+1, Y2p2b+1));
+        const float3 srcPix30 = make_float3(tex2D<unsigned char>(srcGPlane, X3p0b+0, Y3p0b+0), tex2D<unsigned char>(srcBPlane, X3p1b+0, Y3p1b+0), tex2D<unsigned char>(srcRPlane, X3p2b+0, Y3p2b+0));
+        const float3 srcPix31 = make_float3(tex2D<unsigned char>(srcGPlane, X3p0b+1, Y3p0b+0), tex2D<unsigned char>(srcBPlane, X3p1b+1, Y3p1b+0), tex2D<unsigned char>(srcRPlane, X3p2b+1, Y3p2b+0));
+        const float3 srcPix32 = make_float3(tex2D<unsigned char>(srcGPlane, X3p0b+0, Y3p0b+1), tex2D<unsigned char>(srcBPlane, X3p1b+0, Y3p1b+1), tex2D<unsigned char>(srcRPlane, X3p2b+0, Y3p2b+1));
+        const float3 srcPix33 = make_float3(tex2D<unsigned char>(srcGPlane, X3p0b+1, Y3p0b+1), tex2D<unsigned char>(srcBPlane, X3p1b+1, Y3p1b+1), tex2D<unsigned char>(srcRPlane, X3p2b+1, Y3p2b+1));
+        
+        
+        /* Backward Colorspace and Transfer (EOTF). */
+        const float3 linPix00 = bwXfrCol(srcPix00, SRC_CM, FN, SRC_FULL_SWING, SRC_YDEPTH, SRC_CDEPTH);
+        const float3 linPix01 = bwXfrCol(srcPix01, SRC_CM, FN, SRC_FULL_SWING, SRC_YDEPTH, SRC_CDEPTH);
+        const float3 linPix02 = bwXfrCol(srcPix02, SRC_CM, FN, SRC_FULL_SWING, SRC_YDEPTH, SRC_CDEPTH);
+        const float3 linPix03 = bwXfrCol(srcPix03, SRC_CM, FN, SRC_FULL_SWING, SRC_YDEPTH, SRC_CDEPTH);
+        const float3 linPix10 = bwXfrCol(srcPix10, SRC_CM, FN, SRC_FULL_SWING, SRC_YDEPTH, SRC_CDEPTH);
+        const float3 linPix11 = bwXfrCol(srcPix11, SRC_CM, FN, SRC_FULL_SWING, SRC_YDEPTH, SRC_CDEPTH);
+        const float3 linPix12 = bwXfrCol(srcPix12, SRC_CM, FN, SRC_FULL_SWING, SRC_YDEPTH, SRC_CDEPTH);
+        const float3 linPix13 = bwXfrCol(srcPix13, SRC_CM, FN, SRC_FULL_SWING, SRC_YDEPTH, SRC_CDEPTH);
+        const float3 linPix20 = bwXfrCol(srcPix20, SRC_CM, FN, SRC_FULL_SWING, SRC_YDEPTH, SRC_CDEPTH);
+        const float3 linPix21 = bwXfrCol(srcPix21, SRC_CM, FN, SRC_FULL_SWING, SRC_YDEPTH, SRC_CDEPTH);
+        const float3 linPix22 = bwXfrCol(srcPix22, SRC_CM, FN, SRC_FULL_SWING, SRC_YDEPTH, SRC_CDEPTH);
+        const float3 linPix23 = bwXfrCol(srcPix23, SRC_CM, FN, SRC_FULL_SWING, SRC_YDEPTH, SRC_CDEPTH);
+        const float3 linPix30 = bwXfrCol(srcPix30, SRC_CM, FN, SRC_FULL_SWING, SRC_YDEPTH, SRC_CDEPTH);
+        const float3 linPix31 = bwXfrCol(srcPix31, SRC_CM, FN, SRC_FULL_SWING, SRC_YDEPTH, SRC_CDEPTH);
+        const float3 linPix32 = bwXfrCol(srcPix32, SRC_CM, FN, SRC_FULL_SWING, SRC_YDEPTH, SRC_CDEPTH);
+        const float3 linPix33 = bwXfrCol(srcPix33, SRC_CM, FN, SRC_FULL_SWING, SRC_YDEPTH, SRC_CDEPTH);
+        
+        
+        /* Linear Interpolation */
+        const float3 X0pf     = make_float3(X0p0f, X0p1f, X0p2f);
+        const float3 X1pf     = make_float3(X1p0f, X1p1f, X1p2f);
+        const float3 X2pf     = make_float3(X2p0f, X2p1f, X2p2f);
+        const float3 X3pf     = make_float3(X3p0f, X3p1f, X3p2f);
+        const float3 Y0pf     = make_float3(Y0p0f, Y0p1f, Y0p2f);
+        const float3 Y1pf     = make_float3(Y1p0f, Y1p1f, Y1p2f);
+        const float3 Y2pf     = make_float3(Y2p0f, Y2p1f, Y2p2f);
+        const float3 Y3pf     = make_float3(Y3p0f, Y3p1f, Y3p2f);
+        const float3 linPixD0 = lerpv3(lerpv3(linPix00, linPix01, X0pf), lerpv3(linPix02, linPix03, X0pf), Y0pf);
+        const float3 linPixD1 = lerpv3(lerpv3(linPix10, linPix11, X1pf), lerpv3(linPix12, linPix13, X1pf), Y1pf);
+        const float3 linPixD2 = lerpv3(lerpv3(linPix20, linPix21, X2pf), lerpv3(linPix22, linPix23, X2pf), Y2pf);
+        const float3 linPixD3 = lerpv3(lerpv3(linPix30, linPix31, X3pf), lerpv3(linPix32, linPix33, X3pf), Y3pf);
+        const float3 linPixD4 = lerps3(lerps3(linPixD0, linPixD1, 0.5f), lerps3(linPixD2, linPixD3, 0.5f), 0.5f);
+        
+        
+        /* Forward Colorspace and Transfer (OETF). */
+        const float3 dstPixD0 = fwXfrCol(linPixD0, DST_CM, FN, DST_FULL_SWING, DST_YDEPTH, DST_CDEPTH);
+        const float3 dstPixD1 = fwXfrCol(linPixD1, DST_CM, FN, DST_FULL_SWING, DST_YDEPTH, DST_CDEPTH);
+        const float3 dstPixD2 = fwXfrCol(linPixD2, DST_CM, FN, DST_FULL_SWING, DST_YDEPTH, DST_CDEPTH);
+        const float3 dstPixD3 = fwXfrCol(linPixD3, DST_CM, FN, DST_FULL_SWING, DST_YDEPTH, DST_CDEPTH);
+        const float3 dstPixD4 = fwXfrCol(linPixD4, DST_CM, FN, DST_FULL_SWING, DST_YDEPTH, DST_CDEPTH);
+        
+        
+        /* Store YUV. */
+        dstPtr0[0*dstW/1/1+0]   = make_uchar1(roundf(fclampf(0.f, dstPixD0.x, (1<<DST_YDEPTH)-1)));
+        dstPtr0[0*dstW/1/1+1]   = make_uchar1(roundf(fclampf(0.f, dstPixD1.x, (1<<DST_YDEPTH)-1)));
+        dstPtr0[1*dstW/1/1+0]   = make_uchar1(roundf(fclampf(0.f, dstPixD2.x, (1<<DST_YDEPTH)-1)));
+        dstPtr0[1*dstW/1/1+1]   = make_uchar1(roundf(fclampf(0.f, dstPixD3.x, (1<<DST_YDEPTH)-1)));
+        dstPtr1[0*dstW/2/2+0]   = make_uchar1(roundf(fclampf(0.f, dstPixD4.y, (1<<DST_CDEPTH)-1)));
+        dstPtr2[0*dstW/2/2+0]   = make_uchar1(roundf(fclampf(0.f, dstPixD4.z, (1<<DST_CDEPTH)-1)));
+    }else{
+        /**
+         * We perform nearest-sample point fetch for 4 Y, 1 Cb and 1 Cr samples.
+         * 
+         * Since YUV420 is 2x2 chroma-subsampled, we select the top left
+         * pixel's chroma information, given that we're forbidden to interpolate.
+         * 
+         * We must consider three planes separately:
+         * 
+         *   - Plane 0 is luma                   or G
+         *   - Plane 1 is chroma blue-difference or B
+         *   - Plane 2 is chroma red -difference or R
+         */
+        
+        const float X0p0b=roundf(X0p0);
+        const float X1p0b=roundf(X1p0);
+        const float X2p0b=roundf(X2p0);
+        const float X3p0b=roundf(X3p0);
+        const float X0p1b=roundf(X0p1);
+        const float X1p1b=roundf(X1p1);
+        const float X2p1b=roundf(X2p1);
+        const float X3p1b=roundf(X3p1);
+        const float X0p2b=roundf(X0p2);
+        const float X1p2b=roundf(X1p2);
+        const float X2p2b=roundf(X2p2);
+        const float X3p2b=roundf(X3p2);
+        
+        const float Y0p0b=roundf(Y0p0);
+        const float Y1p0b=roundf(Y1p0);
+        const float Y2p0b=roundf(Y2p0);
+        const float Y3p0b=roundf(Y3p0);
+        const float Y0p1b=roundf(Y0p1);
+        const float Y1p1b=roundf(Y1p1);
+        const float Y2p1b=roundf(Y2p1);
+        const float Y3p1b=roundf(Y3p1);
+        const float Y0p2b=roundf(Y0p2);
+        const float Y1p2b=roundf(Y1p2);
+        const float Y2p2b=roundf(Y2p2);
+        const float Y3p2b=roundf(Y3p2);
+        
+        
+        /* Sample from texture at the computed coordinates. */
+        const float3 srcPix0 = make_float3(tex2D<unsigned char>(srcGPlane, X0p0b+0, Y0p0b+0), tex2D<unsigned char>(srcBPlane, X0p1b+0, Y0p1b+0), tex2D<unsigned char>(srcRPlane, X0p2b+0, Y0p2b+0));
+        const float3 srcPix1 = make_float3(tex2D<unsigned char>(srcGPlane, X1p0b+1, Y1p0b+0), tex2D<unsigned char>(srcBPlane, X1p1b+1, Y1p1b+0), tex2D<unsigned char>(srcRPlane, X1p2b+1, Y1p2b+0));
+        const float3 srcPix2 = make_float3(tex2D<unsigned char>(srcGPlane, X2p0b+0, Y2p0b+1), tex2D<unsigned char>(srcBPlane, X2p1b+0, Y2p1b+1), tex2D<unsigned char>(srcRPlane, X2p2b+0, Y2p2b+1));
+        const float3 srcPix3 = make_float3(tex2D<unsigned char>(srcGPlane, X3p0b+1, Y3p0b+1), tex2D<unsigned char>(srcBPlane, X3p1b+1, Y3p1b+1), tex2D<unsigned char>(srcRPlane, X3p2b+1, Y3p2b+1));
+        
+        
+        /* Backward Colorspace and Transfer (EOTF). */
+        const float3 linPix0 = bwXfrCol(srcPix0, SRC_CM, FN, SRC_FULL_SWING, SRC_YDEPTH, SRC_CDEPTH);
+        const float3 linPix1 = bwXfrCol(srcPix1, SRC_CM, FN, SRC_FULL_SWING, SRC_YDEPTH, SRC_CDEPTH);
+        const float3 linPix2 = bwXfrCol(srcPix2, SRC_CM, FN, SRC_FULL_SWING, SRC_YDEPTH, SRC_CDEPTH);
+        const float3 linPix3 = bwXfrCol(srcPix3, SRC_CM, FN, SRC_FULL_SWING, SRC_YDEPTH, SRC_CDEPTH);
+        
+        
+        /* Forward Colorspace and Transfer (OETF). */
+        const float3 dstPix0 = fwXfrCol(linPix0, DST_CM, FN, DST_FULL_SWING, DST_YDEPTH, DST_CDEPTH);
+        const float3 dstPix1 = fwXfrCol(linPix1, DST_CM, FN, DST_FULL_SWING, DST_YDEPTH, DST_CDEPTH);
+        const float3 dstPix2 = fwXfrCol(linPix2, DST_CM, FN, DST_FULL_SWING, DST_YDEPTH, DST_CDEPTH);
+        const float3 dstPix3 = fwXfrCol(linPix3, DST_CM, FN, DST_FULL_SWING, DST_YDEPTH, DST_CDEPTH);
+        
+        
+        /* Store YUV. */
+        dstPtr0[0*dstW/1/1+0]   = make_uchar1(roundf(fclampf(0.f, dstPix0.x, (1<<DST_YDEPTH)-1)));
+        dstPtr0[0*dstW/1/1+1]   = make_uchar1(roundf(fclampf(0.f, dstPix1.x, (1<<DST_YDEPTH)-1)));
+        dstPtr0[1*dstW/1/1+0]   = make_uchar1(roundf(fclampf(0.f, dstPix2.x, (1<<DST_YDEPTH)-1)));
+        dstPtr0[1*dstW/1/1+1]   = make_uchar1(roundf(fclampf(0.f, dstPix3.x, (1<<DST_YDEPTH)-1)));
+        dstPtr1[0*dstW/2/2+0]   = make_uchar1(roundf(fclampf(0.f, dstPix0.y, (1<<DST_CDEPTH)-1)));
+        dstPtr2[0*dstW/2/2+0]   = make_uchar1(roundf(fclampf(0.f, dstPix0.z, (1<<DST_CDEPTH)-1)));
+    }
+}
+#endif
+
+/**
+ * Other References:
+ * 
+ *   - The "Continuum Magic Kernel Sharp" method:
+ * 
+ *                { 0.0             ,         x <= -1.5
+ *                { 0.5(x+1.5)**2   , -1.5 <= x <= -0.5
+ *         m(x) = { 0.75 - (x)**2   , -0.5 <= x <= +0.5
+ *                { 0.5(x-1.5)**2   , +0.5 <= x <= +1.5
+ *                { 0.0             , +1.5 <= x
+ *     
+ *     followed by the sharpening post-filter [-0.25, +1.5, -0.25].
+ *     http://www.johncostella.com/magic/
+ */
