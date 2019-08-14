@@ -1033,21 +1033,120 @@ static int  i2h_main            (UNIVERSE* u){
  * @return 0 if successful; !0 otherwise.
  */
 
-static int  i2h_do_output         (UNIVERSE*        u){
-    (void)u;
+static int  i2h_do_output       (UNIVERSE*        u){
+    ITEM* i = u->items;
+    for(;i;i=i->next){
+        printf("id=%3u,name=%s\n", i->id, i->name);
+    }
     return 0;
 }
 
 /**
  * @brief Append the set of ID references to a linked list of them.
+ * 
  * @param [in,out]  refs  The head of the linked list
  * @param [in,out]  iref  The set to be appended.
  * @return 0.
  */
 
-static int  i2h_append_irefs      (IREF** refs, IREF* iref){
+static int  i2h_append_irefs    (IREF** refs, IREF* iref){
     iref->next = *refs;
     *refs = iref;
+    return 0;
+}
+
+/**
+ * @brief Find lowest free item ID.
+ * 
+ * @param [in]  u       The universe we're operating over.
+ * @param [out] id_out  The ID that was found.
+ * @return 0 if no free ID available; !0 otherwise.
+ */
+
+static int  i2h_find_free_item_id(UNIVERSE* u, uint32_t* id_out){
+    uint32_t id;
+    ITEM*    item;
+    
+    if(!id_out){
+        return 0;
+    }
+    
+    for(id=0,item=u->items; item; id++,item=item->next){
+        if(item->id != id){
+            *id_out = id;
+            return 1;
+        }
+    }
+    
+    return 0;
+}
+
+/**
+ * @brief Insert the item in sorted order in the list.
+ * 
+ * @param [in,out]  items  The head of the linked list of items.
+ * @param [in,out]  item   The item to be inserted.
+ * @return 0.
+ */
+
+static int  i2h_insert_item     (ITEM** items, ITEM* item){
+    while(*items && (*items)->id < item->id){
+        items = &(*items)->next;
+    }
+    item->next = *items;
+    *items     = item;
+    return 0;
+}
+
+/**
+ * @brief Initialize the universe to default values.
+ * 
+ * @param [in]  u  The universe we're operating over.
+ * @return 0.
+ */
+
+static int  i2h_init_item       (ITEM*            item){
+    item->id             = 0;
+    item->path           = NULL;
+    item->name           = "";
+    memcpy(item->type, "pict", 4);
+    item->mime           = "application/octet-stream";
+    item->primary        = 0;
+    item->hidden         = 0;
+    item->want_thumbnail = 0;
+    item->width          = 0;
+    item->height         = 0;
+    item->frame          = NULL;
+    item->packet         = NULL;
+    item->refs           = NULL;
+    item->thumbnail      = NULL;
+    item->grid           = NULL;
+    item->next           = NULL;
+    return 0;
+}
+
+/**
+ * @brief Initialize the universe to default values.
+ * 
+ * @param [in]  u  The universe we're operating over.
+ * @return 0.
+ */
+
+static int  i2h_init_universe   (UNIVERSE*        u){
+    i2h_init_item(&u->item);
+    u->items              = NULL;
+    
+    u->out.codec          = avcodec_find_encoder_by_name("libx265");
+    u->out.codecCtx       = NULL;
+    u->out.packet         = NULL;
+    u->out.tile_width     = 512;
+    u->out.tile_height    = 512;
+    u->out.crf            = 10;
+    u->out.chroma_format  = BENZINA_CHROMAFMT_YUV420;
+    u->out.x264_params    = "";
+    u->out.x265_params    = "";
+    u->out.url            = NULL;
+    
     return 0;
 }
 
@@ -1267,7 +1366,7 @@ static int i2h_parse_item(UNIVERSE* u, char*** argv){
     char* p;
     char* q;
     int   id_set = 0;
-    ITEM* i      = u->items;
+    ITEM* item;
     
     /* Consume the = if it's there. */
     if(!i2h_parse_consumeequals(argv)){
@@ -1290,8 +1389,8 @@ static int i2h_parse_item(UNIVERSE* u, char*** argv){
                 p = q;
             }
             id_set = 1;
-            for(;i;i=i->next){
-                if(i->id == u->item.id){
+            for(item=u->items; item; item=item->next){
+                if(item->id == u->item.id){
                     i2hmessageexit(EINVAL, stderr, "Pre-existing item with same ID %"PRIu32"!\n", u->item.id);
                 }
             }
@@ -1320,19 +1419,15 @@ static int i2h_parse_item(UNIVERSE* u, char*** argv){
     if(strnlen(u->item.type, 4) != 4){
         i2hmessageexit(EINVAL, stderr, "The type= key must be exactly 4 ASCII characters!\n");
     }
-    if(!id_set){
-        if(!u->items || !u->items->id){
-            u->item.id = 0;
-        }else{
-            for(i=u->items; i->next && i->id+1==i->next->id; i=i->next){}
-            u->item.id = i->id+1;
-        }
+    if(!id_set && !i2h_find_free_item_id(u, &u->item.id)){
+        i2hmessageexit(EINVAL, stderr, "Too many items added, no item IDs remaining!\n");
     }
     
-#if 0
-    fprintf(stdout, "id=%u,type=%4.4s,path=%s\n",
-            u->item.id, u->item.type, u->item.path);
-#endif
+    /* Append item to list */
+    item = malloc(sizeof(*item));
+    memcpy(item, &u->item, sizeof(*item));
+    i2h_init_item(&u->item);
+    i2h_insert_item(&u->items, item);
     
     return 1;
 }
@@ -1434,58 +1529,6 @@ static int  i2h_parse_args      (UNIVERSE*        u,
     }
     
     return i2h_do_output(u);
-}
-
-/**
- * @brief Initialize the universe to default values.
- * 
- * @param [in]  u  The universe we're operating over.
- * @return 0.
- */
-
-static int  i2h_init_item       (ITEM*            item){
-    item->id             = 0;
-    item->path           = NULL;
-    item->name           = "";
-    memcpy(item->type, "pict", 4);
-    item->mime           = "application/octet-stream";
-    item->primary        = 0;
-    item->hidden         = 0;
-    item->want_thumbnail = 0;
-    item->width          = 0;
-    item->height         = 0;
-    item->frame          = NULL;
-    item->packet         = NULL;
-    item->refs           = NULL;
-    item->thumbnail      = NULL;
-    item->grid           = NULL;
-    item->next           = NULL;
-    return 0;
-}
-
-/**
- * @brief Initialize the universe to default values.
- * 
- * @param [in]  u  The universe we're operating over.
- * @return 0.
- */
-
-static int  i2h_init_universe   (UNIVERSE*        u){
-    i2h_init_item(&u->item);
-    u->items              = NULL;
-    
-    u->out.codec          = avcodec_find_encoder_by_name("libx265");
-    u->out.codecCtx       = NULL;
-    u->out.packet         = NULL;
-    u->out.tile_width     = 512;
-    u->out.tile_height    = 512;
-    u->out.crf            = 10;
-    u->out.chroma_format  = BENZINA_CHROMAFMT_YUV420;
-    u->out.x264_params    = "";
-    u->out.x265_params    = "";
-    u->out.url            = NULL;
-    
-    return 0;
 }
 
 /**
