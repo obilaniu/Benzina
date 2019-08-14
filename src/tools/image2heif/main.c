@@ -92,15 +92,7 @@ struct UNIVERSE{
     /* Args */
     struct{
         char*       urlIn;
-        char*       urlEmb;
-        char*       urlOut;
-        struct{
-            unsigned w,h;
-            int      chroma_fmt;
-            int      superscale;
-        } canvas;
         const char* x264params;
-        unsigned    crf;
     } args;
     
     /* HEIF */
@@ -125,7 +117,6 @@ struct UNIVERSE{
         AVCodec*           codec;
         AVCodecContext*    codecCtx;
         AVPacket*          packet;
-        FILE*              fp;
         uint32_t           tile_width, tile_height;
         unsigned           crf;
         unsigned           chroma_format;
@@ -172,6 +163,10 @@ static inline int   i2hfprintf   (FILE*            fp,
  * @brief Miscellaneous string testing and utility functions.
  */
 
+static int strstartswith(const char* s, const char* t){
+    size_t ls = strlen(s), lt = strlen(t);
+    return ls<lt ? 0 : !memcmp(s, t, lt);
+}
 static int strendswith(const char* s, const char* e){
     size_t ls = strlen(s), le = strlen(e);
     return ls<le ? 0 : !strcmp(s+ls-le, e);
@@ -773,7 +768,7 @@ static int  i2h_configure_encoder(UNIVERSE* u, AVFrame* frame){
     av_dict_set    (&codecCtxOpt, "preset",      "placebo",    0);
     av_dict_set    (&codecCtxOpt, "tune",        "stillimage", 0);
     av_dict_set_int(&codecCtxOpt, "forced-idr",  1,            0);
-    av_dict_set_int(&codecCtxOpt, "crf",         u->args.crf,  0);
+    av_dict_set_int(&codecCtxOpt, "crf",         u->out.crf,  0);
     av_dict_set    (&codecCtxOpt, "x264-params", x264params,   0);
     u->ret = avcodec_open2(u->out.codecCtx, u->out.codec, &codecCtxOpt);
     if(av_dict_count(codecCtxOpt)){
@@ -863,10 +858,10 @@ static int  i2h_do_frame        (UNIVERSE*        u, AVFrame* frame){
             i2hmessageexit(EINVAL, stderr, "Unsupported pixel format %s!\n",
                                            av_get_pix_fmt_name(graphfiltframe->format));
     }
-    u->tx.geom.i.canvas.w          = u->args.canvas.w;
-    u->tx.geom.i.canvas.h          = u->args.canvas.h;
-    u->tx.geom.i.canvas.chroma_fmt = u->args.canvas.chroma_fmt;
-    u->tx.geom.i.canvas.superscale = u->args.canvas.superscale;
+    u->tx.geom.i.canvas.w          = u->out.tile_width;
+    u->tx.geom.i.canvas.h          = u->out.tile_height;
+    u->tx.geom.i.canvas.chroma_fmt = u->out.chroma_format;
+    u->tx.geom.i.canvas.superscale = 0;
     benzina_geom_solve(&u->tx.geom);
     
     
@@ -874,16 +869,16 @@ static int  i2h_do_frame        (UNIVERSE*        u, AVFrame* frame){
      * CUDA Filtering.
      */
     
-    cudafiltframe->width           = u->args.canvas.w;
-    cudafiltframe->height          = u->args.canvas.h;
-    switch(u->args.canvas.chroma_fmt){
+    cudafiltframe->width           = u->out.tile_width;
+    cudafiltframe->height          = u->out.tile_height;
+    switch(u->out.chroma_format){
         case BENZINA_CHROMAFMT_YUV400: cudafiltframe->format = AV_PIX_FMT_GRAY8;   break;
         case BENZINA_CHROMAFMT_YUV420: cudafiltframe->format = AV_PIX_FMT_YUV420P; break;
         case BENZINA_CHROMAFMT_YUV422: cudafiltframe->format = AV_PIX_FMT_YUV422P; break;
         case BENZINA_CHROMAFMT_YUV444: cudafiltframe->format = AV_PIX_FMT_YUV444P; break;
         default:
             i2hmessageexit(EINVAL, stderr, "Unsupported canvas chroma_fmt %d!\n",
-                                           u->args.canvas.chroma_fmt);
+                                           u->out.chroma_format);
     }
     cudafiltframe->chroma_location = benzina2avchromaloc(u->tx.geom.o.chroma_loc);
     cudafiltframe->color_range     = graphfiltframe->color_range;
@@ -933,7 +928,7 @@ static int  i2h_do_frame        (UNIVERSE*        u, AVFrame* frame){
     
     
     /* Write Out */
-#if 1
+#if 0
     fwrite(u->out.packet->data, 1, u->out.packet->size, u->out.fp);
     fflush(u->out.fp);
 #endif
@@ -1025,8 +1020,6 @@ static int  i2h_main            (UNIVERSE* u){
     /* Cleanup */
     avcodec_free_context(&u->in.codecCtx);
     avformat_close_input(&u->in.formatCtx);
-    fclose(u->out.fp);
-    u->out.fp = NULL;
     
     
     /* Return */
@@ -1213,7 +1206,7 @@ static int i2h_parse_name(UNIVERSE* u, char*** argv){
     return 1;
 }
 static int i2h_parse_ref(UNIVERSE* u, char*** argv){
-    char* p, *s, comma;
+    char* p, *s;
     uint32_t r    = 0;
     int      n    = 0;
     IREF*    iref = calloc(1, sizeof(*iref));
@@ -1262,11 +1255,86 @@ static int i2h_parse_ref(UNIVERSE* u, char*** argv){
     
     return 1;
 }
+static int i2h_parse_mime(UNIVERSE* u, char*** argv){
+    if(!i2h_parse_consumeequals(argv)){
+        i2hmessageexit(EINVAL, stderr, "Option --mime consumes an argument!\n");
+    }
+    
+    u->item.mime = *(*argv)++;
+    return 1;
+}
 static int i2h_parse_item(UNIVERSE* u, char*** argv){
-    /* TODO: Implement me! */
-    (void)u;
-    (void)argv;
-    return 0;
+    char* p;
+    char* q;
+    int   id_set = 0;
+    ITEM* i      = u->items;
+    
+    /* Consume the = if it's there. */
+    if(!i2h_parse_consumeequals(argv)){
+        i2hmessageexit(EINVAL, stderr, "Option --item consumes an argument!\n");
+    }
+    
+    /* Extract the argument. */
+    p = *(*argv)++;
+    
+    /* Parse the argument. */
+    while(1){
+        if      (strstartswith(p, "id=")){
+            if(id_set){
+                i2hmessageexit(EINVAL, stderr, "Item ID has already been set!\n");
+            }
+            u->item.id = strtoull(p+=3, &q, 0);
+            if(p==q){
+                i2hmessageexit(EINVAL, stderr, "id= requires a 32-bit unsigned integer item ID!\n");
+            }else{
+                p = q;
+            }
+            id_set = 1;
+            for(;i;i=i->next){
+                if(i->id == u->item.id){
+                    i2hmessageexit(EINVAL, stderr, "Pre-existing item with same ID %"PRIu32"!\n", u->item.id);
+                }
+            }
+        }else if(strstartswith(p, "type=")){
+            memcpy(u->item.type, p+=5, 4);
+            p += 4;
+        }else if(strstartswith(p, "path=")){
+            u->item.path = (p+=5);
+            break;
+        }else{
+            i2hmessageexit(EINVAL, stderr, "Unknown key '%s'\n", p);
+        }
+        
+        if(*p++ != ','){
+            i2hmessageexit(EINVAL, stderr, "The keys of --item must be separated by ',' and the last key must be path= !\n");
+        }
+    }
+    
+    /**
+     * Validate.
+     * 
+     * - Type codes must be exactly 4 bytes.
+     * - When no id= key is given, automatically assign one.
+     */
+    
+    if(strnlen(u->item.type, 4) != 4){
+        i2hmessageexit(EINVAL, stderr, "The type= key must be exactly 4 ASCII characters!\n");
+    }
+    if(!id_set){
+        if(!u->items || !u->items->id){
+            u->item.id = 0;
+        }else{
+            for(i=u->items; i->next && i->id+1==i->next->id; i=i->next){}
+            u->item.id = i->id+1;
+        }
+    }
+    
+#if 0
+    fprintf(stdout, "id=%u,type=%4.4s,path=%s\n",
+            u->item.id, u->item.type, u->item.path);
+#endif
+    
+    return 1;
 }
 static int i2h_parse_output(UNIVERSE* u, char*** argv){
     if(!i2h_parse_consumeequals(argv)){
@@ -1319,6 +1387,7 @@ static int  i2h_parse_args      (UNIVERSE*        u,
                     case 'p': i2h_parse_primary  (u, argv); break;
                     case 't': i2h_parse_thumbnail(u, argv); break;
                     case 'h': i2h_parse_help     (u, argv); break;
+                    case 'm': i2h_parse_mime     (u, argv); break;
                     case 'n': i2h_parse_name     (u, argv); break;
                     case 'r': i2h_parse_ref      (u, argv); break;
                     case 'i': i2h_parse_item     (u, argv); break;
@@ -1347,6 +1416,8 @@ static int  i2h_parse_args      (UNIVERSE*        u,
             i2h_parse_primary(u, argv);
         }else if(i2h_parse_longopt(argv, "--thumb")){
             i2h_parse_thumbnail(u, argv);
+        }else if(i2h_parse_longopt(argv, "--mime")){
+            i2h_parse_mime(u, argv);
         }else if(i2h_parse_longopt(argv, "--name")){
             i2h_parse_name(u, argv);
         }else if(i2h_parse_longopt(argv, "--ref")){
@@ -1377,7 +1448,7 @@ static int  i2h_init_item       (ITEM*            item){
     item->path           = NULL;
     item->name           = "";
     memcpy(item->type, "pict", 4);
-    item->mime           = NULL;
+    item->mime           = "application/octet-stream";
     item->primary        = 0;
     item->hidden         = 0;
     item->want_thumbnail = 0;
@@ -1434,17 +1505,19 @@ static int  i2h_init_universe   (UNIVERSE*        u){
  *     -p, --primary            Mark as primary item. Default false. Incompatible with -h.
  *     -t, --thumb              Want (single-tile) thumbnail.
  *     -n, --name=S             Name of item.
+ *     -m, --mime=S             MIME-type of item. Default "application/octet-stream".
  *     -r, --ref=type:id[,id]*  Typed reference. Can be specified multiple times.
  * 
  *   Item Declaration
- *     -i, --item[:N][:T]   Source file. Examples:
- *     -i image.png         Add item with next-lowest-numbered ID of type
- *                          "pict" from image.png
- *     -i:4 image.png       Add item with ID=4 of type "pict" from image.png
- *     -i:4:pict image.png  Add item with ID=4 of type "pict" from image.png
- *     -i:mime:application/octet-stream target.bin
- *                          Add item with next-lowest-numbered ID of MIME
- *                          type "application/octet-stream" from target.bin.
+ *     -i, --item=[id=N,][type=T,]path=S   Source file. Examples:
+ *     -i path=image.png        Add item with next-lowest-numbered ID of type
+ *                              "pict" from image.png
+ *     -i id=4,path=image.png   Add item with ID=4 of type "pict" from image.png
+ *     -i id=4,type=pict,path=image.png 
+ *                              Add item with ID=4 of type "pict" from image.png
+ *     --mime application/octet-stream -i type=mime,path=target.bin
+ *                              Add item with next-lowest-numbered ID of MIME
+ *                              type "application/octet-stream" from target.bin.
  * 
  *   Output Declaration
  *     -o, --output=S       Target output filename. Default "out.heif".
