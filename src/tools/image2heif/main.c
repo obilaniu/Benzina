@@ -39,7 +39,8 @@
 
 
 /* Data Structure Forward Declarations and Typedefs */
-typedef struct ITEM ITEM;
+typedef struct ITEM     ITEM;
+typedef struct IREF     IREF;
 typedef struct UNIVERSE UNIVERSE;
 
 
@@ -56,16 +57,29 @@ struct ITEM{
     uint32_t    id;
     const char* path;
     const char* name;
+    char        type[4];
     const char* mime;
-    int         is_primary;
-    int         want_thumbnail;
+    unsigned    primary        : 1;
+    unsigned    hidden         : 1;
+    unsigned    want_thumbnail : 1;
     uint32_t    width, height;
-    uint32_t    tile_width, tile_height;
     AVFrame*    frame;
     AVPacket*   packet;
+    IREF*       refs;
     ITEM*       thumbnail;
     ITEM*       grid;
     ITEM*       next;
+};
+
+/**
+ * @brief Item reference.
+ */
+
+struct IREF{
+    char      type[4];
+    uint32_t  num_references;
+    uint32_t* to_item_id;
+    IREF*     next;
 };
 
 /**
@@ -85,9 +99,13 @@ struct UNIVERSE{
             int      chroma_fmt;
             int      superscale;
         } canvas;
-        unsigned    crf;
         const char* x264params;
+        unsigned    crf;
     } args;
+    
+    /* HEIF */
+    ITEM             item;
+    ITEM*            items;
     
     /* Status */
     int              ret;
@@ -101,9 +119,6 @@ struct UNIVERSE{
         AVCodecContext*    codecCtx;
     } in;
     struct{
-        FILE*              fp;
-    } emb;
-    struct{
         BENZINA_GEOM       geom;
     } tx;
     struct{
@@ -111,6 +126,12 @@ struct UNIVERSE{
         AVCodecContext*    codecCtx;
         AVPacket*          packet;
         FILE*              fp;
+        uint32_t           tile_width, tile_height;
+        unsigned           crf;
+        unsigned           chroma_format;
+        const char*        x264_params;
+        const char*        x265_params;
+        const char*        url;
     } out;
 };
 
@@ -155,17 +176,14 @@ static int strendswith(const char* s, const char* e){
     size_t ls = strlen(s), le = strlen(e);
     return ls<le ? 0 : !strcmp(s+ls-le, e);
 }
-static int str2chromafmt(const char* s){
-    if      (!strcmp(s, "yuv400")){return BENZINA_CHROMAFMT_YUV400;
-    }else if(!strcmp(s, "yuv420")){return BENZINA_CHROMAFMT_YUV420;
-    }else if(!strcmp(s, "yuv422")){return BENZINA_CHROMAFMT_YUV422;
-    }else if(!strcmp(s, "yuv444")){return BENZINA_CHROMAFMT_YUV444;
+static int i2h_str2chromafmt(const char* s){
+    if      (strcmp(s, "yuv400") == 0){return BENZINA_CHROMAFMT_YUV400;
+    }else if(strcmp(s, "yuv420") == 0){return BENZINA_CHROMAFMT_YUV420;
+    }else if(strcmp(s, "yuv422") == 0){return BENZINA_CHROMAFMT_YUV422;
+    }else if(strcmp(s, "yuv444") == 0){return BENZINA_CHROMAFMT_YUV444;
     }else{
         return -100;
     }
-}
-static int str2canvaschromafmt(const char* s){
-    return !strcmp(s, "yuv420super") ? BENZINA_CHROMAFMT_YUV420 : str2chromafmt(s);
 }
 static int av2benzinachromaloc(enum AVChromaLocation chroma_loc){
     if(chroma_loc == AVCHROMA_LOC_UNSPECIFIED)
@@ -1007,10 +1025,6 @@ static int  i2h_main            (UNIVERSE* u){
     /* Cleanup */
     avcodec_free_context(&u->in.codecCtx);
     avformat_close_input(&u->in.formatCtx);
-    if(u->emb.fp){
-        fclose(u->emb.fp);
-        u->emb.fp = NULL;
-    }
     fclose(u->out.fp);
     u->out.fp = NULL;
     
@@ -1020,216 +1034,431 @@ static int  i2h_main            (UNIVERSE* u){
 }
 
 /**
- * @brief Perform the activities for one argument group.
+ * @brief Output a HEIF file with the given items.
  * 
- * @param [in,out]  u     The universe we're operating over.
+ * @param [in]  u  The universe we're operating over.
+ * @return 0 if successful; !0 otherwise.
  */
 
-static void i2h_do_one_group(UNIVERSE* u){
-    i2h_main(u);
+static int  i2h_do_output         (UNIVERSE*        u){
+    (void)u;
+    return 0;
 }
 
 /**
- * @brief Parse invidual arguments.
- * 
- * This will rearrange in-place argv to create arrays of strings, and prepare
- * the universe for processing.
- * 
- * @param [in,out] u       The universe we're operating over.
- * @param [in]     p       The current argument we're handling.
- * @param [out]    pOut    Pointer to next argument we should handle.
+ * @brief Append the set of ID references to a linked list of them.
+ * @param [in,out]  refs  The head of the linked list
+ * @param [in,out]  iref  The set to be appended.
+ * @return 0.
  */
 
-static void i2h_parse_input (UNIVERSE* u, char** p, char*** pOut){
-    if(p[1]){
-        u->args.urlIn = p[1];
-        p += 2;
-    }else{
-        i2hmessageexit(EINVAL, stderr, "Error: Missing argument to -i\n");
-    }
-    *pOut = p;
-}
-static void i2h_parse_embed (UNIVERSE* u, char** p, char*** pOut){
-    if(p[1]){
-        u->args.urlEmb = p[1];
-        p += 2;
-    }else{
-        i2hmessageexit(EINVAL, stderr, "Error: Missing argument to -e\n");
-    }
-    *pOut = p;
-}
-static void i2h_parse_canvas(UNIVERSE* u, char** p, char*** pOut){
-    char canvasChromaFmt[21] = "yuv420";
-    if(p[1]){
-        switch(sscanf(p[1], "%u:%u:%20[yuv420super]",
-                      &u->args.canvas.w,
-                      &u->args.canvas.h,
-                      canvasChromaFmt)){
-            default:
-            case 0: break;
-            case 1: u->args.canvas.h = u->args.canvas.w; break;
-        }
-        u->args.canvas.superscale = strendswith(canvasChromaFmt, "super");
-        u->args.canvas.chroma_fmt = str2canvaschromafmt(canvasChromaFmt);
-        if(u->args.canvas.w < 48 || u->args.canvas.w > 4096 || u->args.canvas.w % 16 != 0)
-            i2hmessageexit(EINVAL, stderr, "Coded width must be 48-4096 pixels in multiples of 16!\n");
-        if(u->args.canvas.h < 48 || u->args.canvas.h > 4096 || u->args.canvas.h % 16 != 0)
-            i2hmessageexit(EINVAL, stderr, "Coded height must be 48-4096 pixels in multiples of 16!\n");
-        if(u->args.canvas.chroma_fmt < 0)
-            i2hmessageexit(EINVAL, stderr, "Unknown chroma format \"%s\"!\n", canvasChromaFmt);
-        
-        p += 2;
-    }else{
-        i2hmessageexit(EINVAL, stderr, "Error: Missing argument to --canvas\n");
-    }
-    *pOut = p;
-}
-static void i2h_parse_crf   (UNIVERSE* u, char** p, char*** pOut){
-    char* s;
-    if(p[1]){
-        u->args.crf = strtoull(p[1], &s, 0);
-        if((u->args.crf > 51) || (*s != '\0')){
-            i2hmessageexit(EINVAL, stderr, "Error: --crf must be integer in range [0, 51]!\n");
-        }
-        p += 2;
-    }else{
-        i2hmessageexit(EINVAL, stderr, "Error: Missing argument to --crf\n");
-    }
-    *pOut = p;
-}
-static void i2h_parse_x264  (UNIVERSE* u, char** p, char*** pOut){
-    if(p[1]){
-        if(p[1][0] != '-'){
-            u->args.x264params = p[1];
-            p += 2;
-        }else{
-            p += 1;
-        }
-    }
-    *pOut = p;
-}
-static void i2h_parse_output(UNIVERSE* u, char** p, char*** pOut){
-    if(streq(*p, "-o")){
-        if(!*++p){
-            i2hmessageexit(EINVAL, stderr, "Error: Missing argument to -o\n");
-        }
-    }
-    u->args.urlOut = *p++;
-    *pOut = p;
+static int  i2h_append_irefs      (IREF** refs, IREF* iref){
+    iref->next = *refs;
+    *refs = iref;
+    return 0;
 }
 
 /**
- * @brief Parse one group of arguments.
+ * @brief Parse individual arguments.
  * 
- * This will rearrange in-place argv to create arrays of strings, and prepare
- * the universe for processing.
+ * @param [in/out]  u        The universe we're operating over.
+ * @param [in,out]  argv     A pointer to a pointer to the arguments array.
  * 
- * @param [in,out] u       The universe we're operating over.
- * @param [in]     argv    The beginning of the parameters vector to consider.
- * @param [out]    argvOut The beginning of the next parameters vector to consider,
- *                         or NULL if there isn't one.
+ * On entry,  **argv points just past the end of the option's name.
+ * On return, **argv points to the next option.
+ * 
+ * @return !0 if successfully parsed, 0 otherwise.
  */
 
-static void i2h_parse_one_group(UNIVERSE* u, char** argv, char*** argvOut){
-    /* Set defaults for argument group */
-    u->args.urlIn             =                     NULL;
-    u->args.urlEmb            =                     NULL;
-    u->args.urlOut            =               "out.h264";
-    u->args.canvas.w          =                     1024;
-    u->args.canvas.h          =                      512;
-    u->args.canvas.superscale =                        1;
-    u->args.canvas.chroma_fmt = BENZINA_CHROMAFMT_YUV420;
-    u->args.crf               =                       10;
-    u->args.x264params        =                     NULL;
+static int i2h_parse_shortopt(char*** argv){
+    int ret = **argv            &&
+             (**argv)[0] == '-' &&
+             (**argv)[1] != '-' &&
+             (**argv)[1] != '\0';
+    if(ret){
+        ++**argv;
+    }
+    return ret;
+}
+static int i2h_parse_longopt(char*** argv, const char* opt){
+    size_t l   = strlen(opt);
+    int    ret = strncmp(**argv, opt, l) == 0 &&
+                       ((**argv)[l] == '\0' ||
+                        (**argv)[l] == '=');
+    if(ret){
+        **argv += l;
+    }
+    return ret;
+}
+static int i2h_parse_consumeequals(char*** argv){
+    switch(***argv){
+        case '\0': return !!*++*argv;
+        case '=':  return !!++**argv;
+        default:   return 0;
+    }
+}
+static int i2h_parse_noconsume(char*** argv){
+    switch(***argv){
+        case '\0': return (void)*++*argv, 1;
+        case '=':  i2hmessageexit(EINVAL, stderr, "Option takes no arguments!\n");
+        default:   return 1;
+    }
+}
+static int i2h_parse_codec(UNIVERSE* u, char*** argv){
+    const char* codec;
     
-    /* Iterate over arguments group */
-    while(*argv && u->ret == 0){
-        if      (streq(*argv, "-i")){
-            i2h_parse_input (u, argv, &argv);
-        }else if(streq(*argv, "-e")){
-            i2h_parse_embed (u, argv, &argv);
-        }else if(streq(*argv, "--canvas")){
-            i2h_parse_canvas(u, argv, &argv);
-        }else if(streq(*argv, "--crf")){
-            i2h_parse_crf   (u, argv, &argv);
-        }else if(streq(*argv, "--x264")){
-            i2h_parse_x264  (u, argv, &argv);
-        }else if(streq(*argv, "-o") || **argv != '-'){
-            i2h_parse_output(u, argv, &argv);
+    if(!i2h_parse_consumeequals(argv)){
+        i2hmessageexit(EINVAL, stderr, "Option --codec consumes an argument!\n");
+    }
+    
+    codec = *(*argv)++;
+    if      (strcmp(codec, "h264") == 0 ||
+             strcmp(codec, "x264") == 0){
+        codec = "libx264";
+    }else if(strcmp(codec, "hevc") == 0 ||
+             strcmp(codec, "h265") == 0 ||
+             strcmp(codec, "x265") == 0){
+        codec = "libx265";
+    }
+    
+    u->out.codec = avcodec_find_encoder_by_name(codec);
+    if(!u->out.codec)
+        i2hmessageexit(EINVAL, stderr, "--codec '%s' unknown!\n", codec);
+    
+    return 1;
+}
+static int i2h_parse_tile(UNIVERSE* u, char*** argv){
+    char tile_chroma_format[21] = "yuv420";
+    
+    if(!i2h_parse_consumeequals(argv)){
+        i2hmessageexit(EINVAL, stderr, "Option --tile consumes an argument!\n");
+    }
+    
+    switch(sscanf(*(*argv)++, "%"PRIu32":%"PRIu32":%20[yuv420]",
+                  &u->out.tile_width,
+                  &u->out.tile_height,
+                  tile_chroma_format)){
+        default:
+        case 0: i2hmessageexit(EINVAL, stderr, "--tile requires an argument formatted 'width:height:chroma_format' !\n");
+        case 1: u->out.tile_height = u->out.tile_width; break;
+        case 2:
+        case 3: break;
+    }
+    u->out.chroma_format = i2h_str2chromafmt(tile_chroma_format);
+    if(u->out.tile_width  < 48 || u->out.tile_width  > 4096 || u->out.tile_width  % 16 != 0)
+        i2hmessageexit(EINVAL, stderr, "Tile width must be 48-4096 pixels in multiples of 16!\n");
+    if(u->out.tile_height < 48 || u->out.tile_height > 4096 || u->out.tile_height % 16 != 0)
+        i2hmessageexit(EINVAL, stderr, "Tile height must be 48-4096 pixels in multiples of 16!\n");
+    if(u->out.chroma_format > BENZINA_CHROMAFMT_YUV444)
+        i2hmessageexit(EINVAL, stderr, "Unknown chroma format \"%s\"!\n", tile_chroma_format);
+    
+    return 1;
+}
+static int i2h_parse_x264_params(UNIVERSE* u, char*** argv){
+    if(!i2h_parse_consumeequals(argv)){
+        i2hmessageexit(EINVAL, stderr, "Option --x264-params consumes an argument!\n");
+    }
+    
+    u->out.x264_params = *(*argv)++;
+    return 1;
+}
+static int i2h_parse_x265_params(UNIVERSE* u, char*** argv){
+    if(!i2h_parse_consumeequals(argv)){
+        i2hmessageexit(EINVAL, stderr, "Option --x265-params consumes an argument!\n");
+    }
+    
+    u->out.x265_params = *(*argv)++;
+    return 1;
+}
+static int i2h_parse_crf(UNIVERSE* u, char*** argv){
+    char* p;
+    
+    if(!i2h_parse_consumeequals(argv)){
+        i2hmessageexit(EINVAL, stderr, "Option --crf consumes an argument!\n");
+    }
+    
+    u->out.crf = strtoull(p=*(*argv)++, &p, 0);
+    if(u->out.crf > 51 || *p){
+        i2hmessageexit(EINVAL, stderr, "Error: --crf must be integer in range [0, 51]!\n");
+    }
+    return 1;
+}
+static int i2h_parse_hidden(UNIVERSE* u, char*** argv){
+    if(!i2h_parse_noconsume(argv)){
+        i2hmessageexit(EINVAL, stderr, "Option --hidden does not consume an argument!\n");
+    }
+    u->item.hidden         = 1;
+    return 1;
+}
+static int i2h_parse_primary(UNIVERSE* u, char*** argv){
+    if(!i2h_parse_noconsume(argv)){
+        i2hmessageexit(EINVAL, stderr, "Option --primary does not consume an argument!\n");
+    }
+    u->item.primary        = 1;
+    return 1;
+}
+static int i2h_parse_thumbnail(UNIVERSE* u, char*** argv){
+    if(!i2h_parse_noconsume(argv)){
+        i2hmessageexit(EINVAL, stderr, "Option --thumb does not consume an argument!\n");
+    }
+    u->item.want_thumbnail = 1;
+    return 1;
+}
+static int i2h_parse_name(UNIVERSE* u, char*** argv){
+    if(!i2h_parse_consumeequals(argv)){
+        i2hmessageexit(EINVAL, stderr, "Option --name consumes an argument!\n");
+    }
+    
+    u->item.name = *(*argv)++;
+    return 1;
+}
+static int i2h_parse_ref(UNIVERSE* u, char*** argv){
+    char* p, *s, comma;
+    uint32_t r    = 0;
+    int      n    = 0;
+    IREF*    iref = calloc(1, sizeof(*iref));
+    
+    /* Consume the = if it's there. */
+    if(!i2h_parse_consumeequals(argv)){
+        i2hmessageexit(EINVAL, stderr, "Option --ref consumes an argument!\n");
+    }
+    
+    /* Extract the argument. */
+    p = *(*argv)++;
+    
+    /* First 4 bytes are the type. */
+    memcpy(iref->type, p, sizeof(iref->type));
+    p += sizeof(iref->type);
+    
+    /* The type is separated from the IDs by a : */
+    if(*p++ != ':'){
+        i2hmessageexit(EINVAL, stderr, "Option --ref requires form 'type:id,id,id,...' !\n");
+    }
+    
+    /* Count the number of IDs. */
+    s = p;
+    do{
+        if(sscanf(s, " %"PRIu32"%*[, ]%n", &r, &n) == 1){
+            iref->num_references++;
+            s += n;
+        }else{
             break;
-        }else{
-            i2hmessageexit(EINVAL, stderr, "Error: Unknown option %s!\n", *argv);
         }
+    }while(1);
+    
+    /* Allocate the array of IDs. */
+    iref->to_item_id = calloc(iref->num_references,
+                              sizeof(*iref->to_item_id));
+    
+    /* Reparse the IDs, this time saving them into the array. */
+    s = p;
+    for(r=0;r<iref->num_references;r++){
+        sscanf(s, " %"PRIu32"%*[, ]%n", &iref->to_item_id[r], &n);
+        s += n;
     }
     
-    /* Exit */
-    *argvOut = argv;
+    /* Append this set of references to the current item. */
+    i2h_append_irefs(&u->item.refs, iref);
+    
+    return 1;
+}
+static int i2h_parse_item(UNIVERSE* u, char*** argv){
+    /* TODO: Implement me! */
+    (void)u;
+    (void)argv;
+    return 0;
+}
+static int i2h_parse_output(UNIVERSE* u, char*** argv){
+    if(!i2h_parse_consumeequals(argv)){
+        i2hmessageexit(EINVAL, stderr, "Option --output consumes an argument!\n");
+    }
+    
+    u->out.url = *(*argv)++;
+    return 1;
+}
+static int i2h_parse_help(UNIVERSE* u, char*** argv){
+    (void)u;
+    (void)argv;
+    
+    fprintf(stdout,
+        "Usage: benzina-image2heif [args]\n"
+    );
+    exit(0);
+    
+    return 0;
 }
 
 /**
- * @brief Validate parsed group arguments globally.
+ * @brief Parse the arguments, performing what they require.
+ * 
+ * The command-line is structured in several groups of flags:
+ *   - An input group,  which terminates in -i or --item and declares an input file.
+ *   - An output group, which terminates in -o and declares an output file.
+ * 
+ * There can be many input groups, declaring multiple items, but there can be at
+ * most one output group.
  * 
  * @param [in,out]  u     The universe we're operating over.
- */
-
-static void i2h_validate_one_group(UNIVERSE* u){
-    if(!u->args.urlIn || !*u->args.urlIn){
-        i2hmessageexit(EINVAL, stderr, "No input media provided as argument!\n");
-    }
-    
-    if(!u->args.urlEmb          ||
-       streq(u->args.urlEmb, "")){
-        u->emb.fp = NULL;
-    }else{
-        u->emb.fp = fopen(u->args.urlEmb, "r");
-        if(!u->emb.fp)
-            i2hmessageexit(EPERM, stderr, "Cannot open embedded data file!\n");
-    }
-    
-    if(!u->args.urlOut           ||
-       streq(u->args.urlOut, "") ||
-       streq(u->args.urlOut, "-")){
-        u->out.fp = stdout;
-    }else{
-        u->out.fp = fopen(u->args.urlOut, "a+b");
-        if(!u->out.fp)
-            i2hmessageexit(EPERM, stderr, "Cannot open output media!\n");
-    }
-}
-
-/**
- * @brief Interpret the program, performing what the arguments require.
- * 
- * The command-line is structured in several groups of flags that precede
- * an output filename. If a group lacks an output filename, the result is
- * written to standard output.
- * 
- * @param [in,out]  u     The universe we're operating over.
- * @param [in,out]  argc  The parameters count.
- * @param [in,out]  argv  The parameters vector.
+ * @param [in,out]  argv  A pointer to a pointer to the arguments array.
  * 
  * @return Exit code.
  */
 
-static int  i2h_interpret_args  (UNIVERSE*        u,
-                                 int              argc,
-                                 char**           argv){
-    (void)argc;
-    while(*argv){
-        i2h_parse_one_group(u, argv, &argv);
-        i2h_validate_one_group(u);
-        i2h_do_one_group(u);
+static int  i2h_parse_args      (UNIVERSE*        u,
+                                 char***          argv){
+    const char* s;
+    while(**argv){
+        if(i2h_parse_shortopt(argv)){
+            /**
+             * Iterate over the individual characters of a short option sequence
+             * until we 1) fall off its end or 2) consume an argument.
+             */
+            for(s=**argv; (s == **argv) && (***argv); ++s){
+                switch(*(**argv)++){
+                    case 'H': i2h_parse_hidden   (u, argv); break;
+                    case 'p': i2h_parse_primary  (u, argv); break;
+                    case 't': i2h_parse_thumbnail(u, argv); break;
+                    case 'h': i2h_parse_help     (u, argv); break;
+                    case 'n': i2h_parse_name     (u, argv); break;
+                    case 'r': i2h_parse_ref      (u, argv); break;
+                    case 'i': i2h_parse_item     (u, argv); break;
+                    case 'o': i2h_parse_output   (u, argv); break;
+                    default:
+                        i2hmessageexit(EINVAL, stderr, "Unknown short option '-%c' !\n", *--**argv);
+                }
+            }
+            if(s == **argv){
+                /* We fell off the end of a series of short options. */
+                ++*argv;
+            }
+        }else if(i2h_parse_longopt(argv, "--codec")){
+            i2h_parse_codec(u, argv);
+        }else if(i2h_parse_longopt(argv, "--tile")){
+            i2h_parse_tile(u, argv);
+        }else if(i2h_parse_longopt(argv, "--x264-params")){
+            i2h_parse_x264_params(u, argv);
+        }else if(i2h_parse_longopt(argv, "--x265-params")){
+            i2h_parse_x265_params(u, argv);
+        }else if(i2h_parse_longopt(argv, "--crf")){
+            i2h_parse_crf(u, argv);
+        }else if(i2h_parse_longopt(argv, "--hidden")){
+            i2h_parse_hidden(u, argv);
+        }else if(i2h_parse_longopt(argv, "--primary")){
+            i2h_parse_primary(u, argv);
+        }else if(i2h_parse_longopt(argv, "--thumb")){
+            i2h_parse_thumbnail(u, argv);
+        }else if(i2h_parse_longopt(argv, "--name")){
+            i2h_parse_name(u, argv);
+        }else if(i2h_parse_longopt(argv, "--ref")){
+            i2h_parse_ref(u, argv);
+        }else if(i2h_parse_longopt(argv, "--item")){
+            i2h_parse_item(u, argv);
+        }else if(i2h_parse_longopt(argv, "--output")){
+            i2h_parse_output(u, argv);
+        }else if(i2h_parse_longopt(argv, "--help")){
+            i2h_parse_help(u, argv);
+        }else{
+            i2hmessageexit(EINVAL, stderr, "Unknown long option '%s' !\n", **argv);
+        }
     }
-    return u->ret;
+    
+    return i2h_do_output(u);
+}
+
+/**
+ * @brief Initialize the universe to default values.
+ * 
+ * @param [in]  u  The universe we're operating over.
+ * @return 0.
+ */
+
+static int  i2h_init_item       (ITEM*            item){
+    item->id             = 0;
+    item->path           = NULL;
+    item->name           = "";
+    memcpy(item->type, "pict", 4);
+    item->mime           = NULL;
+    item->primary        = 0;
+    item->hidden         = 0;
+    item->want_thumbnail = 0;
+    item->width          = 0;
+    item->height         = 0;
+    item->frame          = NULL;
+    item->packet         = NULL;
+    item->refs           = NULL;
+    item->thumbnail      = NULL;
+    item->grid           = NULL;
+    item->next           = NULL;
+    return 0;
+}
+
+/**
+ * @brief Initialize the universe to default values.
+ * 
+ * @param [in]  u  The universe we're operating over.
+ * @return 0.
+ */
+
+static int  i2h_init_universe   (UNIVERSE*        u){
+    i2h_init_item(&u->item);
+    u->items              = NULL;
+    
+    u->out.codec          = avcodec_find_encoder_by_name("libx265");
+    u->out.codecCtx       = NULL;
+    u->out.packet         = NULL;
+    u->out.tile_width     = 512;
+    u->out.tile_height    = 512;
+    u->out.crf            = 10;
+    u->out.chroma_format  = BENZINA_CHROMAFMT_YUV420;
+    u->out.x264_params    = "";
+    u->out.x265_params    = "";
+    u->out.url            = NULL;
+    
+    return 0;
 }
 
 /**
  * Main
+ * 
+ * Supports the following arguments:
+ * 
+ *   "Sticky" Parameters (preserved across picture items until changed)
+ *     --codec=S                Codec selection. Default "h265", synonym "hevc", alternative "h264".
+ *     --tile=W:H[:F]           Tile configuration. Width:Height:Chroma Format. Default 512:512:yuv420.
+ *     --x264-params=S          Additional x264 parameters. Default "".
+ *     --x265-params=S          Additional x265 parameters. Default "".
+ *     --crf=N                  CRF 0-51. Default 10.
+ * 
+ *   "Unsticky" Parameters (used for only one item)
+ *     -H, --hidden             Set hidden bit. Default false. Incompatible with -p.
+ *     -p, --primary            Mark as primary item. Default false. Incompatible with -h.
+ *     -t, --thumb              Want (single-tile) thumbnail.
+ *     -n, --name=S             Name of item.
+ *     -r, --ref=type:id[,id]*  Typed reference. Can be specified multiple times.
+ * 
+ *   Item Declaration
+ *     -i, --item[:N][:T]   Source file. Examples:
+ *     -i image.png         Add item with next-lowest-numbered ID of type
+ *                          "pict" from image.png
+ *     -i:4 image.png       Add item with ID=4 of type "pict" from image.png
+ *     -i:4:pict image.png  Add item with ID=4 of type "pict" from image.png
+ *     -i:mime:application/octet-stream target.bin
+ *                          Add item with next-lowest-numbered ID of MIME
+ *                          type "application/octet-stream" from target.bin.
+ * 
+ *   Output Declaration
+ *     -o, --output=S       Target output filename. Default "out.heif".
+ * 
+ *   Miscellaneous
+ *     -h, --help           Print help and exit.
  */
 
 int main(int argc, char* argv[]){
     static UNIVERSE ustack = {0}, *u = &ustack;
-    return i2h_interpret_args(u, argc-1, argv+1);
+    (void)argc;
+    argv++;
+    i2h_init_universe(u);
+    return i2h_parse_args(u, &argv);
 }
 
 
