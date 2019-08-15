@@ -96,20 +96,13 @@ struct UNIVERSE{
     } args;
     
     /* HEIF */
-    ITEM             item;
+    ITEM*            item;
     ITEM*            items;
     
     /* Status */
     int              ret;
     
     /* FFmpeg Encode/Decode */
-    struct{
-        AVFormatContext*   formatCtx;
-        int                formatStream;
-        AVCodecParameters* codecPar;
-        AVCodec*           codec;
-        AVCodecContext*    codecCtx;
-    } in;
     struct{
         BENZINA_GEOM       geom;
     } tx;
@@ -578,15 +571,6 @@ static int i2h_canonicalize_pixfmt(AVFrame* out, AVFrame* in){
         goto fail;
     }
     
-#if 0
-    char* str = avfilter_graph_dump(graph, "");
-    if(str){
-        i2hmessage(stdout, "%s\n", str);
-    }
-    i2hmessage(stdout, "%s\n", graphstr);
-    av_free(str);
-#endif
-    
     
     /**
      * Push the input  frame into the graph.
@@ -945,88 +929,6 @@ static int  i2h_do_frame        (UNIVERSE*        u, AVFrame* frame){
 }
 
 /**
- * Open and close FFmpeg.
- * 
- * In-between, handle frames.
- */
-
-static int  i2h_main            (UNIVERSE* u){
-    /* Input Init */
-    u->ret              = avformat_open_input         (&u->in.formatCtx,
-                                                       u->args.urlIn,
-                                                       NULL, NULL);
-    if(u->ret < 0)
-        i2hmessageexit(u->ret, stderr, "Cannot open input media \"%s\"! (%d)\n", u->args.urlIn, u->ret);
-    
-    u->ret              = avformat_find_stream_info   (u->in.formatCtx, NULL);
-    if(u->ret < 0)
-        i2hmessageexit(EIO,    stderr, "Cannot understand input media \"%s\"! (%d)\n", u->args.urlIn, u->ret);
-    
-    u->in.formatStream  = av_find_default_stream_index(u->in.formatCtx);
-    if(!i2h_is_imagelike_stream(u->in.formatCtx, u->in.formatStream))
-        i2hmessageexit(EINVAL, stderr, "No image data in media \"%s\"!\n", u->args.urlIn);
-    
-    u->in.codecPar      = u->in.formatCtx->streams[u->in.formatStream]->codecpar;
-    u->in.codec         = avcodec_find_decoder        (u->in.codecPar->codec_id);
-    u->in.codecCtx      = avcodec_alloc_context3      (u->in.codec);
-    if(!u->in.codecCtx)
-        i2hmessageexit(EINVAL, stderr, "Could not allocate decoder!\n");
-    
-    u->ret              = avcodec_open2               (u->in.codecCtx,
-                                                       u->in.codec,
-                                                       NULL);
-    if(u->ret < 0)
-        i2hmessageexit(u->ret, stderr, "Could not open decoder! (%d)\n", u->ret);
-    
-    
-    /**
-     * Input packet-reading loop.
-     */
-    
-    do{
-        AVPacket* packet = av_packet_alloc();
-        if(!packet)
-            i2hmessageexit(ENOMEM, stderr, "Failed to allocate packet object!\n");
-        
-        u->ret = av_read_frame(u->in.formatCtx, packet);
-        if(u->ret < 0)
-            i2hmessageexit(u->ret, stderr, "Error or end-of-file reading media \"%s\" (%d)!\n",
-                                           u->args.urlIn, u->ret);
-        
-        if(packet->stream_index != u->in.formatStream){
-            av_packet_free(&packet);
-        }else{
-            u->ret = avcodec_send_packet(u->in.codecCtx, packet);
-            av_packet_free(&packet);
-            if(u->ret){
-                i2hmessageexit(u->ret, stderr, "Error pushing packet! (%d)\n", u->ret);
-            }else{
-                AVFrame* frame = av_frame_alloc();
-                if(!frame)
-                    i2hmessageexit(ENOMEM, stderr, "Error allocating frame!\n");
-                
-                u->ret = avcodec_receive_frame(u->in.codecCtx, frame);
-                if(u->ret)
-                    i2hmessageexit(u->ret, stderr, "Error pulling frame! (%d)\n",  u->ret);
-                
-                u->ret = i2h_do_frame(u, frame);
-                av_frame_free(&frame);
-            }
-            break;
-        }
-    }while(!u->ret);
-    
-    
-    /* Cleanup */
-    avcodec_free_context(&u->in.codecCtx);
-    avformat_close_input(&u->in.formatCtx);
-    
-    
-    /* Return */
-    return u->ret;
-}
-
-/**
  * @brief Output a HEIF file with the given items.
  * 
  * @param [in]  u  The universe we're operating over.
@@ -1042,6 +944,98 @@ static int  i2h_do_output       (UNIVERSE*        u){
 }
 
 /**
+ * @brief Handle the completion of a new item
+ * @param [in]  u     The universe we're operating over.
+ * @param [in]  item  The completed item we'd like to process.
+ * @return 0.
+ */
+
+static int  i2h_handle_item     (UNIVERSE* u, ITEM* item){
+    /* FFmpeg state. */
+    AVFormatContext*   format_ctx    = NULL;
+    int                format_stream = 0;
+    AVCodecParameters* codec_par     = NULL;
+    AVCodec*           codec         = NULL;
+    AVCodecContext*    codec_ctx     = NULL;
+    
+    
+    /* Input Init */
+    u->ret   = avformat_open_input(&format_ctx, item->path, NULL, NULL);
+    if(u->ret < 0)
+        i2hmessageexit(u->ret, stderr, "Cannot open input media \"%s\"! (%d)\n", item->path, u->ret);
+    
+    u->ret   = avformat_find_stream_info(format_ctx, NULL);
+    if(u->ret < 0)
+        i2hmessageexit(EIO,    stderr, "Cannot understand input media \"%s\"! (%d)\n", item->path, u->ret);
+    
+    format_stream = av_find_default_stream_index(format_ctx);
+    if(!i2h_is_imagelike_stream(format_ctx, format_stream))
+        i2hmessageexit(EINVAL, stderr, "No image data in media \"%s\"!\n", item->path);
+    
+    codec_par = format_ctx->streams[format_stream]->codecpar;
+    codec    = avcodec_find_decoder(codec_par->codec_id);
+    codec_ctx = avcodec_alloc_context3(codec);
+    if(!codec_ctx)
+        i2hmessageexit(EINVAL, stderr, "Could not allocate decoder!\n");
+    
+    u->ret   = avcodec_open2(codec_ctx, codec, NULL);
+    if(u->ret < 0)
+        i2hmessageexit(u->ret, stderr, "Could not open decoder! (%d)\n", u->ret);
+    
+    
+    /* Read first (one) frame. */
+    do{
+        AVPacket* packet = av_packet_alloc();
+        if(!packet)
+            i2hmessageexit(ENOMEM, stderr, "Failed to allocate packet object!\n");
+        
+        u->ret = av_read_frame(format_ctx, packet);
+        if(u->ret < 0)
+            i2hmessageexit(u->ret, stderr, "Error or end-of-file reading media \"%s\" (%d)!\n",
+                                           item->path, u->ret);
+        
+        if(packet->stream_index != format_stream){
+            av_packet_free(&packet);
+        }else{
+            u->ret = avcodec_send_packet(codec_ctx, packet);
+            av_packet_free(&packet);
+            if(u->ret)
+                i2hmessageexit(u->ret, stderr, "Error pushing packet! (%d)\n", u->ret);
+            
+            item->frame = av_frame_alloc();
+            if(!item->frame)
+                i2hmessageexit(ENOMEM, stderr, "Error allocating frame!\n");
+            
+            u->ret = avcodec_receive_frame(codec_ctx, item->frame);
+            if(u->ret)
+                i2hmessageexit(u->ret, stderr, "Error pulling frame! (%d)\n",  u->ret);
+            break;
+        }
+    }while(!u->ret);
+    
+    
+    /* Cleanup input reader objects */
+    avcodec_free_context(&codec_ctx);
+    avformat_close_input(&format_ctx);
+    
+    
+    /* Handle the frame. */
+    i2h_fixup_frame(item->frame);
+    i2h_canonicalize_pixfmt(item->frame, item->frame);
+    item->width  = item->frame->width;
+    item->height = item->frame->height;
+    
+    
+    fprintf(stdout, "ID %u: %ux%u %s\n",
+            item->id, item->width, item->height,
+            av_get_pix_fmt_name(item->frame->format));
+    //av_frame_free(&item->frame);
+    
+    
+    return 0;
+}
+
+/**
  * @brief Append the set of ID references to a linked list of them.
  * 
  * @param [in,out]  refs  The head of the linked list
@@ -1053,6 +1047,24 @@ static int  i2h_append_irefs    (IREF** refs, IREF* iref){
     iref->next = *refs;
     *refs = iref;
     return 0;
+}
+
+/**
+ * @brief Find an item by its ID.
+ * @param [in]  u   The universe we're operating over.
+ * @param [in]  id  The ID of the item we're looking for.
+ * @return The item, if found; NULL otherwise.
+ */
+
+static ITEM* i2h_find_item_by_id (UNIVERSE* u, uint32_t id){
+    ITEM* item;
+    for(item=u->items; item; item=item->next){
+        if(item->id == id){
+            return item;
+        }
+    }
+    
+    return NULL;
 }
 
 /**
@@ -1099,9 +1111,9 @@ static int  i2h_insert_item     (ITEM** items, ITEM* item){
 }
 
 /**
- * @brief Initialize the universe to default values.
+ * @brief Initialize the item to default values.
  * 
- * @param [in]  u  The universe we're operating over.
+ * @param [in]  item   The item to initialize.
  * @return 0.
  */
 
@@ -1126,6 +1138,20 @@ static int  i2h_init_item       (ITEM*            item){
 }
 
 /**
+ * @brief Allocate and initialize new item.
+ * 
+ * @param [in]  u  The universe we're operating over.
+ * @return 0.
+ */
+
+static int  i2h_init_new_item   (UNIVERSE*        u){
+    u->item               = malloc(sizeof(*u->item));
+    i2h_init_item(u->item);
+    
+    return 0;
+}
+
+/**
  * @brief Initialize the universe to default values.
  * 
  * @param [in]  u  The universe we're operating over.
@@ -1133,8 +1159,8 @@ static int  i2h_init_item       (ITEM*            item){
  */
 
 static int  i2h_init_universe   (UNIVERSE*        u){
-    i2h_init_item(&u->item);
     u->items              = NULL;
+    i2h_init_new_item(u);
     
     u->out.codec          = avcodec_find_encoder_by_name("libx265");
     u->out.codecCtx       = NULL;
@@ -1199,17 +1225,13 @@ static int i2h_parse_noconsume(char*** argv){
 static int i2h_parse_codec(UNIVERSE* u, char*** argv){
     const char* codec;
     
-    if(!i2h_parse_consumeequals(argv)){
+    if(!i2h_parse_consumeequals(argv))
         i2hmessageexit(EINVAL, stderr, "Option --codec consumes an argument!\n");
-    }
     
     codec = *(*argv)++;
-    if      (strcmp(codec, "h264") == 0 ||
-             strcmp(codec, "x264") == 0){
+    if      (streq(codec, "h264") || streq(codec, "x264")){
         codec = "libx264";
-    }else if(strcmp(codec, "hevc") == 0 ||
-             strcmp(codec, "h265") == 0 ||
-             strcmp(codec, "x265") == 0){
+    }else if(streq(codec, "hevc") || streq(codec, "h265") || streq(codec, "x265")){
         codec = "libx265";
     }
     
@@ -1222,9 +1244,8 @@ static int i2h_parse_codec(UNIVERSE* u, char*** argv){
 static int i2h_parse_tile(UNIVERSE* u, char*** argv){
     char tile_chroma_format[21] = "yuv420";
     
-    if(!i2h_parse_consumeequals(argv)){
+    if(!i2h_parse_consumeequals(argv))
         i2hmessageexit(EINVAL, stderr, "Option --tile consumes an argument!\n");
-    }
     
     switch(sscanf(*(*argv)++, "%"PRIu32":%"PRIu32":%20[yuv420]",
                   &u->out.tile_width,
@@ -1247,17 +1268,15 @@ static int i2h_parse_tile(UNIVERSE* u, char*** argv){
     return 1;
 }
 static int i2h_parse_x264_params(UNIVERSE* u, char*** argv){
-    if(!i2h_parse_consumeequals(argv)){
+    if(!i2h_parse_consumeequals(argv))
         i2hmessageexit(EINVAL, stderr, "Option --x264-params consumes an argument!\n");
-    }
     
     u->out.x264_params = *(*argv)++;
     return 1;
 }
 static int i2h_parse_x265_params(UNIVERSE* u, char*** argv){
-    if(!i2h_parse_consumeequals(argv)){
+    if(!i2h_parse_consumeequals(argv))
         i2hmessageexit(EINVAL, stderr, "Option --x265-params consumes an argument!\n");
-    }
     
     u->out.x265_params = *(*argv)++;
     return 1;
@@ -1265,43 +1284,48 @@ static int i2h_parse_x265_params(UNIVERSE* u, char*** argv){
 static int i2h_parse_crf(UNIVERSE* u, char*** argv){
     char* p;
     
-    if(!i2h_parse_consumeequals(argv)){
+    if(!i2h_parse_consumeequals(argv))
         i2hmessageexit(EINVAL, stderr, "Option --crf consumes an argument!\n");
-    }
     
     u->out.crf = strtoull(p=*(*argv)++, &p, 0);
-    if(u->out.crf > 51 || *p){
+    if(u->out.crf > 51 || *p != '\0')
         i2hmessageexit(EINVAL, stderr, "Error: --crf must be integer in range [0, 51]!\n");
-    }
+    
     return 1;
 }
 static int i2h_parse_hidden(UNIVERSE* u, char*** argv){
-    if(!i2h_parse_noconsume(argv)){
+    if(!i2h_parse_noconsume(argv))
         i2hmessageexit(EINVAL, stderr, "Option --hidden does not consume an argument!\n");
-    }
-    u->item.hidden         = 1;
+    
+    u->item->hidden         = 1;
     return 1;
 }
 static int i2h_parse_primary(UNIVERSE* u, char*** argv){
-    if(!i2h_parse_noconsume(argv)){
+    if(!i2h_parse_noconsume(argv))
         i2hmessageexit(EINVAL, stderr, "Option --primary does not consume an argument!\n");
-    }
-    u->item.primary        = 1;
+    
+    u->item->primary        = 1;
     return 1;
 }
 static int i2h_parse_thumbnail(UNIVERSE* u, char*** argv){
-    if(!i2h_parse_noconsume(argv)){
+    if(!i2h_parse_noconsume(argv))
         i2hmessageexit(EINVAL, stderr, "Option --thumb does not consume an argument!\n");
-    }
-    u->item.want_thumbnail = 1;
+    
+    u->item->want_thumbnail = 1;
     return 1;
 }
 static int i2h_parse_name(UNIVERSE* u, char*** argv){
-    if(!i2h_parse_consumeequals(argv)){
+    if(!i2h_parse_consumeequals(argv))
         i2hmessageexit(EINVAL, stderr, "Option --name consumes an argument!\n");
-    }
     
-    u->item.name = *(*argv)++;
+    u->item->name = *(*argv)++;
+    return 1;
+}
+static int i2h_parse_mime(UNIVERSE* u, char*** argv){
+    if(!i2h_parse_consumeequals(argv))
+        i2hmessageexit(EINVAL, stderr, "Option --mime consumes an argument!\n");
+    
+    u->item->mime = *(*argv)++;
     return 1;
 }
 static int i2h_parse_ref(UNIVERSE* u, char*** argv){
@@ -1311,9 +1335,8 @@ static int i2h_parse_ref(UNIVERSE* u, char*** argv){
     IREF*    iref = calloc(1, sizeof(*iref));
     
     /* Consume the = if it's there. */
-    if(!i2h_parse_consumeequals(argv)){
+    if(!i2h_parse_consumeequals(argv))
         i2hmessageexit(EINVAL, stderr, "Option --ref consumes an argument!\n");
-    }
     
     /* Extract the argument. */
     p = *(*argv)++;
@@ -1350,28 +1373,17 @@ static int i2h_parse_ref(UNIVERSE* u, char*** argv){
     }
     
     /* Append this set of references to the current item. */
-    i2h_append_irefs(&u->item.refs, iref);
+    i2h_append_irefs(&u->item->refs, iref);
     
-    return 1;
-}
-static int i2h_parse_mime(UNIVERSE* u, char*** argv){
-    if(!i2h_parse_consumeequals(argv)){
-        i2hmessageexit(EINVAL, stderr, "Option --mime consumes an argument!\n");
-    }
-    
-    u->item.mime = *(*argv)++;
     return 1;
 }
 static int i2h_parse_item(UNIVERSE* u, char*** argv){
-    char* p;
-    char* q;
+    char* p, *q;
     int   id_set = 0;
-    ITEM* item;
     
     /* Consume the = if it's there. */
-    if(!i2h_parse_consumeequals(argv)){
+    if(!i2h_parse_consumeequals(argv))
         i2hmessageexit(EINVAL, stderr, "Option --item consumes an argument!\n");
-    }
     
     /* Extract the argument. */
     p = *(*argv)++;
@@ -1379,26 +1391,20 @@ static int i2h_parse_item(UNIVERSE* u, char*** argv){
     /* Parse the argument. */
     while(1){
         if      (strstartswith(p, "id=")){
-            if(id_set){
+            if(id_set || id_set++)
                 i2hmessageexit(EINVAL, stderr, "Item ID has already been set!\n");
-            }
-            u->item.id = strtoull(p+=3, &q, 0);
-            if(p==q){
+            
+            q = p+3;
+            u->item->id = strtoull(q, &p, 0);
+            if(p==q)
                 i2hmessageexit(EINVAL, stderr, "id= requires a 32-bit unsigned integer item ID!\n");
-            }else{
-                p = q;
-            }
-            id_set = 1;
-            for(item=u->items; item; item=item->next){
-                if(item->id == u->item.id){
-                    i2hmessageexit(EINVAL, stderr, "Pre-existing item with same ID %"PRIu32"!\n", u->item.id);
-                }
-            }
+            if(i2h_find_item_by_id(u, u->item->id))
+                i2hmessageexit(EINVAL, stderr, "Pre-existing item with same ID %"PRIu32"!\n", u->item->id);
         }else if(strstartswith(p, "type=")){
-            memcpy(u->item.type, p+=5, 4);
+            memcpy(u->item->type, p+=5, 4);
             p += 4;
         }else if(strstartswith(p, "path=")){
-            u->item.path = (p+=5);
+            u->item->path = (p+=5);
             break;
         }else{
             i2hmessageexit(EINVAL, stderr, "Unknown key '%s'\n", p);
@@ -1416,25 +1422,21 @@ static int i2h_parse_item(UNIVERSE* u, char*** argv){
      * - When no id= key is given, automatically assign one.
      */
     
-    if(strnlen(u->item.type, 4) != 4){
+    if(strnlen(u->item->type, 4) != 4)
         i2hmessageexit(EINVAL, stderr, "The type= key must be exactly 4 ASCII characters!\n");
-    }
-    if(!id_set && !i2h_find_free_item_id(u, &u->item.id)){
+    if(!id_set && !i2h_find_free_item_id(u, &u->item->id))
         i2hmessageexit(EINVAL, stderr, "Too many items added, no item IDs remaining!\n");
-    }
     
-    /* Append item to list */
-    item = malloc(sizeof(*item));
-    memcpy(item, &u->item, sizeof(*item));
-    i2h_init_item(&u->item);
-    i2h_insert_item(&u->items, item);
+    /* Process completed item. */
+    i2h_insert_item(&u->items, u->item);
+    i2h_handle_item(u, u->item);
+    i2h_init_new_item(u);
     
     return 1;
 }
 static int i2h_parse_output(UNIVERSE* u, char*** argv){
-    if(!i2h_parse_consumeequals(argv)){
+    if(!i2h_parse_consumeequals(argv))
         i2hmessageexit(EINVAL, stderr, "Option --output consumes an argument!\n");
-    }
     
     u->out.url = *(*argv)++;
     return 1;
