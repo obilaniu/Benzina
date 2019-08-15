@@ -462,6 +462,8 @@ static int i2h_canonicalize_pixfmt(AVFrame* out, AVFrame* in){
     char               graphstr     [512] = {0};
     char               buffersrcargs[512] = {0};
     int                ret           = -EINVAL;
+    int                mpegrange     = in->color_range == AVCOL_RANGE_MPEG;
+    const char*        colorrangestr = mpegrange ? "mpeg" : "jpeg";
     
     
     /**
@@ -536,8 +538,8 @@ static int i2h_canonicalize_pixfmt(AVFrame* out, AVFrame* in){
              in->sample_aspect_ratio.den);
     
     snprintf(graphstr, sizeof(graphstr),
-             "scale=in_range=jpeg:out_range=jpeg,format=pix_fmts=%s",
-             av_get_pix_fmt_name(canonical));
+             "scale=in_range=%s:out_range=%s,format=pix_fmts=%s",
+             colorrangestr, colorrangestr, av_get_pix_fmt_name(canonical));
     ret = avfilter_graph_create_filter(&outputs->filter_ctx,
                                        buffersrc,
                                        "in",
@@ -1026,9 +1028,10 @@ static int  i2h_handle_item     (UNIVERSE* u, ITEM* item){
     item->height = item->frame->height;
     
     
-    fprintf(stdout, "ID %u: %ux%u %s\n",
-            item->id, item->width, item->height,
-            av_get_pix_fmt_name(item->frame->format));
+    fprintf(stdout, "ID %u: %ux%u %s %s\n",
+            item->id, item->frame->width, item->frame->height,
+            av_get_pix_fmt_name(item->frame->format),
+            item->frame->color_range == AVCOL_RANGE_JPEG ? "jpeg" : "mpeg");
     //av_frame_free(&item->frame);
     
     
