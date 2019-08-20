@@ -183,66 +183,18 @@ static enum AVChromaLocation benzina2avchromaloc(int chroma_loc){
 }
 
 /**
- * @brief Fixup several possible problems in frame metadata.
+ * @brief Return whether the stream is of image/video type (contains pixel data).
  * 
- * Some pixel formats are deprecated in favour of a combination with other
- * attributes (such as color_range), so we fix them up.
- * 
- * The AV_CODEC_ID_MJPEG decoder still reports the pixel format using the
- * obsolete pixel-format codes AV_PIX_FMT_YUVJxxxP. This causes problems
- * while filtering with graph filters not aware of the deprecated pixel
- * formats.
- * 
- * Fix this up by replacing the deprecated pixel formats with the
- * corresponding AV_PIX_FMT_YUVxxxP code, and setting the color_range to
- * full-range: AVCOL_RANGE_JPEG.
- * 
- * The color primary, transfer function and colorspace data may all be
- * unspecified. Fill in with plausible data.
- * 
- * @param [in]  f   The AVFrame whose attributes are to be fixed up.
- * @return 0.
+ * @param [in]  avfctx  Format context whose streams we are inspecting.
+ * @param [in]  stream  Integer number of the stream we are inspecting.
+ * @return 0 if not a valid stream or not of image/video type; 1 otherwise.
  */
 
-static int i2h_fixup_frame(AVFrame* f){
-    switch(f->format){
-        #define FIXUPFORMAT(p)                         \
-            case AV_PIX_FMT_YUVJ ## p:                 \
-                f->format      = AV_PIX_FMT_YUV ## p;  \
-                f->color_range = AVCOL_RANGE_JPEG;     \
-            break
-        FIXUPFORMAT(411P);
-        FIXUPFORMAT(420P);
-        FIXUPFORMAT(422P);
-        FIXUPFORMAT(440P);
-        FIXUPFORMAT(444P);
-        default: break;
-        #undef  FIXUPFORMAT
+static int i2h_is_imagelike_stream(AVFormatContext* avfctx, int stream){
+    if(stream < 0 || stream >= (int)avfctx->nb_streams){
+        return 0;
     }
-    switch(f->color_primaries){
-        case AVCOL_PRI_RESERVED0:
-        case AVCOL_PRI_RESERVED:
-        case AVCOL_PRI_UNSPECIFIED:
-            f->color_primaries = AVCOL_PRI_BT709;
-        break;
-        default: break;
-    }
-    switch(f->color_trc){
-        case AVCOL_TRC_RESERVED0:
-        case AVCOL_TRC_RESERVED:
-        case AVCOL_TRC_UNSPECIFIED:
-            f->color_trc = AVCOL_TRC_IEC61966_2_1;
-        break;
-        default: break;
-    }
-    switch(f->colorspace){
-        case AVCOL_SPC_RESERVED:
-        case AVCOL_TRC_UNSPECIFIED:
-            f->colorspace = AVCOL_SPC_BT470BG;
-        break;
-        default: break;
-    }
-    return 0;
+    return avfctx->streams[stream]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO;
 }
 
 /**
@@ -443,15 +395,82 @@ static enum AVPixelFormat i2h_pick_pix_fmt(enum AVPixelFormat src){
 }
 
 /**
- * @brief Convert input frame to output with canonical pixel format.
+ * @brief Fixup several possible problems in frame metadata.
  * 
- * @param [out]  out  Output frame, with canonical pixel format.
- * @param [in]   in   Input frame.
+ * Some pixel formats are deprecated in favour of a combination with other
+ * attributes (such as color_range), so we fix them up.
+ * 
+ * The AV_CODEC_ID_MJPEG decoder still reports the pixel format using the
+ * obsolete pixel-format codes AV_PIX_FMT_YUVJxxxP. This causes problems
+ * while filtering with graph filters not aware of the deprecated pixel
+ * formats.
+ * 
+ * Fix this up by replacing the deprecated pixel formats with the
+ * corresponding AV_PIX_FMT_YUVxxxP code, and setting the color_range to
+ * full-range: AVCOL_RANGE_JPEG.
+ * 
+ * The color primary, transfer function and colorspace data may all be
+ * unspecified. Fill in with plausible data.
+ * 
+ * @param [in]  f   The AVFrame whose attributes are to be fixed up.
+ * @return 0.
+ */
+
+static int i2h_fixup_frame(AVFrame* f){
+    switch(f->format){
+        #define FIXUPFORMAT(p)                         \
+            case AV_PIX_FMT_YUVJ ## p:                 \
+                f->format      = AV_PIX_FMT_YUV ## p;  \
+                f->color_range = AVCOL_RANGE_JPEG;     \
+            break
+        FIXUPFORMAT(411P);
+        FIXUPFORMAT(420P);
+        FIXUPFORMAT(422P);
+        FIXUPFORMAT(440P);
+        FIXUPFORMAT(444P);
+        default: break;
+        #undef  FIXUPFORMAT
+    }
+    switch(f->color_primaries){
+        case AVCOL_PRI_RESERVED0:
+        case AVCOL_PRI_RESERVED:
+        case AVCOL_PRI_UNSPECIFIED:
+            f->color_primaries = AVCOL_PRI_BT709;
+        break;
+        default: break;
+    }
+    switch(f->color_trc){
+        case AVCOL_TRC_RESERVED0:
+        case AVCOL_TRC_RESERVED:
+        case AVCOL_TRC_UNSPECIFIED:
+            f->color_trc = AVCOL_TRC_IEC61966_2_1;
+        break;
+        default: break;
+    }
+    switch(f->colorspace){
+        case AVCOL_SPC_RESERVED:
+        case AVCOL_TRC_UNSPECIFIED:
+            f->colorspace = AVCOL_SPC_BT470BG;
+        break;
+        default: break;
+    }
+    return 0;
+}
+
+/**
+ * @brief Apply a filter graph described by a string to the input frame,
+ *        producing an output frame.
+ * 
+ * The graph must have one default input and one default output.
+ * 
+ * @param [out] out       Output frame.
+ * @param [in]  graphstr  String filtergraph description.
+ * @param [in]  in        Input frame. The function increments the reference
+ *                        count of the frame.
  * @return 0 if successful; !0 otherwise.
  */
 
-static int i2h_canonicalize_pixfmt(AVFrame* out, AVFrame* in){
-    enum AVPixelFormat canonical     = i2h_pick_pix_fmt(in->format);
+static int i2h_apply_graph(AVFrame* out, const char* graphstr, AVFrame* in){
     AVFilterGraph*     graph         = NULL;
     AVFilterInOut*     inputs        = NULL;
     AVFilterInOut*     outputs       = NULL;
@@ -459,22 +478,8 @@ static int i2h_canonicalize_pixfmt(AVFrame* out, AVFrame* in){
     AVFilterContext*   buffersinkctx = NULL;
     const AVFilter*    buffersrc     = NULL;
     const AVFilter*    buffersink    = NULL;
-    char               graphstr     [512] = {0};
     char               buffersrcargs[512] = {0};
     int                ret           = -EINVAL;
-    int                mpegrange     = in->color_range == AVCOL_RANGE_MPEG;
-    const char*        colorrangestr = mpegrange ? "mpeg" : "jpeg";
-    
-    
-    /**
-     * Fast Check
-     */
-    
-    if(canonical == AV_PIX_FMT_NONE){
-        i2hmessage(stderr, "Pixel format %s unsupported!\n",
-                   av_get_pix_fmt_name(in->format));
-        return -EINVAL;
-    }
     
     
     /**
@@ -536,10 +541,6 @@ static int i2h_canonicalize_pixfmt(AVFrame* out, AVFrame* in){
              in->width, in->height, in->format,
              in->sample_aspect_ratio.num,
              in->sample_aspect_ratio.den);
-    
-    snprintf(graphstr, sizeof(graphstr),
-             "scale=in_range=%s:out_range=%s,format=pix_fmts=%s",
-             colorrangestr, colorrangestr, av_get_pix_fmt_name(canonical));
     ret = avfilter_graph_create_filter(&outputs->filter_ctx,
                                        buffersrc,
                                        "in",
@@ -610,18 +611,63 @@ static int i2h_canonicalize_pixfmt(AVFrame* out, AVFrame* in){
 }
 
 /**
- * @brief Return whether the stream is of image/video type (contains pixel data).
+ * @brief Convert input frame to output with canonical pixel format.
  * 
- * @param [in]  avfctx  Format context whose streams we are inspecting.
- * @param [in]  stream  Integer number of the stream we are inspecting.
- * @return 0 if not a valid stream or not of image/video type; 1 otherwise.
+ * @param [out]  out  Output frame, with canonical pixel format.
+ * @param [in]   in   Input frame.
+ * @return 0 if successful; !0 otherwise.
  */
 
-static int i2h_is_imagelike_stream(AVFormatContext* avfctx, int stream){
-    if(stream < 0 || stream >= (int)avfctx->nb_streams){
-        return 0;
+static int i2h_canonicalize_pixfmt(AVFrame* out, AVFrame* in){
+    const char* colorrangestr;
+    int mpegrange;
+    enum AVPixelFormat canonical = i2h_pick_pix_fmt(in->format);
+    char graphstr[512] = {0};
+    
+    if(canonical == AV_PIX_FMT_NONE){
+        i2hmessage(stderr, "Pixel format %s unsupported!\n",
+                   av_get_pix_fmt_name(in->format));
+        return -EINVAL;
     }
-    return avfctx->streams[stream]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO;
+    
+    mpegrange     = in->color_range == AVCOL_RANGE_MPEG;
+    colorrangestr = mpegrange ? "mpeg" : "jpeg";
+    snprintf(graphstr, sizeof(graphstr),
+             "scale=in_range=%s:out_range=%s,format=pix_fmts=%s",
+             colorrangestr, colorrangestr, av_get_pix_fmt_name(canonical));
+    
+    return i2h_apply_graph(out, graphstr, in);
+}
+
+/**
+ * @brief Scale frame.
+ * 
+ * @param [out]  out         Output frame.
+ * @param [in]   in          Input frame.
+ * @param [in]   pix_fmt     Output pixel format. Almost surely either
+ *                           AV_PIX_FMT_YUV420P or AV_PIX_FMT_YUV444P.
+ * @param [in]   width       Target width  for scaling, before padding.
+ * @param [in]   height      Target height for scaling, before padding.
+ * @param [in]   tile_width  Tile width.  Output will be padded to a multiple
+ *                           of this width.
+ * @param [in]   tile_height Tile height. Output will be padded to a multiple
+ *                           of this height.
+ * @return 0 if successful; !0 otherwise.
+ */
+
+static int i2h_scale_and_pad(AVFrame* out,
+                             AVFrame* in,
+                             enum AVPixelFormat pix_fmt,
+                             int      width,
+                             int      height,
+                             int      tile_width,
+                             int      tile_height){
+    char graphstr[512] = {0};
+    
+    snprintf(graphstr, sizeof(graphstr),
+             "scale=in_range=%s:out_range=%s,format=pix_fmts=%s", "", "", "");
+    
+    return i2h_apply_graph(out, graphstr, in);
 }
 
 /**
@@ -1121,22 +1167,10 @@ static int  i2h_insert_item     (ITEM** items, ITEM* item){
  */
 
 static int  i2h_init_item       (ITEM*            item){
-    item->id             = 0;
-    item->path           = NULL;
+    memset(item, 0, sizeof(*item));
     item->name           = "";
     memcpy(item->type, "pict", 4);
     item->mime           = "application/octet-stream";
-    item->primary        = 0;
-    item->hidden         = 0;
-    item->want_thumbnail = 0;
-    item->width          = 0;
-    item->height         = 0;
-    item->frame          = NULL;
-    item->packet         = NULL;
-    item->refs           = NULL;
-    item->thumbnail      = NULL;
-    item->grid           = NULL;
-    item->next           = NULL;
     return 0;
 }
 
@@ -1191,7 +1225,7 @@ static int  i2h_init_universe   (UNIVERSE*        u){
  * @return !0 if successfully parsed, 0 otherwise.
  */
 
-static int i2h_parse_shortopt(char*** argv){
+static int i2h_parse_shortopt   (char*** argv){
     int ret = **argv            &&
              (**argv)[0] == '-' &&
              (**argv)[1] != '-' &&
@@ -1201,7 +1235,7 @@ static int i2h_parse_shortopt(char*** argv){
     }
     return ret;
 }
-static int i2h_parse_longopt(char*** argv, const char* opt){
+static int i2h_parse_longopt    (char*** argv, const char* opt){
     size_t l   = strlen(opt);
     int    ret = strncmp(**argv, opt, l) == 0 &&
                        ((**argv)[l] == '\0' ||
@@ -1211,6 +1245,14 @@ static int i2h_parse_longopt(char*** argv, const char* opt){
     }
     return ret;
 }
+static int i2h_parse_consumestr (char*** argv, char** str_out){
+    *str_out = *(*argv)++;
+    return !!*str_out;
+}
+static int i2h_parse_consumecstr(char*** argv, const char** str_out){
+    *str_out = *(*argv)++;
+    return !!*str_out;
+}
 static int i2h_parse_consumeequals(char*** argv){
     switch(***argv){
         case '\0': return !!*++*argv;
@@ -1218,20 +1260,19 @@ static int i2h_parse_consumeequals(char*** argv){
         default:   return 0;
     }
 }
-static int i2h_parse_noconsume(char*** argv){
+static int i2h_parse_noconsume  (char*** argv){
     switch(***argv){
         case '\0': return (void)*++*argv, 1;
         case '=':  i2hmessageexit(EINVAL, stderr, "Option takes no arguments!\n");
         default:   return 1;
     }
 }
-static int i2h_parse_codec(UNIVERSE* u, char*** argv){
+static int i2h_parse_codec      (UNIVERSE* u, char*** argv){
     const char* codec;
     
-    if(!i2h_parse_consumeequals(argv))
+    if(!i2h_parse_consumeequals(argv) || !i2h_parse_consumecstr(argv, &codec))
         i2hmessageexit(EINVAL, stderr, "Option --codec consumes an argument!\n");
     
-    codec = *(*argv)++;
     if      (streq(codec, "h264") || streq(codec, "x264")){
         codec = "libx264";
     }else if(streq(codec, "hevc") || streq(codec, "h265") || streq(codec, "x265")){
@@ -1244,7 +1285,7 @@ static int i2h_parse_codec(UNIVERSE* u, char*** argv){
     
     return 1;
 }
-static int i2h_parse_tile(UNIVERSE* u, char*** argv){
+static int i2h_parse_tile       (UNIVERSE* u, char*** argv){
     char tile_chroma_format[21] = "yuv420";
     
     if(!i2h_parse_consumeequals(argv))
@@ -1271,78 +1312,64 @@ static int i2h_parse_tile(UNIVERSE* u, char*** argv){
     return 1;
 }
 static int i2h_parse_x264_params(UNIVERSE* u, char*** argv){
-    if(!i2h_parse_consumeequals(argv))
+    if(!i2h_parse_consumeequals(argv) || !i2h_parse_consumecstr(argv, &u->out.x264_params))
         i2hmessageexit(EINVAL, stderr, "Option --x264-params consumes an argument!\n");
-    
-    u->out.x264_params = *(*argv)++;
     return 1;
 }
 static int i2h_parse_x265_params(UNIVERSE* u, char*** argv){
-    if(!i2h_parse_consumeequals(argv))
+    if(!i2h_parse_consumeequals(argv) || !i2h_parse_consumecstr(argv, &u->out.x265_params))
         i2hmessageexit(EINVAL, stderr, "Option --x265-params consumes an argument!\n");
-    
-    u->out.x265_params = *(*argv)++;
     return 1;
 }
-static int i2h_parse_crf(UNIVERSE* u, char*** argv){
+static int i2h_parse_crf        (UNIVERSE* u, char*** argv){
     char* p;
     
-    if(!i2h_parse_consumeequals(argv))
+    if(!i2h_parse_consumeequals(argv) || !i2h_parse_consumestr(argv, &p))
         i2hmessageexit(EINVAL, stderr, "Option --crf consumes an argument!\n");
     
-    u->out.crf = strtoull(p=*(*argv)++, &p, 0);
+    u->out.crf = strtoull(p, &p, 0);
     if(u->out.crf > 51 || *p != '\0')
         i2hmessageexit(EINVAL, stderr, "Error: --crf must be integer in range [0, 51]!\n");
     
     return 1;
 }
-static int i2h_parse_hidden(UNIVERSE* u, char*** argv){
+static int i2h_parse_hidden     (UNIVERSE* u, char*** argv){
     if(!i2h_parse_noconsume(argv))
         i2hmessageexit(EINVAL, stderr, "Option --hidden does not consume an argument!\n");
-    
     u->item->hidden         = 1;
     return 1;
 }
-static int i2h_parse_primary(UNIVERSE* u, char*** argv){
+static int i2h_parse_primary    (UNIVERSE* u, char*** argv){
     if(!i2h_parse_noconsume(argv))
         i2hmessageexit(EINVAL, stderr, "Option --primary does not consume an argument!\n");
-    
     u->item->primary        = 1;
     return 1;
 }
-static int i2h_parse_thumbnail(UNIVERSE* u, char*** argv){
+static int i2h_parse_thumbnail  (UNIVERSE* u, char*** argv){
     if(!i2h_parse_noconsume(argv))
         i2hmessageexit(EINVAL, stderr, "Option --thumb does not consume an argument!\n");
-    
     u->item->want_thumbnail = 1;
     return 1;
 }
-static int i2h_parse_name(UNIVERSE* u, char*** argv){
-    if(!i2h_parse_consumeequals(argv))
+static int i2h_parse_name       (UNIVERSE* u, char*** argv){
+    if(!i2h_parse_consumeequals(argv) || !i2h_parse_consumecstr(argv, &u->item->name))
         i2hmessageexit(EINVAL, stderr, "Option --name consumes an argument!\n");
-    
-    u->item->name = *(*argv)++;
     return 1;
 }
-static int i2h_parse_mime(UNIVERSE* u, char*** argv){
-    if(!i2h_parse_consumeequals(argv))
+static int i2h_parse_mime       (UNIVERSE* u, char*** argv){
+    if(!i2h_parse_consumeequals(argv) || !i2h_parse_consumecstr(argv, &u->item->mime))
         i2hmessageexit(EINVAL, stderr, "Option --mime consumes an argument!\n");
-    
-    u->item->mime = *(*argv)++;
     return 1;
 }
-static int i2h_parse_ref(UNIVERSE* u, char*** argv){
+static int i2h_parse_ref        (UNIVERSE* u, char*** argv){
     char* p, *s;
     uint32_t r    = 0;
     int      n    = 0;
     IREF*    iref = calloc(1, sizeof(*iref));
     
-    /* Consume the = if it's there. */
-    if(!i2h_parse_consumeequals(argv))
+    /* Consume the = and argument if it's there. */
+    if(!i2h_parse_consumeequals(argv) || !i2h_parse_consumestr(argv, &p))
         i2hmessageexit(EINVAL, stderr, "Option --ref consumes an argument!\n");
-    
-    /* Extract the argument. */
-    p = *(*argv)++;
     
     /* First 4 bytes are the type. */
     memcpy(iref->type, p, sizeof(iref->type));
@@ -1380,16 +1407,13 @@ static int i2h_parse_ref(UNIVERSE* u, char*** argv){
     
     return 1;
 }
-static int i2h_parse_item(UNIVERSE* u, char*** argv){
+static int i2h_parse_item       (UNIVERSE* u, char*** argv){
     char* p, *q;
     int   id_set = 0;
     
-    /* Consume the = if it's there. */
-    if(!i2h_parse_consumeequals(argv))
+    /* Consume the = and argument if it's there. */
+    if(!i2h_parse_consumeequals(argv) || !i2h_parse_consumestr(argv, &p))
         i2hmessageexit(EINVAL, stderr, "Option --item consumes an argument!\n");
-    
-    /* Extract the argument. */
-    p = *(*argv)++;
     
     /* Parse the argument. */
     while(1){
@@ -1437,14 +1461,12 @@ static int i2h_parse_item(UNIVERSE* u, char*** argv){
     
     return 1;
 }
-static int i2h_parse_output(UNIVERSE* u, char*** argv){
-    if(!i2h_parse_consumeequals(argv))
+static int i2h_parse_output     (UNIVERSE* u, char*** argv){
+    if(!i2h_parse_consumeequals(argv) || !i2h_parse_consumecstr(argv, &u->out.url))
         i2hmessageexit(EINVAL, stderr, "Option --output consumes an argument!\n");
-    
-    u->out.url = *(*argv)++;
     return 1;
 }
-static int i2h_parse_help(UNIVERSE* u, char*** argv){
+static int i2h_parse_help       (UNIVERSE* u, char*** argv){
     (void)u;
     (void)argv;
     
