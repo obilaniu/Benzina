@@ -64,6 +64,8 @@ struct ITEM{
     unsigned    want_thumbnail : 1;
     uint32_t    width, height;
     AVFrame*    frame;
+    AVFrame*    grid_frame;
+    AVFrame*    tile_frame;
     AVPacket*   packet;
     IREF*       refs;
     ITEM*       thumbnail;
@@ -640,14 +642,15 @@ static int i2h_canonicalize_pixfmt(AVFrame* out, AVFrame* in){
 }
 
 /**
- * @brief Scale frame.
+ * @brief Scale/Pad frame to even number of tiles.
  * 
- * @param [out]  out         Output frame.
- * @param [in]   in          Input frame.
- * @param [in]   pix_fmt     Output pixel format. Almost surely either
- *                           AV_PIX_FMT_YUV420P or AV_PIX_FMT_YUV444P.
- * @param [in]   width       Target width  for scaling, before padding.
- * @param [in]   height      Target height for scaling, before padding.
+ * @param [out]  dst         Output frame.
+ * @param [in]   src         Input frame.
+ * @param [in]   dst_pix_fmt Output pixel format. Almost surely either
+ *                           AV_PIX_FMT_YUV420P or AV_PIX_FMT_YUV444P. Must be
+ *                           supported by pad/fillborders filter.
+ * @param [in]   dst_width   Target width  for scaling, before padding.
+ * @param [in]   dst_height  Target height for scaling, before padding.
  * @param [in]   tile_width  Tile width.  Output will be padded to a multiple
  *                           of this width.
  * @param [in]   tile_height Tile height. Output will be padded to a multiple
@@ -655,19 +658,65 @@ static int i2h_canonicalize_pixfmt(AVFrame* out, AVFrame* in){
  * @return 0 if successful; !0 otherwise.
  */
 
-static int i2h_scale_and_pad(AVFrame* out,
-                             AVFrame* in,
-                             enum AVPixelFormat pix_fmt,
-                             int      width,
-                             int      height,
-                             int      tile_width,
-                             int      tile_height){
-    char graphstr[512] = {0};
+static int i2h_scale_and_pad(AVFrame*           dst,
+                             AVFrame*           src,
+                             enum AVPixelFormat dst_pix_fmt,
+                             int                dst_width,
+                             int                dst_height,
+                             int                tile_width,
+                             int                tile_height){
+    char        graphstr[1024] = {0}, *p;
+    const char* src_range, *src_space, *dst_space, *dst_fmt_name;
+    int         i, l, src_is_rgb, src_is_yuv444, dst_scaled;
+    int         padded_width, padded_height;
     
-    snprintf(graphstr, sizeof(graphstr),
-             "scale=in_range=%s:out_range=%s,format=pix_fmts=%s", "", "", "");
     
-    return i2h_apply_graph(out, graphstr, in);
+    /* Preliminaries. Compute various facts about the graph. */
+    src_is_rgb    = src->format == AV_PIX_FMT_GBRP;
+    src_is_yuv444 = src->format == AV_PIX_FMT_YUV444P;
+    src_range     = src->color_range == AVCOL_RANGE_MPEG ? "mpeg" : "jpeg";
+    src_space     = av_color_space_name(src->colorspace);
+    src_space     = src_space  ? src_space : "bt470bg";
+    dst_space     = src_is_rgb ? "bt470bg" : src_space;
+    dst_scaled    = src->width != dst_width || src->height != dst_height;
+    dst_fmt_name  = av_get_pix_fmt_name(dst_pix_fmt);
+    padded_width  = (dst_width  + tile_width  - 1) / tile_width  * tile_width;
+    padded_height = (dst_height + tile_height - 1) / tile_height * tile_height;
+    
+    
+    /* snprintf the graph. */
+    p = graphstr;
+    l = sizeof(graphstr);
+    i = 0;
+    i = snprintf(p, l, "scale=in_range=%s:out_range=%s:in_color_matrix=%s:"
+                       "out_color_matrix=%s",
+                 src_range, src_range, src_space, dst_space);
+    p += i;
+    l -= i;
+    if(dst_scaled){
+        i = snprintf(p, l, ":w=%d:h=%d", dst_width, dst_height);
+        p += i;
+        l -= i;
+    }
+    if(src_is_rgb || src_is_yuv444 || dst_scaled){
+        i = snprintf(p, l, ",format=pix_fmts=yuv444p");
+        p += i;
+        l -= i;
+    }
+    i = snprintf(p, l, ",pad=%d:%d:0:0,fillborders=0:%d:0:%d:smear",
+                 padded_width,
+                 padded_height,
+                 padded_width  - dst_width,
+                 padded_height - dst_height);
+    p += i;
+    l -= i;
+    i = snprintf(p, l, ",scale=in_range=%s:out_range=%s:in_color_matrix=%s:"
+                       "out_color_matrix=%s,format=pix_fmts=%s",
+                 src_range, src_range, dst_space, dst_space, dst_fmt_name);
+    
+    
+    /* Apply and return. */
+    return i2h_apply_graph(dst, graphstr, src);
 }
 
 /**
@@ -1000,11 +1049,26 @@ static int  i2h_do_output       (UNIVERSE*        u){
 
 static int  i2h_handle_item     (UNIVERSE* u, ITEM* item){
     /* FFmpeg state. */
+    int                singletile,   letterboxing;
+    int64_t            scaled_width, scaled_height;
+    enum AVPixelFormat pix_fmt;
     AVFormatContext*   format_ctx    = NULL;
     int                format_stream = 0;
     AVCodecParameters* codec_par     = NULL;
     AVCodec*           codec         = NULL;
     AVCodecContext*    codec_ctx     = NULL;
+    
+    
+    /* Set destination pixel format. */
+    switch(u->out.chroma_format){
+        case BENZINA_CHROMAFMT_YUV400: pix_fmt = AV_PIX_FMT_GRAY8;   break;
+        case BENZINA_CHROMAFMT_YUV420: pix_fmt = AV_PIX_FMT_YUV420P; break;
+        case BENZINA_CHROMAFMT_YUV422: pix_fmt = AV_PIX_FMT_YUV422P; break;
+        case BENZINA_CHROMAFMT_YUV444: pix_fmt = AV_PIX_FMT_YUV444P; break;
+        default:
+            i2hmessageexit(EINVAL, stderr, "Unsupported chroma format \"%u\"!\n",
+                                           u->out.chroma_format);
+    }
     
     
     /* Input Init */
@@ -1067,19 +1131,81 @@ static int  i2h_handle_item     (UNIVERSE* u, ITEM* item){
     avformat_close_input(&format_ctx);
     
     
-    /* Handle the frame. */
+    /* Fixup the frame and canonicalize its pixel format. */
     i2h_fixup_frame(item->frame);
     i2h_canonicalize_pixfmt(item->frame, item->frame);
     item->width  = item->frame->width;
     item->height = item->frame->height;
     
     
+    /* Compute scaling parameters */
+    singletile   = item->frame->width  <= (int)u->out.tile_width &&
+                   item->frame->height <= (int)u->out.tile_height;
+    letterboxing = ((uint64_t)item->frame->width  * u->out.tile_height) >=
+                   ((uint64_t)item->frame->height * u->out.tile_width );
+    if(singletile){
+        scaled_width  = item->frame->width;
+        scaled_height = item->frame->height;
+    }else if(letterboxing){
+        scaled_width  = u->out.tile_width;
+        scaled_height = round(1.0 * scaled_width *
+                              item->frame->height/item->frame->width);
+    }else{
+        scaled_height = u->out.tile_height;
+        scaled_width  = round(1.0 * scaled_height *
+                              item->frame->width/item->frame->height);
+    }
+    
+    
+    /* Create grid/single-tile frames */
+    item->grid_frame = av_frame_alloc();
+    if(!item->grid_frame)
+        i2hmessageexit(ENOMEM, stderr, "Error allocating frame!\n");
+    item->tile_frame = av_frame_alloc();
+    if(!item->tile_frame)
+        i2hmessageexit(ENOMEM, stderr, "Error allocating frame!\n");
+    
+    i2h_scale_and_pad(item->grid_frame, item->frame, pix_fmt,
+                      item->width, item->height,
+                      u->out.tile_width, u->out.tile_height);
+    if(singletile){
+        av_frame_ref(item->tile_frame, item->grid_frame);
+    }else{
+        i2h_scale_and_pad(item->tile_frame, item->frame, pix_fmt,
+                          scaled_width, scaled_height,
+                          u->out.tile_width, u->out.tile_height);
+    }
+    
+#if 1
     fprintf(stdout, "ID %u: %ux%u %s %s\n",
             item->id, item->frame->width, item->frame->height,
             av_get_pix_fmt_name(item->frame->format),
             item->frame->color_range == AVCOL_RANGE_JPEG ? "jpeg" : "mpeg");
-    //av_frame_free(&item->frame);
+    fprintf(stdout, "Grid:  %ux%u %s %s\n",
+            item->grid_frame->width, item->grid_frame->height,
+            av_get_pix_fmt_name(item->grid_frame->format),
+            item->grid_frame->color_range == AVCOL_RANGE_JPEG ? "jpeg" : "mpeg");
+    fprintf(stdout, "Tile:  %ux%u %s %s\n",
+            item->tile_frame->width, item->tile_frame->height,
+            av_get_pix_fmt_name(item->tile_frame->format),
+            item->tile_frame->color_range == AVCOL_RANGE_JPEG ? "jpeg" : "mpeg");
+#endif
+#if 0
+    FILE* fp;
+    fp = fopen("grid.yuv", "w");
+    fwrite(item->grid_frame->data[0], item->grid_frame->width*item->grid_frame->height/1, 1, fp);
+    fwrite(item->grid_frame->data[1], item->grid_frame->width*item->grid_frame->height/4, 1, fp);
+    fwrite(item->grid_frame->data[2], item->grid_frame->width*item->grid_frame->height/4, 1, fp);
+    fclose(fp);
+    fp = fopen("tile.yuv", "w");
+    fwrite(item->tile_frame->data[0], item->tile_frame->width*item->tile_frame->height/1, 1, fp);
+    fwrite(item->tile_frame->data[1], item->tile_frame->width*item->tile_frame->height/4, 1, fp);
+    fwrite(item->tile_frame->data[2], item->tile_frame->width*item->tile_frame->height/4, 1, fp);
+    fclose(fp);
+    exit(1);
     
+    //av_frame_free(&item->frame);
+#endif
     
     return 0;
 }
