@@ -260,110 +260,113 @@ static enum AVPixelFormat i2h_pick_pix_fmt(enum AVPixelFormat src){
         case AV_PIX_FMT_RGB48LE:
             return AV_PIX_FMT_GBRP16LE;
         case AV_PIX_FMT_YUV410P:
-            return AV_PIX_FMT_NONE;
+            return AV_PIX_FMT_YUV410P;
         case AV_PIX_FMT_YUV411P:
-            return AV_PIX_FMT_NONE;
+            return AV_PIX_FMT_YUV411P;
         case AV_PIX_FMT_UYYVYY411:
-            return AV_PIX_FMT_NONE;
+            return AV_PIX_FMT_UYYVYY411;
         case AV_PIX_FMT_YUV420P9LE:
         case AV_PIX_FMT_YUV420P9BE:
         case AV_PIX_FMT_YUVA420P9LE:
         case AV_PIX_FMT_YUVA420P9BE:
-            return AV_PIX_FMT_NONE;
+            return AV_PIX_FMT_YUV420P9LE;
         case AV_PIX_FMT_YUV420P10LE:
         case AV_PIX_FMT_YUV420P10BE:
         case AV_PIX_FMT_YUVA420P10LE:
         case AV_PIX_FMT_YUVA420P10BE:
         case AV_PIX_FMT_P010LE:
         case AV_PIX_FMT_P010BE:
-            return AV_PIX_FMT_NONE;
+            return AV_PIX_FMT_YUV420P10LE;
         case AV_PIX_FMT_YUV420P12LE:
         case AV_PIX_FMT_YUV420P12BE:
-            return AV_PIX_FMT_NONE;
+            return AV_PIX_FMT_YUV420P12LE;
         case AV_PIX_FMT_YUV420P14LE:
         case AV_PIX_FMT_YUV420P14BE:
-            return AV_PIX_FMT_NONE;
+            return AV_PIX_FMT_YUV420P14LE;
         case AV_PIX_FMT_GBRP9LE:
         case AV_PIX_FMT_GBRP9BE:
+            return AV_PIX_FMT_GBRP9LE;
         case AV_PIX_FMT_GRAY9LE:
         case AV_PIX_FMT_GRAY9BE:
-            return AV_PIX_FMT_NONE;
+            return AV_PIX_FMT_GRAY9LE;
         case AV_PIX_FMT_GBRP10LE:
         case AV_PIX_FMT_GBRP10BE:
         case AV_PIX_FMT_GBRAP10LE:
         case AV_PIX_FMT_GBRAP10BE:
+            return AV_PIX_FMT_GBRP10LE;
         case AV_PIX_FMT_GRAY10LE:
         case AV_PIX_FMT_GRAY10BE:
-            return AV_PIX_FMT_NONE;
+            return AV_PIX_FMT_GRAY10LE;
         case AV_PIX_FMT_GBRP12LE:
         case AV_PIX_FMT_GBRP12BE:
         case AV_PIX_FMT_GBRAP12LE:
         case AV_PIX_FMT_GBRAP12BE:
+            return AV_PIX_FMT_GBRP12LE;
         case AV_PIX_FMT_GRAY12LE:
         case AV_PIX_FMT_GRAY12BE:
-            return AV_PIX_FMT_NONE;
+            return AV_PIX_FMT_GRAY12LE;
         case AV_PIX_FMT_GBRP14LE:
         case AV_PIX_FMT_GBRP14BE:
-            return AV_PIX_FMT_NONE;
+            return AV_PIX_FMT_GBRP14LE;
         case AV_PIX_FMT_YUV422P:
         case AV_PIX_FMT_YUVA422P:
         case AV_PIX_FMT_UYVY422:
         case AV_PIX_FMT_YVYU422:
         case AV_PIX_FMT_YUYV422:
         case AV_PIX_FMT_NV16:
-            return AV_PIX_FMT_NONE;
+            return AV_PIX_FMT_YUV422P;
         case AV_PIX_FMT_YUV422P9LE:
         case AV_PIX_FMT_YUV422P9BE:
         case AV_PIX_FMT_YUVA422P9LE:
         case AV_PIX_FMT_YUVA422P9BE:
-            return AV_PIX_FMT_NONE;
+            return AV_PIX_FMT_YUV422P9LE;
         case AV_PIX_FMT_YUV422P10LE:
         case AV_PIX_FMT_YUV422P10BE:
         case AV_PIX_FMT_YUVA422P10LE:
         case AV_PIX_FMT_YUVA422P10BE:
         case AV_PIX_FMT_NV20LE:
         case AV_PIX_FMT_NV20BE:
-            return AV_PIX_FMT_NONE;
+            return AV_PIX_FMT_YUV422P10LE;
         case AV_PIX_FMT_YUV422P12LE:
         case AV_PIX_FMT_YUV422P12BE:
-            return AV_PIX_FMT_NONE;
+            return AV_PIX_FMT_YUV422P12LE;
         case AV_PIX_FMT_YUV422P14LE:
         case AV_PIX_FMT_YUV422P14BE:
-            return AV_PIX_FMT_NONE;
+            return AV_PIX_FMT_YUV422P14LE;
         case AV_PIX_FMT_YUV422P16LE:
         case AV_PIX_FMT_YUV422P16BE:
         case AV_PIX_FMT_YUVA422P16LE:
         case AV_PIX_FMT_YUVA422P16BE:
-            return AV_PIX_FMT_NONE;
+            return AV_PIX_FMT_YUV422P16LE;
         case AV_PIX_FMT_YUV440P:
-            return AV_PIX_FMT_NONE;
+            return AV_PIX_FMT_YUV440P;
         case AV_PIX_FMT_YUV440P10LE:
         case AV_PIX_FMT_YUV440P10BE:
-            return AV_PIX_FMT_NONE;
+            return AV_PIX_FMT_YUV440P10LE;
         case AV_PIX_FMT_YUV440P12LE:
         case AV_PIX_FMT_YUV440P12BE:
-            return AV_PIX_FMT_NONE;
+            return AV_PIX_FMT_YUV440P12LE;
         case AV_PIX_FMT_YUV444P9LE:
         case AV_PIX_FMT_YUV444P9BE:
         case AV_PIX_FMT_YUVA444P9LE:
         case AV_PIX_FMT_YUVA444P9BE:
-            return AV_PIX_FMT_NONE;
+            return AV_PIX_FMT_YUV444P9LE;
         case AV_PIX_FMT_YUV444P10LE:
         case AV_PIX_FMT_YUV444P10BE:
         case AV_PIX_FMT_YUVA444P10LE:
         case AV_PIX_FMT_YUVA444P10BE:
-            return AV_PIX_FMT_NONE;
+            return AV_PIX_FMT_YUV444P10LE;
         case AV_PIX_FMT_YUV444P12LE:
         case AV_PIX_FMT_YUV444P12BE:
-            return AV_PIX_FMT_NONE;
+            return AV_PIX_FMT_YUV444P12LE;
         case AV_PIX_FMT_YUV444P14LE:
         case AV_PIX_FMT_YUV444P14BE:
-            return AV_PIX_FMT_NONE;
+            return AV_PIX_FMT_YUV444P14LE;
         case AV_PIX_FMT_GBRPF32LE:
         case AV_PIX_FMT_GBRPF32BE:
         case AV_PIX_FMT_GBRAPF32LE:
         case AV_PIX_FMT_GBRAPF32BE:
-            return AV_PIX_FMT_NONE;
+            return AV_PIX_FMT_GBRPF32LE;
         default:
             return AV_PIX_FMT_NONE;
 #if FF_API_VAAPI
