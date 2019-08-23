@@ -97,7 +97,6 @@ struct UNIVERSE{
     struct{
         AVCodec*           codec;
         AVCodecContext*    codec_ctx;
-        AVPacket*          packet;
         uint32_t           tile_width, tile_height;
         unsigned           crf;
         unsigned           chroma_format;
@@ -109,7 +108,41 @@ struct UNIVERSE{
 
 
 
-/* Static Inline Function Definitions */
+/* Static Function Prototypes */
+static int   i2h_frame_fixup                 (AVFrame* f);
+static int   i2h_frame_apply_graph           (AVFrame* out, const char* graphstr, AVFrame* in);
+static int   i2h_frame_canonicalize_pixfmt   (AVFrame* out, AVFrame* in);
+static int   i2h_frame_scale_and_pad         (AVFrame*           dst,
+                                              AVFrame*           src,
+                                              enum AVPixelFormat dst_pix_fmt,
+                                              int                dst_width,
+                                              int                dst_height,
+                                              int                tile_width,
+                                              int                tile_height);
+
+static int   i2h_item_init                   (ITEM* item);
+static int   i2h_item_insert                 (ITEM** items, ITEM* item);
+
+static int   i2h_iref_append                 (IREF** refs, IREF* iref);
+
+static int   i2h_universe_init               (UNIVERSE* u);
+static int   i2h_universe_item_init_new      (UNIVERSE* u);
+static int   i2h_universe_item_find_free_id  (UNIVERSE* u, uint32_t* id_out);
+static ITEM* i2h_universe_item_find_by_id    (UNIVERSE* u, uint32_t  id);
+static int   i2h_universe_item_handle        (UNIVERSE* u, ITEM* item);
+static int   i2h_universe_item_handle_pict   (UNIVERSE* u, ITEM* item);
+static int   i2h_universe_item_handle_mime   (UNIVERSE* u, ITEM* item);
+static int   i2h_universe_encoder_configure  (UNIVERSE* u, AVFrame* frame);
+static void  i2h_universe_encoder_deconfigure(UNIVERSE* u);
+static int   i2h_universe_do_output          (UNIVERSE* u);
+
+
+
+/*************************
+ *** Utility Functions ***
+ *************************/
+
+/* Static Function Definitions */
 
 /**
  * @brief Quick print of status message.
@@ -138,11 +171,11 @@ static inline int   streq        (const char* s, const char* t){
 static inline int   strne        (const char* s, const char* t){
     return !streq(s,t);
 }
-static int          strstartswith(const char* s, const char* t){
+static inline int   strstartswith(const char* s, const char* t){
     size_t ls = strlen(s), lt = strlen(t);
     return ls<lt ? 0 : !memcmp(s, t, lt);
 }
-static int          strendswith  (const char* s, const char* e){
+static inline int   strendswith  (const char* s, const char* e){
     size_t ls = strlen(s), le = strlen(e);
     return ls<le ? 0 : !strcmp(s+ls-le, e);
 }
@@ -154,104 +187,6 @@ static int          i2h_str2chromafmt(const char* s){
     }else{
         return -100;
     }
-}
-static int          av2benzinachromaloc(enum AVChromaLocation chroma_loc){
-    if(chroma_loc == AVCHROMA_LOC_UNSPECIFIED)
-        return BENZINA_CHROMALOC_CENTER;
-    return (int)chroma_loc - 1;
-}
-static enum AVChromaLocation benzina2avchromaloc(int chroma_loc){
-    return (enum AVChromaLocation)(chroma_loc + 1);
-}
-
-/**
- * @brief Convert to x264-expected string the integer code for color primaries,
- *        transfer characteristics and color space.
- * 
- * @return A string representation of the code, as named by x264; Otherwise NULL.
- */
-
-static const char* i2h_x264_color_primaries(enum AVColorPrimaries color_primaries){
-    switch(color_primaries){
-        case AVCOL_PRI_BT709:         return "bt709";
-        case AVCOL_PRI_BT470M:        return "bt470m";
-        case AVCOL_PRI_BT470BG:       return "bt470bg";
-        case AVCOL_PRI_SMPTE170M:     return "smpte170m";
-        case AVCOL_PRI_SMPTE240M:     return "smpte240m";
-        case AVCOL_PRI_FILM:          return "film";
-        case AVCOL_PRI_BT2020:        return "bt2020";
-        case AVCOL_PRI_SMPTE428:      return "smpte428";
-        case AVCOL_PRI_SMPTE431:      return "smpte431";
-        case AVCOL_PRI_SMPTE432:      return "smpte432";
-        default:                      return NULL;
-    }
-}
-static const char* i2h_x264_color_trc(enum AVColorTransferCharacteristic color_trc){
-    switch(color_trc){
-        case AVCOL_TRC_BT709:         return "bt709";
-        case AVCOL_TRC_GAMMA22:       return "bt470m";
-        case AVCOL_TRC_GAMMA28:       return "bt470bg";
-        case AVCOL_TRC_SMPTE170M:     return "smpte170m";
-        case AVCOL_TRC_SMPTE240M:     return "smpte240m";
-        case AVCOL_TRC_LINEAR:        return "linear";
-        case AVCOL_TRC_LOG:           return "log100";
-        case AVCOL_TRC_LOG_SQRT:      return "log316";
-        case AVCOL_TRC_IEC61966_2_4:  return "iec61966-2-4";
-        case AVCOL_TRC_BT1361_ECG:    return "bt1361e";
-        case AVCOL_TRC_IEC61966_2_1:  return "iec61966-2-1";
-        case AVCOL_TRC_BT2020_10:     return "bt2020-10";
-        case AVCOL_TRC_BT2020_12:     return "bt2020-12";
-        case AVCOL_TRC_SMPTE2084:     return "smpte2084";
-        case AVCOL_TRC_SMPTE428:      return "smpte428";
-        case AVCOL_TRC_ARIB_STD_B67:  return "arib-std-b67";
-        default:                      return NULL;
-    }
-}
-static const char* i2h_x264_color_space(enum AVColorSpace color_space){
-    switch(color_space){
-        case AVCOL_SPC_BT709:              return "bt709";
-        case AVCOL_SPC_FCC:                return "fcc";
-        case AVCOL_SPC_BT470BG:            return "bt470bg";
-        case AVCOL_SPC_SMPTE170M:          return "smpte170m";
-        case AVCOL_SPC_SMPTE240M:          return "smpte240m";
-        case AVCOL_SPC_RGB:                return "GBR";
-        case AVCOL_SPC_YCGCO:              return "YCgCo";
-        case AVCOL_SPC_BT2020_NCL:         return "bt2020nc";
-        case AVCOL_SPC_BT2020_CL:          return "bt2020c";
-        case AVCOL_SPC_CHROMA_DERIVED_NCL: return "chroma-derived-nc";
-        case AVCOL_SPC_CHROMA_DERIVED_CL:  return "chroma-derived-c";
-        case AVCOL_SPC_SMPTE2085:          return "smpte2085";
-        default:                           return NULL;
-    }
-}
-
-/**
- * @brief Check whether the selected codec is x264 or x265.
- * 
- * @param [in]  codec  The codec in question.
- * @return Whether it is x264/x265 or not.
- */
-
-static int i2h_is_codec_x264(AVCodec* codec){
-    return streq(codec->name, "libx264");
-}
-static int i2h_is_codec_x265(AVCodec* codec){
-    return streq(codec->name, "libx265");
-}
-
-/**
- * @brief Return whether the stream is of image/video type (contains pixel data).
- * 
- * @param [in]  avfctx  Format context whose streams we are inspecting.
- * @param [in]  stream  Integer number of the stream we are inspecting.
- * @return 0 if not a valid stream or not of image/video type; 1 otherwise.
- */
-
-static int i2h_is_imagelike_stream(AVFormatContext* avfctx, int stream){
-    if(stream < 0 || stream >= (int)avfctx->nb_streams){
-        return 0;
-    }
-    return avfctx->streams[stream]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO;
 }
 
 /**
@@ -452,6 +387,167 @@ static enum AVPixelFormat i2h_pick_pix_fmt(enum AVPixelFormat src){
 }
 
 /**
+ * @brief Convert to x264-expected string the integer code for color primaries,
+ *        transfer characteristics and color space.
+ * 
+ * @return A string representation of the code, as named by x264; Otherwise NULL.
+ */
+
+static const char* i2h_x264_color_primaries(enum AVColorPrimaries color_primaries){
+    switch(color_primaries){
+        case AVCOL_PRI_BT709:         return "bt709";
+        case AVCOL_PRI_BT470M:        return "bt470m";
+        case AVCOL_PRI_BT470BG:       return "bt470bg";
+        case AVCOL_PRI_SMPTE170M:     return "smpte170m";
+        case AVCOL_PRI_SMPTE240M:     return "smpte240m";
+        case AVCOL_PRI_FILM:          return "film";
+        case AVCOL_PRI_BT2020:        return "bt2020";
+        case AVCOL_PRI_SMPTE428:      return "smpte428";
+        case AVCOL_PRI_SMPTE431:      return "smpte431";
+        case AVCOL_PRI_SMPTE432:      return "smpte432";
+        default:                      return NULL;
+    }
+}
+static const char* i2h_x264_color_trc      (enum AVColorTransferCharacteristic color_trc){
+    switch(color_trc){
+        case AVCOL_TRC_BT709:         return "bt709";
+        case AVCOL_TRC_GAMMA22:       return "bt470m";
+        case AVCOL_TRC_GAMMA28:       return "bt470bg";
+        case AVCOL_TRC_SMPTE170M:     return "smpte170m";
+        case AVCOL_TRC_SMPTE240M:     return "smpte240m";
+        case AVCOL_TRC_LINEAR:        return "linear";
+        case AVCOL_TRC_LOG:           return "log100";
+        case AVCOL_TRC_LOG_SQRT:      return "log316";
+        case AVCOL_TRC_IEC61966_2_4:  return "iec61966-2-4";
+        case AVCOL_TRC_BT1361_ECG:    return "bt1361e";
+        case AVCOL_TRC_IEC61966_2_1:  return "iec61966-2-1";
+        case AVCOL_TRC_BT2020_10:     return "bt2020-10";
+        case AVCOL_TRC_BT2020_12:     return "bt2020-12";
+        case AVCOL_TRC_SMPTE2084:     return "smpte2084";
+        case AVCOL_TRC_SMPTE428:      return "smpte428";
+        case AVCOL_TRC_ARIB_STD_B67:  return "arib-std-b67";
+        default:                      return NULL;
+    }
+}
+static const char* i2h_x264_color_space    (enum AVColorSpace color_space){
+    switch(color_space){
+        case AVCOL_SPC_BT709:              return "bt709";
+        case AVCOL_SPC_FCC:                return "fcc";
+        case AVCOL_SPC_BT470BG:            return "bt470bg";
+        case AVCOL_SPC_SMPTE170M:          return "smpte170m";
+        case AVCOL_SPC_SMPTE240M:          return "smpte240m";
+        case AVCOL_SPC_RGB:                return "GBR";
+        case AVCOL_SPC_YCGCO:              return "YCgCo";
+        case AVCOL_SPC_BT2020_NCL:         return "bt2020nc";
+        case AVCOL_SPC_BT2020_CL:          return "bt2020c";
+        case AVCOL_SPC_CHROMA_DERIVED_NCL: return "chroma-derived-nc";
+        case AVCOL_SPC_CHROMA_DERIVED_CL:  return "chroma-derived-c";
+        case AVCOL_SPC_SMPTE2085:          return "smpte2085";
+        default:                           return NULL;
+    }
+}
+
+/**
+ * @brief Check whether the selected codec is x264 or x265.
+ * 
+ * @param [in]  codec  The codec in question.
+ * @return Whether it is x264/x265 or not.
+ */
+
+static inline int i2h_is_codec_x264(AVCodec* codec){
+    return streq(codec->name, "libx264");
+}
+static inline int i2h_is_codec_x265(AVCodec* codec){
+    return streq(codec->name, "libx265");
+}
+
+/**
+ * @brief Return whether the stream is of image/video type (contains pixel data).
+ * 
+ * @param [in]  avfctx  Format context whose streams we are inspecting.
+ * @param [in]  stream  Integer number of the stream we are inspecting.
+ * @return 0 if not a valid stream or not of image/video type; 1 otherwise.
+ */
+
+static inline int i2h_is_imagelike_stream(AVFormatContext* avfctx, int stream){
+    if(stream < 0 || stream >= (int)avfctx->nb_streams){
+        return 0;
+    }
+    return avfctx->streams[stream]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO;
+}
+
+
+
+/*****************************
+ *** Application Functions ***
+ *****************************/
+
+/***** Frame *****/
+
+/**
+ * @brief Fixup several possible problems in frame metadata.
+ * 
+ * Some pixel formats are deprecated in favour of a combination with other
+ * attributes (such as color_range), so we fix them up.
+ * 
+ * The AV_CODEC_ID_MJPEG decoder still reports the pixel format using the
+ * obsolete pixel-format codes AV_PIX_FMT_YUVJxxxP. This causes problems
+ * while filtering with graph filters not aware of the deprecated pixel
+ * formats.
+ * 
+ * Fix this up by replacing the deprecated pixel formats with the
+ * corresponding AV_PIX_FMT_YUVxxxP code, and setting the color_range to
+ * full-range: AVCOL_RANGE_JPEG.
+ * 
+ * The color primary, transfer function and colorspace data may all be
+ * unspecified. Fill in with plausible data.
+ * 
+ * @param [in,out]  f   The AVFrame whose attributes are to be fixed up.
+ * @return 0.
+ */
+
+static int i2h_frame_fixup(AVFrame* f){
+    switch(f->format){
+        #define FIXUPFORMAT(p)                         \
+            case AV_PIX_FMT_YUVJ ## p:                 \
+                f->format      = AV_PIX_FMT_YUV ## p;  \
+                f->color_range = AVCOL_RANGE_JPEG;     \
+            break
+        FIXUPFORMAT(411P);
+        FIXUPFORMAT(420P);
+        FIXUPFORMAT(422P);
+        FIXUPFORMAT(440P);
+        FIXUPFORMAT(444P);
+        default: break;
+        #undef  FIXUPFORMAT
+    }
+    switch(f->color_primaries){
+        case AVCOL_PRI_RESERVED0:
+        case AVCOL_PRI_RESERVED:
+        case AVCOL_PRI_UNSPECIFIED:
+            f->color_primaries = AVCOL_PRI_BT709;
+        break;
+        default: break;
+    }
+    switch(f->color_trc){
+        case AVCOL_TRC_RESERVED0:
+        case AVCOL_TRC_RESERVED:
+        case AVCOL_TRC_UNSPECIFIED:
+            f->color_trc = AVCOL_TRC_IEC61966_2_1;
+        break;
+        default: break;
+    }
+    switch(f->colorspace){
+        case AVCOL_SPC_RESERVED:
+        case AVCOL_TRC_UNSPECIFIED:
+            f->colorspace = AVCOL_SPC_BT470BG;
+        break;
+        default: break;
+    }
+    return 0;
+}
+
+/**
  * @brief Apply a filter graph described by a string to the input frame,
  *        producing an output frame.
  * 
@@ -464,7 +560,7 @@ static enum AVPixelFormat i2h_pick_pix_fmt(enum AVPixelFormat src){
  * @return 0 if successful; !0 otherwise.
  */
 
-static int i2h_graph_apply(AVFrame* out, const char* graphstr, AVFrame* in){
+static int i2h_frame_apply_graph(AVFrame* out, const char* graphstr, AVFrame* in){
     AVFilterGraph*     graph         = NULL;
     AVFilterInOut*     inputs        = NULL;
     AVFilterInOut*     outputs       = NULL;
@@ -605,69 +701,6 @@ static int i2h_graph_apply(AVFrame* out, const char* graphstr, AVFrame* in){
 }
 
 /**
- * @brief Fixup several possible problems in frame metadata.
- * 
- * Some pixel formats are deprecated in favour of a combination with other
- * attributes (such as color_range), so we fix them up.
- * 
- * The AV_CODEC_ID_MJPEG decoder still reports the pixel format using the
- * obsolete pixel-format codes AV_PIX_FMT_YUVJxxxP. This causes problems
- * while filtering with graph filters not aware of the deprecated pixel
- * formats.
- * 
- * Fix this up by replacing the deprecated pixel formats with the
- * corresponding AV_PIX_FMT_YUVxxxP code, and setting the color_range to
- * full-range: AVCOL_RANGE_JPEG.
- * 
- * The color primary, transfer function and colorspace data may all be
- * unspecified. Fill in with plausible data.
- * 
- * @param [in]  f   The AVFrame whose attributes are to be fixed up.
- * @return 0.
- */
-
-static int i2h_frame_fixup(AVFrame* f){
-    switch(f->format){
-        #define FIXUPFORMAT(p)                         \
-            case AV_PIX_FMT_YUVJ ## p:                 \
-                f->format      = AV_PIX_FMT_YUV ## p;  \
-                f->color_range = AVCOL_RANGE_JPEG;     \
-            break
-        FIXUPFORMAT(411P);
-        FIXUPFORMAT(420P);
-        FIXUPFORMAT(422P);
-        FIXUPFORMAT(440P);
-        FIXUPFORMAT(444P);
-        default: break;
-        #undef  FIXUPFORMAT
-    }
-    switch(f->color_primaries){
-        case AVCOL_PRI_RESERVED0:
-        case AVCOL_PRI_RESERVED:
-        case AVCOL_PRI_UNSPECIFIED:
-            f->color_primaries = AVCOL_PRI_BT709;
-        break;
-        default: break;
-    }
-    switch(f->color_trc){
-        case AVCOL_TRC_RESERVED0:
-        case AVCOL_TRC_RESERVED:
-        case AVCOL_TRC_UNSPECIFIED:
-            f->color_trc = AVCOL_TRC_IEC61966_2_1;
-        break;
-        default: break;
-    }
-    switch(f->colorspace){
-        case AVCOL_SPC_RESERVED:
-        case AVCOL_TRC_UNSPECIFIED:
-            f->colorspace = AVCOL_SPC_BT470BG;
-        break;
-        default: break;
-    }
-    return 0;
-}
-
-/**
  * @brief Convert input frame to output with canonical pixel format.
  * 
  * @param [out]  out  Output frame, with canonical pixel format.
@@ -693,7 +726,7 @@ static int i2h_frame_canonicalize_pixfmt(AVFrame* out, AVFrame* in){
              "scale=in_range=%s:out_range=%s,format=pix_fmts=%s",
              colorrangestr, colorrangestr, av_get_pix_fmt_name(canonical));
     
-    return i2h_graph_apply(out, graphstr, in);
+    return i2h_frame_apply_graph(out, graphstr, in);
 }
 
 /**
@@ -771,230 +804,146 @@ static int i2h_frame_scale_and_pad(AVFrame*           dst,
     
     
     /* Apply and return. */
-    return i2h_graph_apply(dst, graphstr, src);
+    return i2h_frame_apply_graph(dst, graphstr, src);
+}
+
+
+
+/***** Item *****/
+
+/**
+ * @brief Initialize the item to default values.
+ * 
+ * @param [in]  item   The item to initialize.
+ * @return 0.
+ */
+
+static int  i2h_item_init                   (ITEM* item){
+    memset(item, 0, sizeof(*item));
+    item->name           = "";
+    memcpy(item->type, "pict", 4);
+    item->mime           = "application/octet-stream";
+    return 0;
 }
 
 /**
- * @brief Configure encoder for encoding the given prototypical frame.
+ * @brief Insert the item in sorted order in the list.
  * 
- * @param [in,out]  u           The universe we're operating over.
- * @param [in]      frame       The frame whose properties (except size) we use
- *                              as a template for encoding.
- * @param [in]      tile_width  The width  of the tiles to be encoded
- * @param [in]      tile_height The height of the tiles to be encoded
- * @return 0 if successful; !0 otherwise.
+ * @param [in,out]  items  The head of the linked list of items.
+ * @param [in,out]  item   The item to be inserted.
+ * @return 0.
  */
 
-static int  i2h_configure_encoder(UNIVERSE* u,
-                                  AVFrame*  frame,
-                                  int       tile_width,
-                                  int       tile_height){
-    char          x26xparams[1024];
-    const char*   x26x_params;
-    const char*   x26x_params_args;
-    const char*   colorprim_str;
-    const char*   transfer_str;
-    const char*   colormatrix_str;
-    AVDictionary* codec_ctx_opt = NULL;
-    
-    
-    if(i2h_is_codec_x264(u->out.codec)){
-        x26x_params      = "x264-params";
-        x26x_params_args = u->out.x264_params ? u->out.x264_params : "";
-    }else{
-        x26x_params      = "x265-params";
-        x26x_params_args = u->out.x265_params ? u->out.x265_params : "";
+static int  i2h_item_insert                 (ITEM** items, ITEM* item){
+    while(*items && (*items)->id < item->id){
+        items = &(*items)->next;
     }
-    
-    u->out.codec_ctx = avcodec_alloc_context3(u->out.codec);
-    if(!u->out.codec_ctx)
-        i2hmessageexit(ENOMEM, stderr, "Could not allocate encoder!\n");
-    
-    u->out.codec_ctx->width                  = tile_width;
-    u->out.codec_ctx->height                 = tile_height;
-    u->out.codec_ctx->time_base.num          =  1;  /* Nominal 30 fps */
-    u->out.codec_ctx->time_base.den          = 30;  /* Nominal 30 fps */
-    u->out.codec_ctx->gop_size               =  0;  /* Intra only */
-    u->out.codec_ctx->pix_fmt                = frame->format;
-    u->out.codec_ctx->chroma_sample_location = frame->chroma_location;
-    u->out.codec_ctx->color_range            = frame->color_range;
-    u->out.codec_ctx->color_primaries        = frame->color_primaries;
-    u->out.codec_ctx->color_trc              = frame->color_trc;
-    u->out.codec_ctx->colorspace             = frame->colorspace;
-    u->out.codec_ctx->sample_aspect_ratio    = frame->sample_aspect_ratio;
-    u->out.codec_ctx->flags                 |= AV_CODEC_FLAG_LOOP_FILTER;
-    u->out.codec_ctx->thread_count           = 1;
-    u->out.codec_ctx->slices                 = 1;
-    colorprim_str   = i2h_x264_color_primaries(frame->color_primaries);
-    colorprim_str   = colorprim_str   ? colorprim_str   : i2h_x264_color_primaries(
-                                        frame->color_primaries = AVCOL_PRI_BT709);
-    transfer_str    = i2h_x264_color_trc      (frame->color_trc);
-    transfer_str    = transfer_str    ? transfer_str    : i2h_x264_color_trc(
-                                        frame->color_trc       = AVCOL_TRC_IEC61966_2_1);
-    colormatrix_str = i2h_x264_color_space    (frame->colorspace);
-    colormatrix_str = colormatrix_str ? colormatrix_str : i2h_x264_color_space(
-                                        frame->colorspace      = AVCOL_SPC_BT470BG);
-    snprintf(x26xparams, sizeof(x26xparams),
-             "ref=1:chromaloc=1:log=-1:slices-max=32:fullrange=on:stitchable=1:"
-             "colorprim=%s:transfer=%s:colormatrix=%s%s%s",
-             colorprim_str, transfer_str, colormatrix_str,
-             *x26x_params_args ? ":"              : "",
-             *x26x_params_args ? x26x_params_args : "");
-    av_dict_set    (&codec_ctx_opt, "profile",     "high444",    0);
-    av_dict_set    (&codec_ctx_opt, "preset",      "placebo",    0);
-    av_dict_set    (&codec_ctx_opt, "tune",        "stillimage", 0);
-    av_dict_set_int(&codec_ctx_opt, "forced-idr",  1,            0);
-    av_dict_set_int(&codec_ctx_opt, "crf",         u->out.crf,   0);
-    av_dict_set    (&codec_ctx_opt, x26x_params,   x26xparams,   0);
-    u->ret = avcodec_open2(u->out.codec_ctx, u->out.codec, &codec_ctx_opt);
-    if(av_dict_count(codec_ctx_opt)){
-        AVDictionaryEntry* entry = NULL;
-        i2hmessage(stderr, "Warning: codec ignored %d options!\n",
-                           av_dict_count(codec_ctx_opt));
-        while((entry=av_dict_get(codec_ctx_opt, "", entry, AV_DICT_IGNORE_SUFFIX))){
-            i2hmessage(stderr, "    %20s: %s\n", entry->key, entry->value);
-        }
-    }
-    av_dict_free(&codec_ctx_opt);
-    if(u->ret < 0)
-        i2hmessageexit(u->ret, stderr, "Could not open encoder! (%d)\n", u->ret);
-    
-    
-    /* Return */
-    return u->ret = 0;
+    item->next = *items;
+    *items     = item;
+    return 0;
 }
 
+
+
+/***** Item Reference *****/
+
 /**
- * @brief Release the universe's encoder context.
+ * @brief Append the set of ID references to a linked list of them.
  * 
- * @param [in,out]  u     The universe we're operating over.
+ * @param [in,out]  refs  The head of the linked list
+ * @param [in,out]  iref  The set to be appended.
+ * @return 0.
  */
 
-static void i2h_deconfigure_encoder(UNIVERSE* u){
-    avcodec_free_context(&u->out.codec_ctx);
+static int  i2h_iref_append                 (IREF** refs, IREF* iref){
+    iref->next = *refs;
+    *refs = iref;
+    return 0;
 }
 
-/**
- * @brief Handle one frame.
- * 
- * This means:
- * 
- *   - Creating the filter graph specific to this frame
- *   - Invoking the filter graph, thus canonicalizing the pixel format
- *   - Solving the geometry problem for this frame.
- *   - Creating the canvas by executing custom CUDA code.
- *   - Encoding it in H.264
- *   - Surrounding it with metadata and an embedded payload.
- *   - Writing it out.
- */
 
-static int  i2h_do_frame        (UNIVERSE*        u, AVFrame* frame){
-    AVFrame*     graphfiltframe = NULL;
-    AVFrame*     cudafiltframe  = NULL;
-    
-    /* Graph & CUDA Filtering Init */
-    graphfiltframe = av_frame_alloc();
-    if(!graphfiltframe)
-        i2hmessageexit(ENOMEM, stderr, "Error allocating frame!\n");
-    
-    cudafiltframe = av_frame_alloc();
-    if(!cudafiltframe)
-        i2hmessageexit(ENOMEM, stderr, "Error allocating frame!\n");
-    
-    
-    /**
-     * Fixup and graph-filter to canonicalize input frame
-     */
-    
-    i2h_frame_fixup(frame);
-    u->ret = i2h_frame_canonicalize_pixfmt(graphfiltframe, frame);
-    if(u->ret < 0)
-        i2hmessageexit(u->ret, stderr, "Failed to canonicalize pixel format! (%d)\n", u->ret);
-    
-    /**
-     * CUDA Filtering.
-     */
-    
-    cudafiltframe->width           = u->out.tile_width;
-    cudafiltframe->height          = u->out.tile_height;
-    cudafiltframe->format          = u->out.chroma_format;
-    cudafiltframe->chroma_location = graphfiltframe->chroma_location;
-    cudafiltframe->color_range     = graphfiltframe->color_range;
-    cudafiltframe->color_primaries = graphfiltframe->color_primaries;
-    cudafiltframe->color_trc       = graphfiltframe->color_trc;
-    cudafiltframe->colorspace      = graphfiltframe->colorspace;
-    u->ret = av_frame_get_buffer(cudafiltframe, 0);
-    if(u->ret != 0)
-        i2hmessageexit(ENOMEM, stderr, "Error allocating frame! (%d)\n", u->ret);
-    
-#if 0
-    u->ret = i2h_cuda_filter(u, cudafiltframe, graphfiltframe, &u->tx.geom);
-    if(u->ret < 0)
-        i2hmessageexit(u->ret, stderr, "Failed to filter image! (%d)\n", u->ret);
-#endif
-    
-    /* Encoding Init */
-    u->out.packet = av_packet_alloc();
-    if(!u->out.packet)
-        i2hmessageexit(ENOMEM, stderr, "Failed to allocate packet object!\n");
-    
-    
-    /**
-     * Push the filtered frame  into the encoder.
-     * Pull the output packet from the encoder.
-     * 
-     * Flushing the input encode pipeline requires pushing in a NULL frame.
-     */
-    
-    u->ret = i2h_configure_encoder(u, cudafiltframe, u->out.tile_width, u->out.tile_height);
-    if(u->ret)
-        i2hmessageexit(u->ret, stderr, "Failed to configure x264 encoder! (%d)\n", u->ret);
-    
-    cudafiltframe->pts = frame->best_effort_timestamp;
-    u->ret = avcodec_send_frame(u->out.codec_ctx, cudafiltframe);
-    if(u->ret < 0)
-        i2hmessageexit(u->ret, stderr, "Error pushing frame into encoder! (%d)\n", u->ret);
-    
-    u->ret = avcodec_send_frame(u->out.codec_ctx, NULL);
-    if(u->ret < 0)
-        i2hmessageexit(u->ret, stderr, "Error flushing encoder input! (%d)\n", u->ret);
-    
-    u->ret = avcodec_receive_packet(u->out.codec_ctx, u->out.packet);
-    if(u->ret < 0)
-        i2hmessageexit(u->ret, stderr, "Error pulling packet from encoder! (%d)\n", u->ret);
-    
-    i2h_deconfigure_encoder(u);
-    
-    
-    /* Write Out */
-#if 0
-    fwrite(u->out.packet->data, 1, u->out.packet->size, u->out.fp);
-    fflush(u->out.fp);
-#endif
-    
-    
-    /* Cleanup */
-    av_packet_free(&u->out.packet);
-    av_frame_free(&graphfiltframe);
-    av_frame_free(&cudafiltframe);
-    
-    
-    /* Return */
-    return u->ret=0;
-}
+
+/***** Universe *****/
 
 /**
- * @brief Output a HEIF file with the given items.
+ * @brief Initialize the universe to default values.
  * 
  * @param [in]  u  The universe we're operating over.
- * @return 0 if successful; !0 otherwise.
+ * @return 0.
  */
 
-static int  i2h_do_output       (UNIVERSE*        u){
-    ITEM* i = u->items;
-    for(;i;i=i->next){
-        printf("id=%3u,name=%s\n", i->id, i->name);
+static int  i2h_universe_init               (UNIVERSE* u){
+    u->items              = NULL;
+    i2h_universe_item_init_new(u);
+    
+    u->out.codec          = avcodec_find_encoder_by_name("libx265");
+    u->out.codec_ctx      = NULL;
+    u->out.tile_width     = 512;
+    u->out.tile_height    = 512;
+    u->out.crf            = 10;
+    u->out.chroma_format  = BENZINA_CHROMAFMT_YUV420;
+    u->out.x264_params    = "";
+    u->out.x265_params    = "";
+    u->out.url            = NULL;
+    
+    return 0;
+}
+
+/**
+ * @brief Allocate and initialize new item.
+ * 
+ * @param [in]  u  The universe we're operating over.
+ * @return 0.
+ */
+
+static int  i2h_universe_item_init_new      (UNIVERSE* u){
+    u->item               = malloc(sizeof(*u->item));
+    i2h_item_init(u->item);
+    
+    return 0;
+}
+
+/**
+ * @brief Find an item by its ID.
+ * @param [in]  u   The universe we're operating over.
+ * @param [in]  id  The ID of the item we're looking for.
+ * @return The item, if found; NULL otherwise.
+ */
+
+static ITEM* i2h_universe_item_find_by_id   (UNIVERSE* u, uint32_t id){
+    ITEM* item;
+    for(item=u->items; item; item=item->next){
+        if(item->id == id){
+            return item;
+        }
     }
+    
+    return NULL;
+}
+
+/**
+ * @brief Find lowest free item ID.
+ * 
+ * @param [in]  u       The universe we're operating over.
+ * @param [out] id_out  The ID that was found.
+ * @return 0 if no free ID available; !0 otherwise.
+ */
+
+static int  i2h_universe_item_find_free_id  (UNIVERSE* u, uint32_t* id_out){
+    uint32_t id;
+    ITEM*    item;
+    
+    if(!id_out){
+        return 0;
+    }
+    
+    for(id=0,item=u->items; item; id++,item=item->next){
+        if(item->id != id){
+            *id_out = id;
+            return 1;
+        }
+    }
+    
     return 0;
 }
 
@@ -1002,10 +951,38 @@ static int  i2h_do_output       (UNIVERSE*        u){
  * @brief Handle the completion of a new item
  * @param [in]  u     The universe we're operating over.
  * @param [in]  item  The completed item we'd like to process.
+ * @return 0 if successful; !0 otherwise.
+ */
+
+static int  i2h_universe_item_handle        (UNIVERSE* u, ITEM* item){
+    if      (memcmp(item->type, "pict", 4) == 0){
+        return i2h_universe_item_handle_pict(u, item);
+    }else if(memcmp(item->type, "mime", 4) == 0){
+        return i2h_universe_item_handle_mime(u, item);
+    }
+    return 1;
+}
+
+/**
+ * @brief Handle the completion of a new MIME item
+ * @param [in]  u     The universe we're operating over.
+ * @param [in]  item  The completed item we'd like to process.
  * @return 0.
  */
 
-static int  i2h_handle_item     (UNIVERSE* u, ITEM* item){
+static int  i2h_universe_item_handle_mime   (UNIVERSE* u, ITEM* item){
+    (void)u, (void)item;
+    return 0;
+}
+
+/**
+ * @brief Handle the completion of a new picture item
+ * @param [in]  u     The universe we're operating over.
+ * @param [in]  item  The completed item we'd like to process.
+ * @return 0.
+ */
+
+static int  i2h_universe_item_handle_pict   (UNIVERSE* u, ITEM* item){
     /* FFmpeg state. */
     int                singletile,   letterboxing;
     int64_t            scaled_width, scaled_height;
@@ -1015,6 +992,7 @@ static int  i2h_handle_item     (UNIVERSE* u, ITEM* item){
     AVCodecParameters* codec_par     = NULL;
     AVCodec*           codec         = NULL;
     AVCodecContext*    codec_ctx     = NULL;
+    AVPacket*          packet        = NULL;
     
     
     /* Set destination pixel format. */
@@ -1135,7 +1113,37 @@ static int  i2h_handle_item     (UNIVERSE* u, ITEM* item){
     }
     
     
-    /* Configure Encoder */
+    /* Encode Tiles */
+    
+    /**
+     * Push the filtered frame  into the encoder.
+     * Pull the output packet from the encoder.
+     * 
+     * Flushing the input encode pipeline requires pushing in a NULL frame.
+     */
+    
+    packet = av_packet_alloc();
+    if(!packet)
+        i2hmessageexit(ENOMEM, stderr, "Failed to allocate packet object!\n");
+    
+    u->ret = i2h_universe_encoder_configure(u, item->tile_frame);
+    if(u->ret)
+        i2hmessageexit(u->ret, stderr, "Failed to configure x264 encoder! (%d)\n", u->ret);
+    
+    item->tile_frame->pts = item->tile_frame->best_effort_timestamp;
+    u->ret = avcodec_send_frame(u->out.codec_ctx, item->tile_frame);
+    if(u->ret < 0)
+        i2hmessageexit(u->ret, stderr, "Error pushing frame into encoder! (%d)\n", u->ret);
+    
+    u->ret = avcodec_send_frame(u->out.codec_ctx, NULL);
+    if(u->ret < 0)
+        i2hmessageexit(u->ret, stderr, "Error flushing encoder input! (%d)\n", u->ret);
+    
+    u->ret = avcodec_receive_packet(u->out.codec_ctx, packet);
+    if(u->ret < 0)
+        i2hmessageexit(u->ret, stderr, "Error pulling packet from encoder! (%d)\n", u->ret);
+    
+    i2h_universe_encoder_deconfigure(u);
     
     
     
@@ -1148,10 +1156,11 @@ static int  i2h_handle_item     (UNIVERSE* u, ITEM* item){
             item->grid_frame->width, item->grid_frame->height,
             av_get_pix_fmt_name(item->grid_frame->format),
             item->grid_frame->color_range == AVCOL_RANGE_JPEG ? "jpeg" : "mpeg");
-    fprintf(stdout, "Tile:  %ux%u %s %s\n",
+    fprintf(stdout, "Tile:  %ux%u %s %s (%d encoded bytes)\n",
             item->tile_frame->width, item->tile_frame->height,
             av_get_pix_fmt_name(item->tile_frame->format),
-            item->tile_frame->color_range == AVCOL_RANGE_JPEG ? "jpeg" : "mpeg");
+            item->tile_frame->color_range == AVCOL_RANGE_JPEG ? "jpeg" : "mpeg",
+            packet->size);
 #endif
 #if 0
     FILE* fp;
@@ -1167,140 +1176,130 @@ static int  i2h_handle_item     (UNIVERSE* u, ITEM* item){
     fclose(fp);
     exit(1);
     
-    //av_frame_free(&item->frame);
+    av_frame_free(&item->frame);
+    av_packet_free(&packet);
 #endif
     
     return 0;
 }
 
 /**
- * @brief Append the set of ID references to a linked list of them.
+ * @brief Configure encoder for encoding the given prototypical frame.
  * 
- * @param [in,out]  refs  The head of the linked list
- * @param [in,out]  iref  The set to be appended.
- * @return 0.
+ * @param [in,out]  u           The universe we're operating over.
+ * @param [in]      frame       The frame whose properties (except size) we use
+ *                              as a template for encoding.
+ * @return 0 if successful; !0 otherwise.
  */
 
-static int  i2h_append_irefs    (IREF** refs, IREF* iref){
-    iref->next = *refs;
-    *refs = iref;
-    return 0;
-}
-
-/**
- * @brief Find an item by its ID.
- * @param [in]  u   The universe we're operating over.
- * @param [in]  id  The ID of the item we're looking for.
- * @return The item, if found; NULL otherwise.
- */
-
-static ITEM* i2h_find_item_by_id (UNIVERSE* u, uint32_t id){
-    ITEM* item;
-    for(item=u->items; item; item=item->next){
-        if(item->id == id){
-            return item;
+static int  i2h_universe_encoder_configure  (UNIVERSE* u,
+                                             AVFrame*  frame){
+    char          x26xparams[1024];
+    const char*   x26x_params;
+    const char*   x26x_params_args;
+    const char*   x26x_profile;
+    const char*   colorprim_str;
+    const char*   transfer_str;
+    const char*   colormatrix_str;
+    AVDictionary* codec_ctx_opt = NULL;
+    
+    
+    if(i2h_is_codec_x264(u->out.codec)){
+        x26x_params      = "x264-params";
+        x26x_params_args = u->out.x264_params ? u->out.x264_params : "";
+        x26x_profile     = "high444";
+    }else{
+        x26x_params      = "x265-params";
+        x26x_params_args = u->out.x265_params ? u->out.x265_params : "";
+        x26x_profile     = "main444-stillpicture";
+    }
+    
+    u->out.codec_ctx = avcodec_alloc_context3(u->out.codec);
+    if(!u->out.codec_ctx)
+        i2hmessageexit(ENOMEM, stderr, "Could not allocate encoder!\n");
+    
+    u->out.codec_ctx->width                  = u->out.tile_width;
+    u->out.codec_ctx->height                 = u->out.tile_height;
+    u->out.codec_ctx->time_base.num          =  1;  /* Nominal 30 fps */
+    u->out.codec_ctx->time_base.den          = 30;  /* Nominal 30 fps */
+    u->out.codec_ctx->gop_size               =  0;  /* Intra only */
+    u->out.codec_ctx->pix_fmt                = frame->format;
+    u->out.codec_ctx->chroma_sample_location = frame->chroma_location;
+    u->out.codec_ctx->color_range            = frame->color_range;
+    u->out.codec_ctx->color_primaries        = frame->color_primaries;
+    u->out.codec_ctx->color_trc              = frame->color_trc;
+    u->out.codec_ctx->colorspace             = frame->colorspace;
+    u->out.codec_ctx->sample_aspect_ratio    = frame->sample_aspect_ratio;
+    u->out.codec_ctx->flags                 |= AV_CODEC_FLAG_LOOP_FILTER;
+    u->out.codec_ctx->thread_count           = 1;
+    u->out.codec_ctx->slices                 = 1;
+    colorprim_str   = i2h_x264_color_primaries(frame->color_primaries);
+    colorprim_str   = colorprim_str   ? colorprim_str   : i2h_x264_color_primaries(
+                                        frame->color_primaries = AVCOL_PRI_BT709);
+    transfer_str    = i2h_x264_color_trc      (frame->color_trc);
+    transfer_str    = transfer_str    ? transfer_str    : i2h_x264_color_trc(
+                                        frame->color_trc       = AVCOL_TRC_IEC61966_2_1);
+    colormatrix_str = i2h_x264_color_space    (frame->colorspace);
+    colormatrix_str = colormatrix_str ? colormatrix_str : i2h_x264_color_space(
+                                        frame->colorspace      = AVCOL_SPC_BT470BG);
+    snprintf(x26xparams, sizeof(x26xparams),
+             "ref=1:chromaloc=1:log=-1:log-level=none:slices-max=32:fullrange=on:"
+             "stitchable=1:colorprim=%s:transfer=%s:colormatrix=%s%s%s",
+             colorprim_str, transfer_str, colormatrix_str,
+             *x26x_params_args ? ":"              : "",
+             *x26x_params_args ? x26x_params_args : "");
+    av_dict_set    (&codec_ctx_opt, "profile",     x26x_profile, 0);
+    av_dict_set    (&codec_ctx_opt, "preset",      "placebo",    0);
+    av_dict_set    (&codec_ctx_opt, "tune",        "ssim",       0);
+    av_dict_set_int(&codec_ctx_opt, "forced-idr",  1,            0);
+    av_dict_set_int(&codec_ctx_opt, "crf",         u->out.crf,   0);
+    av_dict_set    (&codec_ctx_opt, x26x_params,   x26xparams,   0);
+    u->ret = avcodec_open2(u->out.codec_ctx, u->out.codec, &codec_ctx_opt);
+    if(av_dict_count(codec_ctx_opt)){
+        AVDictionaryEntry* entry = NULL;
+        i2hmessage(stderr, "Warning: codec ignored %d options!\n",
+                           av_dict_count(codec_ctx_opt));
+        while((entry=av_dict_get(codec_ctx_opt, "", entry, AV_DICT_IGNORE_SUFFIX))){
+            i2hmessage(stderr, "    %20s: %s\n", entry->key, entry->value);
         }
     }
+    av_dict_free(&codec_ctx_opt);
+    if(u->ret < 0)
+        i2hmessageexit(u->ret, stderr, "Could not open encoder! (%d)\n", u->ret);
     
-    return NULL;
+    
+    /* Return */
+    return u->ret = 0;
 }
 
 /**
- * @brief Find lowest free item ID.
+ * @brief Release the universe's encoder context.
  * 
- * @param [in]  u       The universe we're operating over.
- * @param [out] id_out  The ID that was found.
- * @return 0 if no free ID available; !0 otherwise.
+ * @param [in,out]  u     The universe we're operating over.
  */
 
-static int  i2h_find_free_item_id(UNIVERSE* u, uint32_t* id_out){
-    uint32_t id;
-    ITEM*    item;
-    
-    if(!id_out){
-        return 0;
-    }
-    
-    for(id=0,item=u->items; item; id++,item=item->next){
-        if(item->id != id){
-            *id_out = id;
-            return 1;
-        }
-    }
-    
-    return 0;
+static void i2h_universe_encoder_deconfigure(UNIVERSE* u){
+    avcodec_free_context(&u->out.codec_ctx);
 }
 
 /**
- * @brief Insert the item in sorted order in the list.
- * 
- * @param [in,out]  items  The head of the linked list of items.
- * @param [in,out]  item   The item to be inserted.
- * @return 0.
- */
-
-static int  i2h_insert_item     (ITEM** items, ITEM* item){
-    while(*items && (*items)->id < item->id){
-        items = &(*items)->next;
-    }
-    item->next = *items;
-    *items     = item;
-    return 0;
-}
-
-/**
- * @brief Initialize the item to default values.
- * 
- * @param [in]  item   The item to initialize.
- * @return 0.
- */
-
-static int  i2h_init_item       (ITEM*            item){
-    memset(item, 0, sizeof(*item));
-    item->name           = "";
-    memcpy(item->type, "pict", 4);
-    item->mime           = "application/octet-stream";
-    return 0;
-}
-
-/**
- * @brief Allocate and initialize new item.
+ * @brief Output a HEIF file with the given items.
  * 
  * @param [in]  u  The universe we're operating over.
- * @return 0.
+ * @return 0 if successful; !0 otherwise.
  */
 
-static int  i2h_init_new_item   (UNIVERSE*        u){
-    u->item               = malloc(sizeof(*u->item));
-    i2h_init_item(u->item);
-    
+static int  i2h_universe_do_output          (UNIVERSE*        u){
+    ITEM* i = u->items;
+    for(;i;i=i->next){
+        printf("id=%3u,name=%s\n", i->id, i->name);
+    }
     return 0;
 }
 
-/**
- * @brief Initialize the universe to default values.
- * 
- * @param [in]  u  The universe we're operating over.
- * @return 0.
- */
 
-static int  i2h_universe_init   (UNIVERSE*        u){
-    u->items              = NULL;
-    i2h_init_new_item(u);
-    
-    u->out.codec          = avcodec_find_encoder_by_name("libx265");
-    u->out.codec_ctx       = NULL;
-    u->out.packet         = NULL;
-    u->out.tile_width     = 512;
-    u->out.tile_height    = 512;
-    u->out.crf            = 10;
-    u->out.chroma_format  = BENZINA_CHROMAFMT_YUV420;
-    u->out.x264_params    = "";
-    u->out.x265_params    = "";
-    u->out.url            = NULL;
-    
-    return 0;
-}
+
+/***** Argument-parsing *****/
 
 /**
  * @brief Parse individual arguments.
@@ -1498,7 +1497,7 @@ static int i2h_parse_ref        (UNIVERSE* u, char*** argv){
     }
     
     /* Append this set of references to the current item. */
-    i2h_append_irefs(&u->item->refs, iref);
+    i2h_iref_append(&u->item->refs, iref);
     
     return 1;
 }
@@ -1520,7 +1519,7 @@ static int i2h_parse_item       (UNIVERSE* u, char*** argv){
             u->item->id = strtoull(q, &p, 0);
             if(p==q)
                 i2hmessageexit(EINVAL, stderr, "id= requires a 32-bit unsigned integer item ID!\n");
-            if(i2h_find_item_by_id(u, u->item->id))
+            if(i2h_universe_item_find_by_id(u, u->item->id))
                 i2hmessageexit(EINVAL, stderr, "Pre-existing item with same ID %"PRIu32"!\n", u->item->id);
         }else if(strstartswith(p, "type=")){
             memcpy(u->item->type, p+=5, 4);
@@ -1546,13 +1545,13 @@ static int i2h_parse_item       (UNIVERSE* u, char*** argv){
     
     if(strnlen(u->item->type, 4) != 4)
         i2hmessageexit(EINVAL, stderr, "The type= key must be exactly 4 ASCII characters!\n");
-    if(!id_set && !i2h_find_free_item_id(u, &u->item->id))
+    if(!id_set && !i2h_universe_item_find_free_id(u, &u->item->id))
         i2hmessageexit(EINVAL, stderr, "Too many items added, no item IDs remaining!\n");
     
     /* Process completed item. */
-    i2h_insert_item(&u->items, u->item);
-    i2h_handle_item(u, u->item);
-    i2h_init_new_item(u);
+    i2h_item_insert(&u->items, u->item);
+    i2h_universe_item_handle(u, u->item);
+    i2h_universe_item_init_new(u);
     
     return 1;
 }
@@ -1650,7 +1649,7 @@ static int  i2h_parse_args      (UNIVERSE*        u,
         }
     }
     
-    return i2h_do_output(u);
+    return i2h_universe_do_output(u);
 }
 
 /**
