@@ -34,15 +34,25 @@
 
 
 /* Data Structure Forward Declarations and Typedefs */
-typedef struct ITEM     ITEM;
-typedef struct IREF     IREF;
-typedef struct UNIVERSE UNIVERSE;
+typedef struct PACKETLIST PACKETLIST;
+typedef struct ITEM       ITEM;
+typedef struct IREF       IREF;
+typedef struct UNIVERSE   UNIVERSE;
 
 
 
 /**
  * Data Structure Definitions
  */
+
+/**
+ * @brief Singly-linked-list of AVPackets.
+ */
+
+struct PACKETLIST{
+    AVPacket*   packet;
+    PACKETLIST* next;
+};
 
 /**
  * @brief Item to be added.
@@ -53,18 +63,27 @@ struct ITEM{
     const char* path;
     const char* name;
     char        type[4];
-    const char* mime;
     unsigned    primary        : 1;
     unsigned    hidden         : 1;
     unsigned    want_thumbnail : 1;
-    uint32_t    width, height;
-    AVFrame*    frame;
-    AVFrame*    grid_frame;
-    AVFrame*    tile_frame;
-    AVPacket*   packet;
+    
+    struct{
+        AVCodecContext* codec_ctx;
+        AVFrame*        frame;
+        struct{
+            struct{uint32_t w, h;} clap, ispe;
+            AVFrame* frame;
+            uint32_t num_packets;
+        } grid, thumb;
+    } pict;
+    struct{
+        const char* type;
+        char*       data;
+        size_t      size;
+    } mime;
+    
+    PACKETLIST* packetlist;
     IREF*       refs;
-    ITEM*       thumbnail;
-    ITEM*       grid;
     ITEM*       next;
 };
 
@@ -90,14 +109,10 @@ struct UNIVERSE{
     ITEM*            item;
     ITEM*            items;
     
-    /* Status */
-    int              ret;
-    
     /* FFmpeg Encode/Decode */
     struct{
         AVCodec*           codec;
-        AVCodecContext*    codec_ctx;
-        uint32_t           tile_width, tile_height;
+        struct{uint32_t w, h;} tile;
         unsigned           crf;
         unsigned           chroma_format;
         const char*        x264_params;
@@ -109,32 +124,41 @@ struct UNIVERSE{
 
 
 /* Static Function Prototypes */
-static int   i2h_frame_fixup                 (AVFrame* f);
-static int   i2h_frame_apply_graph           (AVFrame* out, const char* graphstr, AVFrame* in);
-static int   i2h_frame_canonicalize_pixfmt   (AVFrame* out, AVFrame* in);
-static int   i2h_frame_scale_and_pad         (AVFrame*           dst,
-                                              AVFrame*           src,
-                                              enum AVPixelFormat dst_pix_fmt,
-                                              int                dst_width,
-                                              int                dst_height,
-                                              int                tile_width,
-                                              int                tile_height);
+static int   i2h_frame_fixup                  (AVFrame* f);
+static int   i2h_frame_apply_graph            (AVFrame* out, const char* graphstr, AVFrame* in);
+static int   i2h_frame_canonicalize_pixfmt    (AVFrame* out, AVFrame* in);
+static int   i2h_frame_scale_and_pad          (AVFrame*           dst,
+                                               AVFrame*           src,
+                                               enum AVPixelFormat dst_pix_fmt,
+                                               int                dst_width,
+                                               int                dst_height,
+                                               int                tile_width,
+                                               int                tile_height);
 
-static int   i2h_item_init                   (ITEM* item);
-static int   i2h_item_insert                 (ITEM** items, ITEM* item);
+static int   i2h_packetlist_append            (PACKETLIST** list, AVPacket* packet);
+static void  i2h_packetlist_free              (PACKETLIST** list);
 
-static int   i2h_iref_append                 (IREF** refs, IREF* iref);
+static ITEM* i2h_item_new                     (void);
+static int   i2h_item_init                    (ITEM* item);
+static int   i2h_item_is_pict                 (ITEM* item);
+static int   i2h_item_pict_read_frame         (ITEM* item);
+static int   i2h_item_insert                  (ITEM** items, ITEM* item);
+static int   i2h_item_pict_encoder_configure  (ITEM* item, AVFrame* frame, UNIVERSE* u);
+static void  i2h_item_pict_encoder_deconfigure(ITEM* item);
+static int   i2h_item_pict_push_grid_frames   (ITEM* item);
+static int   i2h_item_pict_push_thumb_frames  (ITEM* item);
+static int   i2h_item_pict_push_frame         (ITEM* item, AVFrame* frame);
+static int   i2h_item_append_packet           (ITEM* item, AVPacket* packet);
 
-static int   i2h_universe_init               (UNIVERSE* u);
-static int   i2h_universe_item_init_new      (UNIVERSE* u);
-static int   i2h_universe_item_find_free_id  (UNIVERSE* u, uint32_t* id_out);
-static ITEM* i2h_universe_item_find_by_id    (UNIVERSE* u, uint32_t  id);
-static int   i2h_universe_item_handle        (UNIVERSE* u, ITEM* item);
-static int   i2h_universe_item_handle_pict   (UNIVERSE* u, ITEM* item);
-static int   i2h_universe_item_handle_mime   (UNIVERSE* u, ITEM* item);
-static int   i2h_universe_encoder_configure  (UNIVERSE* u, AVFrame* frame);
-static void  i2h_universe_encoder_deconfigure(UNIVERSE* u);
-static int   i2h_universe_do_output          (UNIVERSE* u);
+static int   i2h_iref_append                  (IREF** refs, IREF* iref);
+
+static int   i2h_universe_init                (UNIVERSE* u);
+static int   i2h_universe_item_find_free_id   (UNIVERSE* u, uint32_t* id_out);
+static ITEM* i2h_universe_item_find_by_id     (UNIVERSE* u, uint32_t  id);
+static int   i2h_universe_item_handle         (UNIVERSE* u, ITEM* item);
+static int   i2h_universe_item_handle_pict    (UNIVERSE* u, ITEM* item);
+static int   i2h_universe_item_handle_mime    (UNIVERSE* u, ITEM* item);
+static int   i2h_universe_do_output           (UNIVERSE* u);
 
 
 
@@ -388,6 +412,48 @@ static enum AVPixelFormat i2h_pick_pix_fmt(enum AVPixelFormat src){
             return AV_PIX_FMT_NONE;
     }
 }
+
+/**
+ * @brief Return the pixel format corresponding to a given Benzina chroma format.
+ * 
+ * @param [in]  chroma format.
+ * @return The chroma format in question.
+ */
+
+static enum AVPixelFormat i2h_benzina2avpixfmt(int chroma_format){
+    switch(chroma_format){
+        case BENZINA_CHROMAFMT_YUV400: return AV_PIX_FMT_GRAY8;
+        case BENZINA_CHROMAFMT_YUV420: return AV_PIX_FMT_YUV420P;
+        case BENZINA_CHROMAFMT_YUV422: return AV_PIX_FMT_YUV422P;
+        case BENZINA_CHROMAFMT_YUV444: return AV_PIX_FMT_YUV444P;
+        default:
+            i2hmessageexit(EINVAL, stderr, "Unsupported chroma format \"%u\"!\n",
+                                           chroma_format);
+    }
+}
+
+/**
+ * @brief Return the Benzina/ISO chroma location corresponding to a given
+ *        FFmpeg chroma location.
+ * 
+ * @param [in] chroma_location  The chroma location to convert.
+ * @return The converted code.
+ */
+
+static int i2h_av2benzinachromaloc(enum AVChromaLocation chroma_location){
+    switch(chroma_location){
+        case AVCHROMA_LOC_UNSPECIFIED:
+        case AVCHROMA_LOC_NB:
+        default:                       return BENZINA_CHROMALOC_CENTER;
+        case AVCHROMA_LOC_LEFT:        return BENZINA_CHROMALOC_LEFT;
+        case AVCHROMA_LOC_CENTER:      return BENZINA_CHROMALOC_CENTER;
+        case AVCHROMA_LOC_TOPLEFT:     return BENZINA_CHROMALOC_TOPLEFT;
+        case AVCHROMA_LOC_TOP:         return BENZINA_CHROMALOC_TOP;
+        case AVCHROMA_LOC_BOTTOMLEFT:  return BENZINA_CHROMALOC_BOTTOMLEFT;
+        case AVCHROMA_LOC_BOTTOM:      return BENZINA_CHROMALOC_BOTTOM;
+    }
+}
+
 
 /**
  * @brief Convert to x264-expected string the integer code for color primaries,
@@ -812,7 +878,69 @@ static int i2h_frame_scale_and_pad(AVFrame*           dst,
 
 
 
+/***** Packet List *****/
+
+/**
+ * @brief Append a packet to the list.
+ * 
+ * @param [in,out]  List of packets to modify. Must be non-NULL.
+ * @param [in]      Packet to append. Must be non-NULL.
+ * @return 0 if successful, !0 otherwise.
+ */
+
+static int   i2h_packetlist_append            (PACKETLIST** list, AVPacket* packet){
+    PACKETLIST* node;
+    
+    if(!list || !packet){return 1;}
+    
+    while(*list){list = &(*list)->next;}
+    
+    node = malloc(sizeof(*node));
+    node->packet = packet;
+    node->next   = NULL;
+    
+    *list = node;
+    
+    return 0;
+}
+
+/**
+ * @brief Free a list of packets.
+ * 
+ * @param [in]  A list of packets to be freed. 
+ */
+
+static void  i2h_packetlist_free              (PACKETLIST** list){
+    PACKETLIST* node;
+    PACKETLIST* next;
+    
+    if(!list){return;}
+    
+    for(node=*list; node; node=next){
+        next = node->next;
+        node->next = NULL;
+        av_packet_free(&node->packet);
+        free(node);
+    }
+    
+    *list = node;
+}
+
+
+
 /***** Item *****/
+
+/**
+ * @brief Allocate new item.
+ * 
+ * @return The new item.
+ */
+
+static ITEM* i2h_item_new                     (void){
+    ITEM* item = malloc(sizeof(*item));
+    i2h_item_init(item);
+    return item;
+}
 
 /**
  * @brief Initialize the item to default values.
@@ -821,12 +949,104 @@ static int i2h_frame_scale_and_pad(AVFrame*           dst,
  * @return 0.
  */
 
-static int  i2h_item_init                   (ITEM* item){
+static int   i2h_item_init                    (ITEM* item){
     memset(item, 0, sizeof(*item));
     item->name           = "";
+    item->mime.type      = "application/octet-stream";
     memcpy(item->type, "pict", 4);
-    item->mime           = "application/octet-stream";
     return 0;
+}
+
+/**
+ * @brief Check whether item is of picture type.
+ * 
+ * @param [in]  item        The item whose type we are checking.
+ * @return 1 if pict-type item; 0 otherwise.
+ */
+
+static int   i2h_item_is_pict                 (ITEM* item){
+    return memcmp(item->type, "pict", sizeof(item->type)) == 0;
+}
+
+/**
+ * @brief Read frame of picture at its URL.
+ * 
+ * @param [in,out]  item        The item for which we're reading the frame.
+ * @return 0 if successful; !0 otherwise.
+ */
+
+static int   i2h_item_pict_read_frame         (ITEM* item){
+    int                ret;
+    AVFormatContext*   format_ctx    = NULL;
+    int                format_stream = 0;
+    AVCodecParameters* codec_par     = NULL;
+    AVCodec*           codec         = NULL;
+    AVCodecContext*    codec_ctx     = NULL;
+    AVPacket*          packet        = NULL;
+    
+    
+    /* Input Init */
+    ret   = avformat_open_input(&format_ctx, item->path, NULL, NULL);
+    if(ret < 0)
+        i2hmessageexit(ret, stderr, "Cannot open input media \"%s\"! (%d)\n", item->path, ret);
+    
+    ret   = avformat_find_stream_info(format_ctx, NULL);
+    if(ret < 0)
+        i2hmessageexit(EIO,    stderr, "Cannot understand input media \"%s\"! (%d)\n", item->path, ret);
+    
+    format_stream = av_find_default_stream_index(format_ctx);
+    if(!i2h_is_imagelike_stream(format_ctx, format_stream))
+        i2hmessageexit(EINVAL, stderr, "No image data in media \"%s\"!\n", item->path);
+    
+    codec_par = format_ctx->streams[format_stream]->codecpar;
+    codec     = avcodec_find_decoder(codec_par->codec_id);
+    codec_ctx = avcodec_alloc_context3(codec);
+    if(!codec_ctx)
+        i2hmessageexit(EINVAL, stderr, "Could not allocate decoder!\n");
+    
+    ret = avcodec_open2(codec_ctx, codec, NULL);
+    if(ret < 0)
+        i2hmessageexit(ret, stderr, "Could not open decoder! (%d)\n", ret);
+    
+    
+    /* Read first (only) frame. */
+    do{
+        packet = av_packet_alloc();
+        if(!packet)
+            i2hmessageexit(ENOMEM, stderr, "Failed to allocate packet object!\n");
+        
+        ret = av_read_frame(format_ctx, packet);
+        if(ret < 0)
+            i2hmessageexit(ret, stderr, "Error or end-of-file reading media \"%s\" (%d)!\n",
+                                        item->path, ret);
+        
+        if(packet->stream_index != format_stream){
+            av_packet_free(&packet);
+        }else{
+            ret = avcodec_send_packet(codec_ctx, packet);
+            av_packet_free(&packet);
+            if(ret)
+                i2hmessageexit(ret, stderr, "Error pushing packet! (%d)\n", ret);
+            
+            item->pict.frame = av_frame_alloc();
+            if(!item->pict.frame)
+                i2hmessageexit(ENOMEM, stderr, "Error allocating frame!\n");
+            
+            ret = avcodec_receive_frame(codec_ctx, item->pict.frame);
+            if(ret)
+                i2hmessageexit(ret, stderr, "Error pulling frame! (%d)\n",  ret);
+            break;
+        }
+    }while(!ret);
+    
+    
+    /* Cleanup input reader objects */
+    avcodec_free_context(&codec_ctx);
+    avformat_close_input(&format_ctx);
+    
+    
+    /* Exit */
+    return ret;
 }
 
 /**
@@ -837,7 +1057,7 @@ static int  i2h_item_init                   (ITEM* item){
  * @return 0.
  */
 
-static int  i2h_item_insert                 (ITEM** items, ITEM* item){
+static int   i2h_item_insert                  (ITEM** items, ITEM* item){
     while(*items && (*items)->id < item->id){
         items = &(*items)->next;
     }
@@ -846,6 +1066,227 @@ static int  i2h_item_insert                 (ITEM** items, ITEM* item){
     return 0;
 }
 
+/**
+ * @brief Configure/Deconfigure encoder for encoding the given prototypical frame.
+ * 
+ * Uses both frame properties and sticky universe properties to configure the
+ * encoder.
+ * 
+ * @param [in,out]  item        The item we're configuring for.
+ * @param [in]      frame       The frame whose properties (except size) we use
+ *                              as a template for encoding.
+ * @param [in,out]  u           The universe whose sticky flags we are using.
+ * @return 0 if successful; !0 otherwise.
+ */
+
+static int  i2h_item_pict_encoder_configure   (ITEM*     item,
+                                               AVFrame*  frame,
+                                               UNIVERSE* u){
+    int           ret;
+    char          x26x_params_str[1024];
+    const char*   x26x_params;
+    const char*   x26x_params_args;
+    const char*   x26x_profile;
+    const char*   colorrange_str;
+    const char*   colorprim_str;
+    const char*   transfer_str;
+    const char*   colormatrix_str;
+    AVDictionary* codec_ctx_opt = NULL;
+    
+    
+    /* Do not configure encoder for non-pict items. */
+    if(!i2h_item_is_pict(item)){return 0;}
+    
+    
+    /* Allocate context. */
+    item->pict.codec_ctx = avcodec_alloc_context3(u->out.codec);
+    if(!item->pict.codec_ctx)
+        i2hmessageexit(ENOMEM, stderr, "Could not allocate encoder!\n");
+    
+    
+    /* Configure context. */
+    colorprim_str   = i2h_x264_color_primaries(frame->color_primaries);
+    colorprim_str   = colorprim_str   ? colorprim_str   : i2h_x264_color_primaries(AVCOL_PRI_BT709);
+    transfer_str    = i2h_x264_color_trc      (frame->color_trc);
+    transfer_str    = transfer_str    ? transfer_str    : i2h_x264_color_trc      (AVCOL_TRC_IEC61966_2_1);
+    colormatrix_str = i2h_x264_color_space    (frame->colorspace);
+    colormatrix_str = colormatrix_str ? colormatrix_str : i2h_x264_color_space    (AVCOL_SPC_BT470BG);
+    if(i2h_is_codec_x264(u->out.codec)){
+        x26x_params      = "x264-params";
+        x26x_params_args = u->out.x264_params ? u->out.x264_params : "";
+        x26x_profile     = "high444";
+        colorrange_str   = frame->color_range==AVCOL_RANGE_MPEG ? "on" : "off";
+        snprintf(x26x_params_str, sizeof(x26x_params_str),
+                 "ref=1:chromaloc=%d:log=-1:log-level=none:stitchable=1:slices-max=32:"
+                 "fullrange=%s:colorprim=%s:transfer=%s:colormatrix=%s%s%s",
+                 i2h_av2benzinachromaloc(frame->chroma_location),
+                 colorrange_str, colorprim_str, transfer_str, colormatrix_str,
+                 *x26x_params_args ? ":"              : "",
+                 *x26x_params_args ? x26x_params_args : "");
+    }else{
+        x26x_params      = "x265-params";
+        x26x_params_args = u->out.x265_params ? u->out.x265_params : "";
+        x26x_profile     = "main444-stillpicture";
+        colorrange_str   = frame->color_range==AVCOL_RANGE_MPEG ? "limited" : "full";
+        snprintf(x26x_params_str, sizeof(x26x_params_str),
+                 "ref=1:chromaloc=%d:log=-1:log-level=none:"
+                 "range=%s:colorprim=%s:transfer=%s:colormatrix=%s%s%s",
+                 i2h_av2benzinachromaloc(frame->chroma_location),
+                 colorrange_str, colorprim_str, transfer_str, colormatrix_str,
+                 *x26x_params_args ? ":"              : "",
+                 *x26x_params_args ? x26x_params_args : "");
+    }
+    item->pict.codec_ctx->width                  = u->out.tile.w;
+    item->pict.codec_ctx->height                 = u->out.tile.h;
+    item->pict.codec_ctx->time_base.num          =  1;  /* Nominal 30 fps */
+    item->pict.codec_ctx->time_base.den          = 30;  /* Nominal 30 fps */
+    item->pict.codec_ctx->gop_size               =  0;  /* Intra only */
+    item->pict.codec_ctx->pix_fmt                = frame->format;
+    item->pict.codec_ctx->chroma_sample_location = frame->chroma_location;
+    item->pict.codec_ctx->color_range            = frame->color_range;
+    item->pict.codec_ctx->color_primaries        = frame->color_primaries;
+    item->pict.codec_ctx->color_trc              = frame->color_trc;
+    item->pict.codec_ctx->colorspace             = frame->colorspace;
+    item->pict.codec_ctx->sample_aspect_ratio    = frame->sample_aspect_ratio;
+    item->pict.codec_ctx->flags                 |= AV_CODEC_FLAG_LOOP_FILTER;
+    item->pict.codec_ctx->thread_count           = 1;
+    item->pict.codec_ctx->thread_type            = FF_THREAD_FRAME;
+    item->pict.codec_ctx->slices                 = 1;
+    av_dict_set    (&codec_ctx_opt, "profile",    x26x_profile,    0);
+    av_dict_set    (&codec_ctx_opt, "preset",     "placebo",       0);
+    av_dict_set    (&codec_ctx_opt, "tune",       "ssim",          0);
+    av_dict_set_int(&codec_ctx_opt, "forced-idr", 1,               0);
+    av_dict_set_int(&codec_ctx_opt, "crf",        u->out.crf,      0);
+    av_dict_set    (&codec_ctx_opt, x26x_params,  x26x_params_str, 0);
+    
+    
+    /* Open context. */
+    ret = avcodec_open2(item->pict.codec_ctx, u->out.codec, &codec_ctx_opt);
+    if(av_dict_count(codec_ctx_opt)){
+        AVDictionaryEntry* entry = NULL;
+        i2hmessage(stderr, "Warning: codec ignored %d options!\n",
+                           av_dict_count(codec_ctx_opt));
+        while((entry=av_dict_get(codec_ctx_opt, "", entry, AV_DICT_IGNORE_SUFFIX))){
+            i2hmessage(stderr, "    %20s: %s\n", entry->key, entry->value);
+        }
+    }
+    av_dict_free(&codec_ctx_opt);
+    if(ret < 0)
+        i2hmessageexit(ret, stderr, "Could not open encoder! (%d)\n", ret);
+    
+    return 0;
+}
+static void i2h_item_pict_encoder_deconfigure (ITEM* item){
+    /* Do not deconfigure encoder for non-pict items. */
+    if(!i2h_item_is_pict(item)){return;}
+    
+    avcodec_free_context(&item->pict.codec_ctx);
+}
+
+/**
+ * @brief Make picture grid/tile items.
+ * 
+ * @param [in,out]  u           The universe we're operating over.
+ * @param [in,out]  item        The item for which a grid and tile items are to
+ *                              be generated.
+ * @return 0 if successful; !0 otherwise.
+ */
+
+static int   i2h_item_pict_push_grid_frames   (ITEM* item){
+    int j, tile_w=item->pict.codec_ctx->width;
+    int i, tile_h=item->pict.codec_ctx->height;
+    int grid_rows=item->pict.grid.ispe.h/tile_h;
+    int grid_cols=item->pict.grid.ispe.w/tile_w;
+    int ret;
+    
+    if(!i2h_item_is_pict(item)){return 0;}
+    
+    for(i=0;i<grid_rows;i++){
+        for(j=0;j<grid_cols;j++){
+            AVFrame* frame = av_frame_clone(item->pict.grid.frame);
+            frame->crop_top    = tile_h * (i);
+            frame->crop_bottom = tile_h * (grid_rows-i-1);
+            frame->crop_left   = tile_w * (j);
+            frame->crop_right  = tile_w * (grid_cols-j-1);
+            
+            ret = av_frame_apply_cropping(frame, 0);
+            if(ret < 0)
+                i2hmessageexit(ret, stderr, "Error applying cropping (%d)!\n", ret);
+            
+            ret = i2h_item_pict_push_frame(item, frame);
+            if(ret != 0)
+                i2hmessageexit(ret, stderr, "Error pushing grid tile into encoder (%d)!\n", ret);
+            
+            item->pict.grid.num_packets++;
+            av_frame_free(&frame);
+        }
+    }
+    
+    return 0;
+}
+static int   i2h_item_pict_push_thumb_frames  (ITEM* item){
+    int ret = i2h_item_pict_push_frame(item, item->pict.thumb.frame);
+    if(ret != 0)
+        i2hmessageexit(ret, stderr, "Error pushing thumbnail tile into encoder (%d)!\n", ret);
+    
+    item->pict.thumb.num_packets++;
+    
+    return ret;
+}
+
+/**
+ * @brief Push a frame into the encoder with respect to this item.
+ * @param [in,out]  Item to which to append a packet.
+ * @param [in]      Packet to append.
+ * @return 0 if successful, !0 otherwise.
+ */
+
+static int   i2h_item_pict_push_frame         (ITEM* item, AVFrame* frame){
+    int retpush, retpull;
+    
+    if(frame){
+        frame->pts = frame->best_effort_timestamp;
+    }else{
+        /* This is a flush frame that signals to the encoder to empty itself. */
+    }
+    
+    do{
+        retpush = avcodec_send_frame(item->pict.codec_ctx, frame);
+        do{
+            AVPacket* packet = av_packet_alloc();
+            if(!packet)
+                i2hmessageexit(ENOMEM, stderr, "Failed to allocate packet object!\n");
+            
+            retpull = avcodec_receive_packet(item->pict.codec_ctx, packet);
+            if(retpull >= 0){
+                i2h_item_append_packet(item, packet);
+            }else{
+                av_packet_free(&packet);
+            }
+        }while(retpull >= 0);
+    }while(retpush == AVERROR(EAGAIN));
+    
+    if(retpush < 0){
+        if(frame){
+            i2hmessageexit(retpush, stderr, "Error pushing frame into encoder! (%d)\n", retpush);
+        }else{
+            i2hmessageexit(retpush, stderr, "Error flushing encoder input! (%d)\n", retpush);
+        }
+    }
+    
+    return 0;
+}
+
+/**
+ * @brief Append packet to item.
+ * @param [in,out]  Item to which to append a packet.
+ * @param [in]      Packet to append.
+ * @return 0 if successful, !0 otherwise.
+ */
+
+static int   i2h_item_append_packet           (ITEM* item, AVPacket* packet){
+    return i2h_packetlist_append(&item->packetlist, packet);
+}
 
 
 /***** Item Reference *****/
@@ -858,7 +1299,7 @@ static int  i2h_item_insert                 (ITEM** items, ITEM* item){
  * @return 0.
  */
 
-static int  i2h_iref_append                 (IREF** refs, IREF* iref){
+static int  i2h_iref_append                   (IREF** refs, IREF* iref){
     iref->next = *refs;
     *refs = iref;
     return 0;
@@ -875,33 +1316,18 @@ static int  i2h_iref_append                 (IREF** refs, IREF* iref){
  * @return 0.
  */
 
-static int  i2h_universe_init               (UNIVERSE* u){
+static int  i2h_universe_init                 (UNIVERSE* u){
     u->items              = NULL;
-    i2h_universe_item_init_new(u);
+    u->item               = i2h_item_new();
     
     u->out.codec          = avcodec_find_encoder_by_name("libx265");
-    u->out.codec_ctx      = NULL;
-    u->out.tile_width     = 512;
-    u->out.tile_height    = 512;
+    u->out.tile.w         = 512;
+    u->out.tile.h         = 512;
     u->out.crf            = 10;
     u->out.chroma_format  = BENZINA_CHROMAFMT_YUV420;
     u->out.x264_params    = "";
     u->out.x265_params    = "";
     u->out.url            = NULL;
-    
-    return 0;
-}
-
-/**
- * @brief Allocate and initialize new item.
- * 
- * @param [in]  u  The universe we're operating over.
- * @return 0.
- */
-
-static int  i2h_universe_item_init_new      (UNIVERSE* u){
-    u->item               = malloc(sizeof(*u->item));
-    i2h_item_init(u->item);
     
     return 0;
 }
@@ -913,7 +1339,7 @@ static int  i2h_universe_item_init_new      (UNIVERSE* u){
  * @return The item, if found; NULL otherwise.
  */
 
-static ITEM* i2h_universe_item_find_by_id   (UNIVERSE* u, uint32_t id){
+static ITEM* i2h_universe_item_find_by_id     (UNIVERSE* u, uint32_t id){
     ITEM* item;
     for(item=u->items; item; item=item->next){
         if(item->id == id){
@@ -932,7 +1358,7 @@ static ITEM* i2h_universe_item_find_by_id   (UNIVERSE* u, uint32_t id){
  * @return 0 if no free ID available; !0 otherwise.
  */
 
-static int  i2h_universe_item_find_free_id  (UNIVERSE* u, uint32_t* id_out){
+static int  i2h_universe_item_find_free_id    (UNIVERSE* u, uint32_t* id_out){
     uint32_t id;
     ITEM*    item;
     
@@ -957,7 +1383,7 @@ static int  i2h_universe_item_find_free_id  (UNIVERSE* u, uint32_t* id_out){
  * @return 0 if successful; !0 otherwise.
  */
 
-static int  i2h_universe_item_handle        (UNIVERSE* u, ITEM* item){
+static int  i2h_universe_item_handle          (UNIVERSE* u, ITEM* item){
     if      (memcmp(item->type, "pict", 4) == 0){
         return i2h_universe_item_handle_pict(u, item);
     }else if(memcmp(item->type, "mime", 4) == 0){
@@ -973,7 +1399,7 @@ static int  i2h_universe_item_handle        (UNIVERSE* u, ITEM* item){
  * @return 0.
  */
 
-static int  i2h_universe_item_handle_mime   (UNIVERSE* u, ITEM* item){
+static int  i2h_universe_item_handle_mime     (UNIVERSE* u, ITEM* item){
     (void)u, (void)item;
     return 0;
 }
@@ -985,185 +1411,107 @@ static int  i2h_universe_item_handle_mime   (UNIVERSE* u, ITEM* item){
  * @return 0.
  */
 
-static int  i2h_universe_item_handle_pict   (UNIVERSE* u, ITEM* item){
+static int  i2h_universe_item_handle_pict     (UNIVERSE* u, ITEM* item){
     /* FFmpeg state. */
-    int                singletile,   letterboxing;
-    int64_t            scaled_width, scaled_height;
-    enum AVPixelFormat pix_fmt;
-    AVFormatContext*   format_ctx    = NULL;
-    int                format_stream = 0;
-    AVCodecParameters* codec_par     = NULL;
-    AVCodec*           codec         = NULL;
-    AVCodecContext*    codec_ctx     = NULL;
-    AVPacket*          packet        = NULL;
+    int                singletile, letterboxing, ret;
+    enum AVPixelFormat pix_fmt = i2h_benzina2avpixfmt(u->out.chroma_format);
     
     
-    /* Set destination pixel format. */
-    switch(u->out.chroma_format){
-        case BENZINA_CHROMAFMT_YUV400: pix_fmt = AV_PIX_FMT_GRAY8;   break;
-        case BENZINA_CHROMAFMT_YUV420: pix_fmt = AV_PIX_FMT_YUV420P; break;
-        case BENZINA_CHROMAFMT_YUV422: pix_fmt = AV_PIX_FMT_YUV422P; break;
-        case BENZINA_CHROMAFMT_YUV444: pix_fmt = AV_PIX_FMT_YUV444P; break;
-        default:
-            i2hmessageexit(EINVAL, stderr, "Unsupported chroma format \"%u\"!\n",
-                                           u->out.chroma_format);
-    }
-    
-    
-    /* Input Init */
-    u->ret   = avformat_open_input(&format_ctx, item->path, NULL, NULL);
-    if(u->ret < 0)
-        i2hmessageexit(u->ret, stderr, "Cannot open input media \"%s\"! (%d)\n", item->path, u->ret);
-    
-    u->ret   = avformat_find_stream_info(format_ctx, NULL);
-    if(u->ret < 0)
-        i2hmessageexit(EIO,    stderr, "Cannot understand input media \"%s\"! (%d)\n", item->path, u->ret);
-    
-    format_stream = av_find_default_stream_index(format_ctx);
-    if(!i2h_is_imagelike_stream(format_ctx, format_stream))
-        i2hmessageexit(EINVAL, stderr, "No image data in media \"%s\"!\n", item->path);
-    
-    codec_par = format_ctx->streams[format_stream]->codecpar;
-    codec    = avcodec_find_decoder(codec_par->codec_id);
-    codec_ctx = avcodec_alloc_context3(codec);
-    if(!codec_ctx)
-        i2hmessageexit(EINVAL, stderr, "Could not allocate decoder!\n");
-    
-    u->ret   = avcodec_open2(codec_ctx, codec, NULL);
-    if(u->ret < 0)
-        i2hmessageexit(u->ret, stderr, "Could not open decoder! (%d)\n", u->ret);
-    
-    
-    /* Read first (one) frame. */
-    do{
-        AVPacket* packet = av_packet_alloc();
-        if(!packet)
-            i2hmessageexit(ENOMEM, stderr, "Failed to allocate packet object!\n");
-        
-        u->ret = av_read_frame(format_ctx, packet);
-        if(u->ret < 0)
-            i2hmessageexit(u->ret, stderr, "Error or end-of-file reading media \"%s\" (%d)!\n",
-                                           item->path, u->ret);
-        
-        if(packet->stream_index != format_stream){
-            av_packet_free(&packet);
-        }else{
-            u->ret = avcodec_send_packet(codec_ctx, packet);
-            av_packet_free(&packet);
-            if(u->ret)
-                i2hmessageexit(u->ret, stderr, "Error pushing packet! (%d)\n", u->ret);
-            
-            item->frame = av_frame_alloc();
-            if(!item->frame)
-                i2hmessageexit(ENOMEM, stderr, "Error allocating frame!\n");
-            
-            u->ret = avcodec_receive_frame(codec_ctx, item->frame);
-            if(u->ret)
-                i2hmessageexit(u->ret, stderr, "Error pulling frame! (%d)\n",  u->ret);
-            break;
-        }
-    }while(!u->ret);
-    
-    
-    /* Cleanup input reader objects */
-    avcodec_free_context(&codec_ctx);
-    avformat_close_input(&format_ctx);
+    /* Read one frame. */
+    ret = i2h_item_pict_read_frame(item);
+    if(ret != 0)
+        i2hmessageexit(ret, stderr, "Failed to read frame from input media \"%s\"! (%d)\n", item->path, ret);
     
     
     /* Fixup the frame and canonicalize its pixel format. */
-    i2h_frame_fixup(item->frame);
-    i2h_frame_canonicalize_pixfmt(item->frame, item->frame);
-    item->width  = item->frame->width;
-    item->height = item->frame->height;
+    i2h_frame_fixup(item->pict.frame);
+    i2h_frame_canonicalize_pixfmt(item->pict.frame, item->pict.frame);
+    item->pict.grid.clap.w = item->pict.frame->width;
+    item->pict.grid.clap.h = item->pict.frame->height;
     
     
     /* Compute scaling parameters */
-    singletile   = item->frame->width  <= (int)u->out.tile_width &&
-                   item->frame->height <= (int)u->out.tile_height;
-    letterboxing = ((uint64_t)item->frame->width  * u->out.tile_height) >=
-                   ((uint64_t)item->frame->height * u->out.tile_width );
+    singletile   = item->pict.frame->width  <= (int)u->out.tile.w &&
+                   item->pict.frame->height <= (int)u->out.tile.h;
+    letterboxing = ((uint64_t)item->pict.frame->width  * u->out.tile.h) >=
+                   ((uint64_t)item->pict.frame->height * u->out.tile.w );
     if(singletile){
-        scaled_width  = item->frame->width;
-        scaled_height = item->frame->height;
+        item->pict.thumb.clap.w = item->pict.frame->width;
+        item->pict.thumb.clap.h = item->pict.frame->height;
     }else if(letterboxing){
-        scaled_width  = u->out.tile_width;
-        scaled_height = round(1.0 * scaled_width *
-                              item->frame->height/item->frame->width);
+        item->pict.thumb.clap.w = u->out.tile.w;
+        item->pict.thumb.clap.h = round(item->pict.thumb.clap.w  * 1.0 *
+                                        item->pict.frame->height /
+                                        item->pict.frame->width);
     }else{
-        scaled_height = u->out.tile_height;
-        scaled_width  = round(1.0 * scaled_height *
-                              item->frame->width/item->frame->height);
+        item->pict.thumb.clap.h = u->out.tile.h;
+        item->pict.thumb.clap.w = round(item->pict.thumb.clap.h * 1.0 *
+                                        item->pict.frame->width /
+                                        item->pict.frame->height);
     }
     
     
     /* Create grid/single-tile frames */
-    item->grid_frame = av_frame_alloc();
-    if(!item->grid_frame)
-        i2hmessageexit(ENOMEM, stderr, "Error allocating frame!\n");
-    item->tile_frame = av_frame_alloc();
-    if(!item->tile_frame)
+    item->pict.grid.frame = av_frame_alloc();
+    if(!item->pict.grid.frame)
         i2hmessageexit(ENOMEM, stderr, "Error allocating frame!\n");
     
-    i2h_frame_scale_and_pad(item->grid_frame, item->frame, pix_fmt,
-                            item->width, item->height,
-                            u->out.tile_width, u->out.tile_height);
-    if(singletile){
-        av_frame_ref(item->tile_frame, item->grid_frame);
-    }else{
-        i2h_frame_scale_and_pad(item->tile_frame, item->frame, pix_fmt,
-                                scaled_width, scaled_height,
-                                u->out.tile_width, u->out.tile_height);
+    i2h_frame_scale_and_pad(item->pict.grid.frame,  item->pict.frame, pix_fmt,
+                            item->pict.grid.clap.w, item->pict.grid.clap.h,
+                            u->out.tile.w,          u->out.tile.h);
+    item->pict.grid.ispe.w = item->pict.grid.frame->width;
+    item->pict.grid.ispe.h = item->pict.grid.frame->height;
+    
+    if(item->want_thumbnail){
+        item->pict.thumb.frame = av_frame_alloc();
+        if(!item->pict.thumb.frame)
+            i2hmessageexit(ENOMEM, stderr, "Error allocating frame!\n");
+        
+        if(singletile){
+            av_frame_ref(item->pict.thumb.frame, item->pict.grid.frame);
+        }else{
+            i2h_frame_scale_and_pad(item->pict.thumb.frame,  item->pict.frame, pix_fmt,
+                                    item->pict.thumb.clap.w, item->pict.thumb.clap.h,
+                                    u->out.tile.w,           u->out.tile.h);
+        }
+        
+        item->pict.thumb.ispe.w = item->pict.thumb.frame->width;
+        item->pict.thumb.ispe.h = item->pict.thumb.frame->height;
     }
     
     
-    /* Encode Tiles */
-    
     /**
-     * Push the filtered frame  into the encoder.
+     * Push encoded tiles into the encoder.
      * Pull the output packet from the encoder.
      * 
      * Flushing the input encode pipeline requires pushing in a NULL frame.
      */
     
-    packet = av_packet_alloc();
-    if(!packet)
-        i2hmessageexit(ENOMEM, stderr, "Failed to allocate packet object!\n");
-    
-    u->ret = i2h_universe_encoder_configure(u, item->tile_frame);
-    if(u->ret)
-        i2hmessageexit(u->ret, stderr, "Failed to configure x264 encoder! (%d)\n", u->ret);
-    
-    item->tile_frame->pts = item->tile_frame->best_effort_timestamp;
-    u->ret = avcodec_send_frame(u->out.codec_ctx, item->tile_frame);
-    if(u->ret < 0)
-        i2hmessageexit(u->ret, stderr, "Error pushing frame into encoder! (%d)\n", u->ret);
-    
-    u->ret = avcodec_send_frame(u->out.codec_ctx, NULL);
-    if(u->ret < 0)
-        i2hmessageexit(u->ret, stderr, "Error flushing encoder input! (%d)\n", u->ret);
-    
-    u->ret = avcodec_receive_packet(u->out.codec_ctx, packet);
-    if(u->ret < 0)
-        i2hmessageexit(u->ret, stderr, "Error pulling packet from encoder! (%d)\n", u->ret);
-    
-    i2h_universe_encoder_deconfigure(u);
-    
+    i2h_item_pict_encoder_configure(item, item->pict.grid.frame, u);
+    i2h_item_pict_push_grid_frames(item);
+    if(item->want_thumbnail){
+        i2h_item_pict_push_thumb_frames(item);
+    }
+    i2h_item_pict_push_frame(item, NULL);
+    i2h_item_pict_encoder_deconfigure(item);
     
     
 #if 1
     fprintf(stdout, "ID %u: %ux%u %s %s\n",
-            item->id, item->frame->width, item->frame->height,
-            av_get_pix_fmt_name(item->frame->format),
-            item->frame->color_range == AVCOL_RANGE_JPEG ? "jpeg" : "mpeg");
+            item->id, item->pict.frame->width, item->pict.frame->height,
+            av_get_pix_fmt_name(item->pict.frame->format),
+            item->pict.frame->color_range == AVCOL_RANGE_JPEG ? "jpeg" : "mpeg");
     fprintf(stdout, "Grid:  %ux%u %s %s\n",
-            item->grid_frame->width, item->grid_frame->height,
-            av_get_pix_fmt_name(item->grid_frame->format),
-            item->grid_frame->color_range == AVCOL_RANGE_JPEG ? "jpeg" : "mpeg");
-    fprintf(stdout, "Tile:  %ux%u %s %s (%d encoded bytes)\n",
-            item->tile_frame->width, item->tile_frame->height,
-            av_get_pix_fmt_name(item->tile_frame->format),
-            item->tile_frame->color_range == AVCOL_RANGE_JPEG ? "jpeg" : "mpeg",
-            packet->size);
+            item->pict.grid.frame->width, item->pict.grid.frame->height,
+            av_get_pix_fmt_name(item->pict.grid.frame->format),
+            item->pict.grid.frame->color_range == AVCOL_RANGE_JPEG ? "jpeg" : "mpeg");
+    if(item->want_thumbnail){
+        fprintf(stdout, "Tile:  %ux%u %s %s (%d encoded bytes)\n",
+                item->pict.thumb.frame->width, item->pict.thumb.frame->height,
+                av_get_pix_fmt_name(item->pict.thumb.frame->format),
+                item->pict.thumb.frame->color_range == AVCOL_RANGE_JPEG ? "jpeg" : "mpeg",
+                item->packetlist->packet->size);
+    }
 #endif
 #if 0
     FILE* fp;
@@ -1184,105 +1532,6 @@ static int  i2h_universe_item_handle_pict   (UNIVERSE* u, ITEM* item){
 #endif
     
     return 0;
-}
-
-/**
- * @brief Configure encoder for encoding the given prototypical frame.
- * 
- * @param [in,out]  u           The universe we're operating over.
- * @param [in]      frame       The frame whose properties (except size) we use
- *                              as a template for encoding.
- * @return 0 if successful; !0 otherwise.
- */
-
-static int  i2h_universe_encoder_configure  (UNIVERSE* u,
-                                             AVFrame*  frame){
-    char          x26xparams[1024];
-    const char*   x26x_params;
-    const char*   x26x_params_args;
-    const char*   x26x_profile;
-    const char*   colorprim_str;
-    const char*   transfer_str;
-    const char*   colormatrix_str;
-    AVDictionary* codec_ctx_opt = NULL;
-    
-    
-    if(i2h_is_codec_x264(u->out.codec)){
-        x26x_params      = "x264-params";
-        x26x_params_args = u->out.x264_params ? u->out.x264_params : "";
-        x26x_profile     = "high444";
-    }else{
-        x26x_params      = "x265-params";
-        x26x_params_args = u->out.x265_params ? u->out.x265_params : "";
-        x26x_profile     = "main444-stillpicture";
-    }
-    
-    u->out.codec_ctx = avcodec_alloc_context3(u->out.codec);
-    if(!u->out.codec_ctx)
-        i2hmessageexit(ENOMEM, stderr, "Could not allocate encoder!\n");
-    
-    u->out.codec_ctx->width                  = u->out.tile_width;
-    u->out.codec_ctx->height                 = u->out.tile_height;
-    u->out.codec_ctx->time_base.num          =  1;  /* Nominal 30 fps */
-    u->out.codec_ctx->time_base.den          = 30;  /* Nominal 30 fps */
-    u->out.codec_ctx->gop_size               =  0;  /* Intra only */
-    u->out.codec_ctx->pix_fmt                = frame->format;
-    u->out.codec_ctx->chroma_sample_location = frame->chroma_location;
-    u->out.codec_ctx->color_range            = frame->color_range;
-    u->out.codec_ctx->color_primaries        = frame->color_primaries;
-    u->out.codec_ctx->color_trc              = frame->color_trc;
-    u->out.codec_ctx->colorspace             = frame->colorspace;
-    u->out.codec_ctx->sample_aspect_ratio    = frame->sample_aspect_ratio;
-    u->out.codec_ctx->flags                 |= AV_CODEC_FLAG_LOOP_FILTER;
-    u->out.codec_ctx->thread_count           = 1;
-    u->out.codec_ctx->slices                 = 1;
-    colorprim_str   = i2h_x264_color_primaries(frame->color_primaries);
-    colorprim_str   = colorprim_str   ? colorprim_str   : i2h_x264_color_primaries(
-                                        frame->color_primaries = AVCOL_PRI_BT709);
-    transfer_str    = i2h_x264_color_trc      (frame->color_trc);
-    transfer_str    = transfer_str    ? transfer_str    : i2h_x264_color_trc(
-                                        frame->color_trc       = AVCOL_TRC_IEC61966_2_1);
-    colormatrix_str = i2h_x264_color_space    (frame->colorspace);
-    colormatrix_str = colormatrix_str ? colormatrix_str : i2h_x264_color_space(
-                                        frame->colorspace      = AVCOL_SPC_BT470BG);
-    snprintf(x26xparams, sizeof(x26xparams),
-             "ref=1:chromaloc=1:log=-1:log-level=none:slices-max=32:fullrange=on:"
-             "stitchable=1:colorprim=%s:transfer=%s:colormatrix=%s%s%s",
-             colorprim_str, transfer_str, colormatrix_str,
-             *x26x_params_args ? ":"              : "",
-             *x26x_params_args ? x26x_params_args : "");
-    av_dict_set    (&codec_ctx_opt, "profile",     x26x_profile, 0);
-    av_dict_set    (&codec_ctx_opt, "preset",      "placebo",    0);
-    av_dict_set    (&codec_ctx_opt, "tune",        "ssim",       0);
-    av_dict_set_int(&codec_ctx_opt, "forced-idr",  1,            0);
-    av_dict_set_int(&codec_ctx_opt, "crf",         u->out.crf,   0);
-    av_dict_set    (&codec_ctx_opt, x26x_params,   x26xparams,   0);
-    u->ret = avcodec_open2(u->out.codec_ctx, u->out.codec, &codec_ctx_opt);
-    if(av_dict_count(codec_ctx_opt)){
-        AVDictionaryEntry* entry = NULL;
-        i2hmessage(stderr, "Warning: codec ignored %d options!\n",
-                           av_dict_count(codec_ctx_opt));
-        while((entry=av_dict_get(codec_ctx_opt, "", entry, AV_DICT_IGNORE_SUFFIX))){
-            i2hmessage(stderr, "    %20s: %s\n", entry->key, entry->value);
-        }
-    }
-    av_dict_free(&codec_ctx_opt);
-    if(u->ret < 0)
-        i2hmessageexit(u->ret, stderr, "Could not open encoder! (%d)\n", u->ret);
-    
-    
-    /* Return */
-    return u->ret = 0;
-}
-
-/**
- * @brief Release the universe's encoder context.
- * 
- * @param [in,out]  u     The universe we're operating over.
- */
-
-static void i2h_universe_encoder_deconfigure(UNIVERSE* u){
-    avcodec_free_context(&u->out.codec_ctx);
 }
 
 /**
@@ -1386,19 +1635,19 @@ static int i2h_parse_tile       (UNIVERSE* u, char*** argv){
         i2hmessageexit(EINVAL, stderr, "Option --tile consumes an argument!\n");
     
     switch(sscanf(*(*argv)++, "%"PRIu32":%"PRIu32":%20[yuv420]",
-                  &u->out.tile_width,
-                  &u->out.tile_height,
+                  &u->out.tile.w,
+                  &u->out.tile.h,
                   tile_chroma_format)){
         default:
         case 0: i2hmessageexit(EINVAL, stderr, "--tile requires an argument formatted 'width:height:chroma_format' !\n");
-        case 1: u->out.tile_height = u->out.tile_width; break;
+        case 1: u->out.tile.h = u->out.tile.w; break;
         case 2:
         case 3: break;
     }
     u->out.chroma_format = i2h_str2chromafmt(tile_chroma_format);
-    if(u->out.tile_width  < 48 || u->out.tile_width  > 4096 || u->out.tile_width  % 16 != 0)
+    if(u->out.tile.w < 48 || u->out.tile.w > 4096 || u->out.tile.w % 16 != 0)
         i2hmessageexit(EINVAL, stderr, "Tile width must be 48-4096 pixels in multiples of 16!\n");
-    if(u->out.tile_height < 48 || u->out.tile_height > 4096 || u->out.tile_height % 16 != 0)
+    if(u->out.tile.h < 48 || u->out.tile.h > 4096 || u->out.tile.h % 16 != 0)
         i2hmessageexit(EINVAL, stderr, "Tile height must be 48-4096 pixels in multiples of 16!\n");
     if(u->out.chroma_format > BENZINA_CHROMAFMT_YUV444)
         i2hmessageexit(EINVAL, stderr, "Unknown chroma format \"%s\"!\n", tile_chroma_format);
@@ -1454,7 +1703,7 @@ static int i2h_parse_name       (UNIVERSE* u, char*** argv){
     return 1;
 }
 static int i2h_parse_mime       (UNIVERSE* u, char*** argv){
-    if(!i2h_parse_consumeequals(argv) || !i2h_parse_consumecstr(argv, &u->item->mime))
+    if(!i2h_parse_consumeequals(argv) || !i2h_parse_consumecstr(argv, &u->item->mime.type))
         i2hmessageexit(EINVAL, stderr, "Option --mime consumes an argument!\n");
     return 1;
 }
@@ -1554,7 +1803,7 @@ static int i2h_parse_item       (UNIVERSE* u, char*** argv){
     /* Process completed item. */
     i2h_item_insert(&u->items, u->item);
     i2h_universe_item_handle(u, u->item);
-    i2h_universe_item_init_new(u);
+    u->item = i2h_item_new();
     
     return 1;
 }
