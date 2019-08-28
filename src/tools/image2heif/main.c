@@ -6,6 +6,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <libavcodec/avcodec.h>
 #include <libavfilter/avfilter.h>
 #include <libavformat/avformat.h>
@@ -1400,7 +1403,28 @@ static int  i2h_universe_item_handle          (UNIVERSE* u, ITEM* item){
  */
 
 static int  i2h_universe_item_handle_mime     (UNIVERSE* u, ITEM* item){
-    (void)u, (void)item;
+    (void)u;
+    
+    int         fd;
+    struct stat buf;
+    ssize_t     len;
+    
+    fd = open(item->path, O_RDONLY|O_CLOEXEC);
+    if(fd<0)
+        i2hmessageexit(EIO, stderr, "Error opening path '%s'!\n", item->path);
+    
+    if(fstat(fd, &buf) < 0)
+        i2hmessageexit(EIO, stderr, "Cannot stat path '%s'!\n", item->path);
+    
+    item->mime.size = buf.st_size;
+    item->mime.data = malloc(item->mime.size);
+    
+    len = read(fd, item->mime.data, item->mime.size);
+    if(len != (ssize_t)item->mime.size)
+        i2hmessageexit(EIO, stderr, "Failed to read '%s' fully!\n", item->path);
+    
+    close(fd);
+    
     return 0;
 }
 
