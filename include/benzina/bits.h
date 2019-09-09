@@ -231,72 +231,72 @@
  * References:
  *     ITU-T H.265      2018-02    Table 7-1.
  * 
- *                                     nal_unit_type | VCL | Notes...
+ *                                     nal_unit_type | VCL | Notes...                                                                                        | Syntax
  */
-#define BENZINA_H265_NALU_TYPE_TRAIL_N          0  //|  y  | Coded slice segment of a non-TSA, non-STSA trailing picture
-#define BENZINA_H265_NALU_TYPE_TRAIL_R          1  //|  y  | Coded slice segment of a non-TSA, non-STSA trailing picture
-#define BENZINA_H265_NALU_TYPE_TSA_N            2  //|  y  | Coded slice segment of a temporal sub-layer access (TSA) picture
-#define BENZINA_H265_NALU_TYPE_TSA_R            3  //|  y  | Coded slice segment of a temporal sub-layer access (TSA) picture
-#define BENZINA_H265_NALU_TYPE_STSA_N           4  //|  y  | Coded slice segment of a step-wise temporal sub-layer access (STSA) picture
-#define BENZINA_H265_NALU_TYPE_STSA_R           5  //|  y  | Coded slice segment of a step-wise temporal sub-layer access (STSA) picture
-#define BENZINA_H265_NALU_TYPE_RADL_N           6  //|  y  | Coded slice segment of a random access decodable leading (RADL) picture
-#define BENZINA_H265_NALU_TYPE_RADL_R           7  //|  y  | Coded slice segment of a random access decodable leading (RADL) picture
-#define BENZINA_H265_NALU_TYPE_RASL_N           8  //|  y  | Coded slice segment of a random access skipped   leading (RASL) picture
-#define BENZINA_H265_NALU_TYPE_RASL_R           9  //|  y  | Coded slice segment of a random access skipped   leading (RASL) picture
-#define BENZINA_H265_NALU_TYPE_RSV_VCL_N10     10  //|  y  | Reserved non-IRAP sub-layer non-reference (SLNR) VCL NAL unit types
-#define BENZINA_H265_NALU_TYPE_RSV_VCL_R11     11  //|  y  | Reserved non-IRAP sub-layer reference            VCL NAL unit types
-#define BENZINA_H265_NALU_TYPE_RSV_VCL_N12     12  //|  y  | Reserved non-IRAP sub-layer non-reference (SLNR) VCL NAL unit types
-#define BENZINA_H265_NALU_TYPE_RSV_VCL_R13     13  //|  y  | Reserved non-IRAP sub-layer reference            VCL NAL unit types
-#define BENZINA_H265_NALU_TYPE_RSV_VCL_N14     14  //|  y  | Reserved non-IRAP sub-layer non-reference (SLNR) VCL NAL unit types
-#define BENZINA_H265_NALU_TYPE_RSV_VCL_R15     15  //|  y  | Reserved non-IRAP sub-layer reference            VCL NAL unit types
-#define BENZINA_H265_NALU_TYPE_BLA_W_LP        16  //|  y  | Coded slice segment of a broken link access (BLA) picture with leading picture.
-#define BENZINA_H265_NALU_TYPE_BLA_W_RADL      17  //|  y  | Coded slice segment of a broken link access (BLA) picture with RADL picture.
-#define BENZINA_H265_NALU_TYPE_BLA_N_LP        18  //|  y  | Coded slice segment of a broken link access (BLA) picture with no leading picture.
-#define BENZINA_H265_NALU_TYPE_IDR_W_RADL      19  //|  y  | Coded slice segment of an instantaneous decoder refresh (IDR) picture with RADL picture.
-#define BENZINA_H265_NALU_TYPE_IDR_N_LP        20  //|  y  | Coded slice segment of an instantaneous decoder refresh (IDR) picture with no leading picture.
-#define BENZINA_H265_NALU_TYPE_CRA_NUT         21  //|  y  | Coded slice segment of a clean random access (CRA) picture
-#define BENZINA_H265_NALU_TYPE_RSV_IRAP_VCL22  22  //|  y  | Reserved intra random access point (IRAP) VCL NAL unit types
-#define BENZINA_H265_NALU_TYPE_RSV_IRAP_VCL23  23  //|  y  | Reserved intra random access point (IRAP) VCL NAL unit types
-#define BENZINA_H265_NALU_TYPE_RSV_VCL24       24  //|  y  | Reserved non-IRAP VCL NAL unit types
-#define BENZINA_H265_NALU_TYPE_RSV_VCL25       25  //|  y  | Reserved non-IRAP VCL NAL unit types
-#define BENZINA_H265_NALU_TYPE_RSV_VCL26       26  //|  y  | Reserved non-IRAP VCL NAL unit types
-#define BENZINA_H265_NALU_TYPE_RSV_VCL27       27  //|  y  | Reserved non-IRAP VCL NAL unit types
-#define BENZINA_H265_NALU_TYPE_RSV_VCL28       28  //|  y  | Reserved non-IRAP VCL NAL unit types
-#define BENZINA_H265_NALU_TYPE_RSV_VCL29       29  //|  y  | Reserved non-IRAP VCL NAL unit types
-#define BENZINA_H265_NALU_TYPE_RSV_VCL30       30  //|  y  | Reserved non-IRAP VCL NAL unit types
-#define BENZINA_H265_NALU_TYPE_RSV_VCL31       31  //|  y  | Reserved non-IRAP VCL NAL unit types
-#define BENZINA_H265_NALU_TYPE_VPS_NUT         32  //|  n  | Video    Parameter Set (VPS)
-#define BENZINA_H265_NALU_TYPE_SPS_NUT         33  //|  n  | Sequence Parameter Set (SPS)
-#define BENZINA_H265_NALU_TYPE_PPS_NUT         34  //|  n  | Picture  Parameter Set (PPS)
-#define BENZINA_H265_NALU_TYPE_AUD_NUT         35  //|  n  | Access Unit Delimiter  (AUD)
-#define BENZINA_H265_NALU_TYPE_EOS_NUT         36  //|  n  | End Of Sequence        (EOS)
-#define BENZINA_H265_NALU_TYPE_EOB_NUT         37  //|  n  | End Of Bitstream       (EOB)
-#define BENZINA_H265_NALU_TYPE_FD_NUT          38  //|  n  | Filler Data            (FD)
-#define BENZINA_H265_NALU_TYPE_PREFIX_SEI_NUT  39  //|  n  | Supplemental Enhancement Information (SEI)
-#define BENZINA_H265_NALU_TYPE_SUFFIX_SEI_NUT  40  //|  n  | Supplemental Enhancement Information (SEI)
-#define BENZINA_H265_NALU_TYPE_RSV_NVCL41      41  //|  n  | Reserved non-VCL NAL unit type
-#define BENZINA_H265_NALU_TYPE_RSV_NVCL42      42  //|  n  | Reserved non-VCL NAL unit type
-#define BENZINA_H265_NALU_TYPE_RSV_NVCL43      43  //|  n  | Reserved non-VCL NAL unit type
-#define BENZINA_H265_NALU_TYPE_RSV_NVCL44      44  //|  n  | Reserved non-VCL NAL unit type
-#define BENZINA_H265_NALU_TYPE_RSV_NVCL45      45  //|  n  | Reserved non-VCL NAL unit type
-#define BENZINA_H265_NALU_TYPE_RSV_NVCL46      46  //|  n  | Reserved non-VCL NAL unit type
-#define BENZINA_H265_NALU_TYPE_RSV_NVCL47      47  //|  n  | Reserved non-VCL NAL unit type
-#define BENZINA_H265_NALU_TYPE_UNSPEC48        48  //|  n  | Unspecified
-#define BENZINA_H265_NALU_TYPE_UNSPEC49        49  //|  n  | Unspecified
-#define BENZINA_H265_NALU_TYPE_UNSPEC50        50  //|  n  | Unspecified
-#define BENZINA_H265_NALU_TYPE_UNSPEC51        51  //|  n  | Unspecified
-#define BENZINA_H265_NALU_TYPE_UNSPEC52        52  //|  n  | Unspecified
-#define BENZINA_H265_NALU_TYPE_UNSPEC53        53  //|  n  | Unspecified
-#define BENZINA_H265_NALU_TYPE_UNSPEC54        54  //|  n  | Unspecified
-#define BENZINA_H265_NALU_TYPE_UNSPEC55        55  //|  n  | Unspecified
-#define BENZINA_H265_NALU_TYPE_UNSPEC56        56  //|  n  | Unspecified
-#define BENZINA_H265_NALU_TYPE_UNSPEC57        57  //|  n  | Unspecified
-#define BENZINA_H265_NALU_TYPE_UNSPEC58        58  //|  n  | Unspecified
-#define BENZINA_H265_NALU_TYPE_UNSPEC59        59  //|  n  | Unspecified
-#define BENZINA_H265_NALU_TYPE_UNSPEC60        60  //|  n  | Unspecified
-#define BENZINA_H265_NALU_TYPE_UNSPEC61        61  //|  n  | Unspecified
-#define BENZINA_H265_NALU_TYPE_UNSPEC62        62  //|  n  | Unspecified
-#define BENZINA_H265_NALU_TYPE_UNSPEC63        63  //|  n  | Unspecified
+#define BENZINA_H265_NALU_TYPE_TRAIL_N          0  //|  y  | Coded slice segment of a non-TSA, non-STSA trailing picture                                     | slice_segment_layer_rbsp()
+#define BENZINA_H265_NALU_TYPE_TRAIL_R          1  //|  y  | Coded slice segment of a non-TSA, non-STSA trailing picture                                     | slice_segment_layer_rbsp()
+#define BENZINA_H265_NALU_TYPE_TSA_N            2  //|  y  | Coded slice segment of a temporal sub-layer access (TSA) picture                                | slice_segment_layer_rbsp()
+#define BENZINA_H265_NALU_TYPE_TSA_R            3  //|  y  | Coded slice segment of a temporal sub-layer access (TSA) picture                                | slice_segment_layer_rbsp()
+#define BENZINA_H265_NALU_TYPE_STSA_N           4  //|  y  | Coded slice segment of a step-wise temporal sub-layer access (STSA) picture                     | slice_segment_layer_rbsp()
+#define BENZINA_H265_NALU_TYPE_STSA_R           5  //|  y  | Coded slice segment of a step-wise temporal sub-layer access (STSA) picture                     | slice_segment_layer_rbsp()
+#define BENZINA_H265_NALU_TYPE_RADL_N           6  //|  y  | Coded slice segment of a random access decodable leading (RADL) picture                         | slice_segment_layer_rbsp()
+#define BENZINA_H265_NALU_TYPE_RADL_R           7  //|  y  | Coded slice segment of a random access decodable leading (RADL) picture                         | slice_segment_layer_rbsp()
+#define BENZINA_H265_NALU_TYPE_RASL_N           8  //|  y  | Coded slice segment of a random access skipped   leading (RASL) picture                         | slice_segment_layer_rbsp()
+#define BENZINA_H265_NALU_TYPE_RASL_R           9  //|  y  | Coded slice segment of a random access skipped   leading (RASL) picture                         | slice_segment_layer_rbsp()
+#define BENZINA_H265_NALU_TYPE_RSV_VCL_N10     10  //|  y  | Reserved non-IRAP sub-layer non-reference (SLNR) VCL NAL unit types                             |
+#define BENZINA_H265_NALU_TYPE_RSV_VCL_R11     11  //|  y  | Reserved non-IRAP sub-layer reference            VCL NAL unit types                             |
+#define BENZINA_H265_NALU_TYPE_RSV_VCL_N12     12  //|  y  | Reserved non-IRAP sub-layer non-reference (SLNR) VCL NAL unit types                             |
+#define BENZINA_H265_NALU_TYPE_RSV_VCL_R13     13  //|  y  | Reserved non-IRAP sub-layer reference            VCL NAL unit types                             |
+#define BENZINA_H265_NALU_TYPE_RSV_VCL_N14     14  //|  y  | Reserved non-IRAP sub-layer non-reference (SLNR) VCL NAL unit types                             |
+#define BENZINA_H265_NALU_TYPE_RSV_VCL_R15     15  //|  y  | Reserved non-IRAP sub-layer reference            VCL NAL unit types                             |
+#define BENZINA_H265_NALU_TYPE_BLA_W_LP        16  //|  y  | Coded slice segment of a broken link access (BLA) picture with leading picture.                 | slice_segment_layer_rbsp()
+#define BENZINA_H265_NALU_TYPE_BLA_W_RADL      17  //|  y  | Coded slice segment of a broken link access (BLA) picture with RADL picture.                    | slice_segment_layer_rbsp()
+#define BENZINA_H265_NALU_TYPE_BLA_N_LP        18  //|  y  | Coded slice segment of a broken link access (BLA) picture with no leading picture.              | slice_segment_layer_rbsp()
+#define BENZINA_H265_NALU_TYPE_IDR_W_RADL      19  //|  y  | Coded slice segment of an instantaneous decoder refresh (IDR) picture with RADL picture.        | slice_segment_layer_rbsp()
+#define BENZINA_H265_NALU_TYPE_IDR_N_LP        20  //|  y  | Coded slice segment of an instantaneous decoder refresh (IDR) picture with no leading picture.  | slice_segment_layer_rbsp()
+#define BENZINA_H265_NALU_TYPE_CRA_NUT         21  //|  y  | Coded slice segment of a clean random access (CRA) picture                                      | slice_segment_layer_rbsp()
+#define BENZINA_H265_NALU_TYPE_RSV_IRAP_VCL22  22  //|  y  | Reserved intra random access point (IRAP) VCL NAL unit types                                    |
+#define BENZINA_H265_NALU_TYPE_RSV_IRAP_VCL23  23  //|  y  | Reserved intra random access point (IRAP) VCL NAL unit types                                    |
+#define BENZINA_H265_NALU_TYPE_RSV_VCL24       24  //|  y  | Reserved non-IRAP VCL NAL unit types                                                            |
+#define BENZINA_H265_NALU_TYPE_RSV_VCL25       25  //|  y  | Reserved non-IRAP VCL NAL unit types                                                            |
+#define BENZINA_H265_NALU_TYPE_RSV_VCL26       26  //|  y  | Reserved non-IRAP VCL NAL unit types                                                            |
+#define BENZINA_H265_NALU_TYPE_RSV_VCL27       27  //|  y  | Reserved non-IRAP VCL NAL unit types                                                            |
+#define BENZINA_H265_NALU_TYPE_RSV_VCL28       28  //|  y  | Reserved non-IRAP VCL NAL unit types                                                            |
+#define BENZINA_H265_NALU_TYPE_RSV_VCL29       29  //|  y  | Reserved non-IRAP VCL NAL unit types                                                            |
+#define BENZINA_H265_NALU_TYPE_RSV_VCL30       30  //|  y  | Reserved non-IRAP VCL NAL unit types                                                            |
+#define BENZINA_H265_NALU_TYPE_RSV_VCL31       31  //|  y  | Reserved non-IRAP VCL NAL unit types                                                            |
+#define BENZINA_H265_NALU_TYPE_VPS_NUT         32  //|  n  | Video    Parameter Set (VPS)                                                                    | video_parameter_set_rbsp()
+#define BENZINA_H265_NALU_TYPE_SPS_NUT         33  //|  n  | Sequence Parameter Set (SPS)                                                                    | seq_parameter_set_rbsp()
+#define BENZINA_H265_NALU_TYPE_PPS_NUT         34  //|  n  | Picture  Parameter Set (PPS)                                                                    | pic_parameter_set_rbsp()
+#define BENZINA_H265_NALU_TYPE_AUD_NUT         35  //|  n  | Access Unit Delimiter  (AUD)                                                                    | access_unit_delimiter_rbsp()
+#define BENZINA_H265_NALU_TYPE_EOS_NUT         36  //|  n  | End Of Sequence        (EOS)                                                                    | end_of_seq_rbsp()
+#define BENZINA_H265_NALU_TYPE_EOB_NUT         37  //|  n  | End Of Bitstream       (EOB)                                                                    | end_of_bitstream_rbsp()
+#define BENZINA_H265_NALU_TYPE_FD_NUT          38  //|  n  | Filler Data            (FD)                                                                     | filler_data_rbsp()
+#define BENZINA_H265_NALU_TYPE_PREFIX_SEI_NUT  39  //|  n  | Supplemental Enhancement Information (SEI)                                                      | sei_rbsp()
+#define BENZINA_H265_NALU_TYPE_SUFFIX_SEI_NUT  40  //|  n  | Supplemental Enhancement Information (SEI)                                                      | sei_rbsp()
+#define BENZINA_H265_NALU_TYPE_RSV_NVCL41      41  //|  n  | Reserved non-VCL NAL unit type                                                                  |
+#define BENZINA_H265_NALU_TYPE_RSV_NVCL42      42  //|  n  | Reserved non-VCL NAL unit type                                                                  |
+#define BENZINA_H265_NALU_TYPE_RSV_NVCL43      43  //|  n  | Reserved non-VCL NAL unit type                                                                  |
+#define BENZINA_H265_NALU_TYPE_RSV_NVCL44      44  //|  n  | Reserved non-VCL NAL unit type                                                                  |
+#define BENZINA_H265_NALU_TYPE_RSV_NVCL45      45  //|  n  | Reserved non-VCL NAL unit type                                                                  |
+#define BENZINA_H265_NALU_TYPE_RSV_NVCL46      46  //|  n  | Reserved non-VCL NAL unit type                                                                  |
+#define BENZINA_H265_NALU_TYPE_RSV_NVCL47      47  //|  n  | Reserved non-VCL NAL unit type                                                                  |
+#define BENZINA_H265_NALU_TYPE_UNSPEC48        48  //|  n  | Unspecified                                                                                     |
+#define BENZINA_H265_NALU_TYPE_UNSPEC49        49  //|  n  | Unspecified                                                                                     |
+#define BENZINA_H265_NALU_TYPE_UNSPEC50        50  //|  n  | Unspecified                                                                                     |
+#define BENZINA_H265_NALU_TYPE_UNSPEC51        51  //|  n  | Unspecified                                                                                     |
+#define BENZINA_H265_NALU_TYPE_UNSPEC52        52  //|  n  | Unspecified                                                                                     |
+#define BENZINA_H265_NALU_TYPE_UNSPEC53        53  //|  n  | Unspecified                                                                                     |
+#define BENZINA_H265_NALU_TYPE_UNSPEC54        54  //|  n  | Unspecified                                                                                     |
+#define BENZINA_H265_NALU_TYPE_UNSPEC55        55  //|  n  | Unspecified                                                                                     |
+#define BENZINA_H265_NALU_TYPE_UNSPEC56        56  //|  n  | Unspecified                                                                                     |
+#define BENZINA_H265_NALU_TYPE_UNSPEC57        57  //|  n  | Unspecified                                                                                     |
+#define BENZINA_H265_NALU_TYPE_UNSPEC58        58  //|  n  | Unspecified                                                                                     |
+#define BENZINA_H265_NALU_TYPE_UNSPEC59        59  //|  n  | Unspecified                                                                                     |
+#define BENZINA_H265_NALU_TYPE_UNSPEC60        60  //|  n  | Unspecified                                                                                     |
+#define BENZINA_H265_NALU_TYPE_UNSPEC61        61  //|  n  | Unspecified                                                                                     |
+#define BENZINA_H265_NALU_TYPE_UNSPEC62        62  //|  n  | Unspecified                                                                                     |
+#define BENZINA_H265_NALU_TYPE_UNSPEC63        63  //|  n  | Unspecified                                                                                     |
 
 
 /* End Include Guard */
