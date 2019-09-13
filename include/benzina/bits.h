@@ -218,7 +218,7 @@
  * is signalled in bits 6 downto 1 inclusive of the first byte of the 2-byte
  * NAL unit header that begins the NALU.
  * 
- *     nal_unit_header( ) {
+ *     nal_unit_header(){
  *         forbidden_zero_bit                f(1)    // Always == 0
  *         nal_unit_type                     u(6)
  *         nuh_layer_id                      u(6)
