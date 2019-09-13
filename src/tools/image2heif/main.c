@@ -1,5 +1,6 @@
 /* Includes */
 #include <errno.h>
+#include <limits.h>
 #include <math.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -8,6 +9,7 @@
 #include <string.h>
 #include <sys/fcntl.h>
 #include <sys/stat.h>
+#include <sys/mman.h>
 #include <unistd.h>
 #include <libavcodec/avcodec.h>
 #include <libavfilter/avfilter.h>
@@ -59,39 +61,104 @@ struct PACKETLIST{
 
 /**
  * @brief Item to be added.
+ * 
+ * The valid item types can be found at mp4ra.org, but because the website is
+ * broken, look at the source directly:
+ *     https://github.com/mp4ra/mp4ra.github.io/blob/master/CSV/item-types.csv
+ * 
+ * As of 2019-09-09 its contents are reproduced below:
+ * 
+ *     code,description,specification
+ *     auvd,Auxiliary Video descriptor,ISO
+ *     avc1,AVC image item,HEIF
+ *     Exif,EXIF item,HEIF
+ *     grid,Image item grid derivation,HEIF
+ *     hvc1,HEVC image item,HEIF
+ *     hvt1,HEVC tile image item,HEIF
+ *     iden,Image item identity derivation,HEIF
+ *     iovl,Image item overlay derivation,HEIF
+ *     j2k1,Contiguous Codestream box as specified in Rec. ITU-T T.800 | ISO/IEC 15444-1,J2KHEIF
+ *     jpeg,JPEG image item,HEIF
+ *     jxs1,Images coded to the JPEG-XS coding format,JPXS
+ *     lhv1,Layered HEVC image item,HEIF
+ *     mint,Data integrity item,HEIF
+ *     mime,Item identified by a MIME type,ISO
+ * 
+ * There is at least one row missing, approximately as follows:
+ * 
+ *     uri%20,Item identified by a URI type,ISO
  */
 
 struct ITEM{
     uint32_t    id;
+    char        type[4];
     const char* path;
     const char* name;
-    char        type[4];
+    const char* mime_type;
+    struct{uint32_t w,h;} tile;
     unsigned    primary        : 1;
     unsigned    hidden         : 1;
     unsigned    want_thumbnail : 1;
     
     struct{
+        AVCodec*        codec;
         AVCodecContext* codec_ctx;
         AVFrame*        frame;
+        AVFrame*        padded_frame;
+        ITEM*           thumb_item;
+        ITEM*           grid_items;
         struct{
             struct{uint32_t w, h;} clap, ispe;
             AVFrame* frame;
             uint32_t num_packets;
         } grid, thumb;
+        struct{uint32_t w, h;} tile, size;
+        unsigned        is_source_jpeg : 1;
+        unsigned        single_tile    : 1;
+        unsigned        letter_boxing  : 1;
     } pict;
     struct{
-        const char* type;
-        char*       data;
-        size_t      size;
+        
+    } grid;
+    struct{
+        
+    } iden;
+    struct{
+        
     } mime;
+    union{
+        
+    } data;
     
     PACKETLIST* packetlist;
     IREF*       refs;
+    struct{
+        IREF*       dimg;
+        IREF*       cdsc;
+    } ref;
+    ITEM*       children;
     ITEM*       next;
 };
 
 /**
  * @brief Item reference.
+ * 
+ * The valid item types can be found at mp4ra.org, here:
+ *     https://github.com/mp4ra/mp4ra.github.io/blob/master/CSV/item-references.csv
+ * 
+ * As of 2019-09-09 its contents are reproduced below:
+ * 
+ *     code,description,type,specification
+ *     auxl,Auxiliary image item reference,item ref.,HEIF
+ *     base,Pre-derived image item base reference, item ref.,HEIF
+ *     dimg,Derived image item reference,item ref.,HEIF
+ *     dpnd,Item coding dependency reference,item ref.,HEIF
+ *     exbl,Scalable image item reference, item ref.,HEIF
+ *     fdel,File delivery reference,item ref.,ISO
+ *     grid,Image item grid reference,item ref.,HEIF
+ *     iloc,Item data location,item ref.,ISO
+ *     prem,Pre-Multiplied item,item ref.,MIAF
+ *     thmb,Thumbnail image item reference,item ref.,HEIF
  */
 
 struct IREF{
@@ -111,57 +178,61 @@ struct UNIVERSE{
     /* HEIF */
     ITEM*            item;
     ITEM*            items;
+    size_t           num_items;
     
     /* FFmpeg Encode/Decode */
     struct{
-        AVCodec*           codec;
         struct{uint32_t w, h;} tile;
-        unsigned           crf;
-        unsigned           chroma_format;
-        const char*        x264_params;
-        const char*        x265_params;
-        const char*        url;
+        unsigned     crf;
+        unsigned     chroma_format;
+        const char*  x264_params;
+        const char*  x265_params;
+        const char*  url;
+        int          fd;
     } out;
 };
 
 
 
 /* Static Function Prototypes */
-static int   i2h_frame_fixup                  (AVFrame* f);
-static int   i2h_frame_apply_graph            (AVFrame* out, const char* graphstr, AVFrame* in);
-static int   i2h_frame_canonicalize_pixfmt    (AVFrame* out, AVFrame* in);
-static int   i2h_frame_scale_and_pad          (AVFrame*           dst,
-                                               AVFrame*           src,
-                                               enum AVPixelFormat dst_pix_fmt,
-                                               int                dst_width,
-                                               int                dst_height,
-                                               int                tile_width,
-                                               int                tile_height);
+static int   i2h_frame_fixup                      (AVFrame* f);
+static int   i2h_frame_apply_graph                (AVFrame* out, const char* graphstr, AVFrame* in);
+static int   i2h_frame_canonicalize_pixfmt        (AVFrame* out, AVFrame* in);
+static int   i2h_frame_scale_and_pad              (AVFrame*           dst,
+                                                   AVFrame*           src,
+                                                   enum AVPixelFormat dst_pix_fmt,
+                                                   int                dst_width,
+                                                   int                dst_height,
+                                                   int                tile_width,
+                                                   int                tile_height);
 
-static int   i2h_packetlist_append            (PACKETLIST** list, AVPacket* packet);
-static void  i2h_packetlist_free              (PACKETLIST** list);
+static int   i2h_packetlist_append                (PACKETLIST** list, AVPacket* packet);
+static void  i2h_packetlist_free                  (PACKETLIST** list);
 
-static ITEM* i2h_item_new                     (void);
-static int   i2h_item_init                    (ITEM* item);
-static int   i2h_item_is_pict                 (ITEM* item);
-static int   i2h_item_pict_read_frame         (ITEM* item);
-static int   i2h_item_insert                  (ITEM** items, ITEM* item);
-static int   i2h_item_pict_encoder_configure  (ITEM* item, AVFrame* frame, UNIVERSE* u);
-static void  i2h_item_pict_encoder_deconfigure(ITEM* item);
-static int   i2h_item_pict_push_grid_frames   (ITEM* item);
-static int   i2h_item_pict_push_thumb_frames  (ITEM* item);
-static int   i2h_item_pict_push_frame         (ITEM* item, AVFrame* frame);
-static int   i2h_item_append_packet           (ITEM* item, AVPacket* packet);
+static ITEM* i2h_item_new                         (void);
+static int   i2h_item_init                        (ITEM* item);
+static int   i2h_item_insert                      (ITEM** items, ITEM* item);
+static int   i2h_item_type_is                     (ITEM* item, const char* type);
+static int   i2h_item_type_is_picture             (ITEM* item);
+static int   i2h_item_picture_read_frame          (ITEM* item);
+static int   i2h_item_picture_encoder_plan        (ITEM* item);
+static int   i2h_item_picture_encoder_configure   (ITEM* item, AVFrame* frame, UNIVERSE* u);
+static void  i2h_item_picture_encoder_deconfigure (ITEM* item);
+static int   i2h_item_picture_push_grid_frames    (ITEM* item);
+static int   i2h_item_picture_push_thumb_frames   (ITEM* item);
+static int   i2h_item_picture_push_frame          (ITEM* item, AVFrame* frame);
+static int   i2h_item_append_packet               (ITEM* item, AVPacket* packet);
 
-static int   i2h_iref_append                  (IREF** refs, IREF* iref);
+static int   i2h_iref_append                      (IREF** refs, IREF* iref);
 
-static int   i2h_universe_init                (UNIVERSE* u);
-static int   i2h_universe_item_find_free_id   (UNIVERSE* u, uint32_t* id_out);
-static ITEM* i2h_universe_item_find_by_id     (UNIVERSE* u, uint32_t  id);
-static int   i2h_universe_item_handle         (UNIVERSE* u, ITEM* item);
-static int   i2h_universe_item_handle_pict    (UNIVERSE* u, ITEM* item);
-static int   i2h_universe_item_handle_mime    (UNIVERSE* u, ITEM* item);
-static int   i2h_universe_do_output           (UNIVERSE* u);
+static int   i2h_universe_init                    (UNIVERSE* u);
+static int   i2h_universe_item_find_free_id       (UNIVERSE* u, uint32_t* id_out);
+static ITEM* i2h_universe_item_find_by_id         (UNIVERSE* u, uint32_t  id);
+static int   i2h_universe_item_handle             (UNIVERSE* u, ITEM* item);
+static int   i2h_universe_item_handle_picture     (UNIVERSE* u, ITEM* item);
+static int   i2h_universe_item_handle_binary      (UNIVERSE* u, ITEM* item);
+static int   i2h_universe_flatten                 (UNIVERSE* u);
+static int   i2h_universe_do_output               (UNIVERSE* u);
 
 
 
@@ -214,6 +285,72 @@ static int          i2h_str2chromafmt(const char* s){
     }else{
         return -100;
     }
+}
+
+/**
+ * @brief Write fully, possibly in multiple attempts, or abort.
+ * 
+ * @param [in]  fd   The file descriptor.
+ * @param [in]  buf  The buffer to write out.
+ * @param [in]  len  The buffer's length.
+ * @param [in]  off  The offset in the file descriptor at which to write.
+ */
+
+static ssize_t writefully (int fd, const void* buf, ssize_t len){
+    ssize_t tot=0, b=1;
+    
+    while(b != 0 && tot < len){
+        b = write(fd, buf, len);
+        if(b<0)
+            i2hmessageexit(EIO, stderr, "Error writing to FD=%d!\n", fd);
+        if(b==0)
+            i2hmessageexit(EIO, stderr, "Failed to write to FD=%d!\n", fd);
+        tot += b;
+        buf  = (const void*)((const char*)buf + b);
+        len -= b;
+    }
+    
+    return tot;
+}
+static ssize_t pwritefully(int fd, const void* buf, ssize_t len, off_t off){
+    ssize_t tot=0, b=1;
+    
+    while(b != 0 && tot < len){
+        b = pwrite(fd, buf, len, off);
+        if(b<0)
+            i2hmessageexit(EIO, stderr, "Error writing to FD=%d!\n", fd);
+        if(b==0)
+            i2hmessageexit(EIO, stderr, "Failed to write to FD=%d!\n", fd);
+        tot += b;
+        buf  = (const void*)((const char*)buf + b);
+        len -= b;
+        off += b;
+    }
+    
+    return tot;
+}
+
+/**
+ * @brief Get length and write length.
+ * @param [in]  u    The universe we're operating over.
+ * @param [out] off  A pointer to the offset.
+ * @return 0
+ */
+
+static int i2h_universe_fdtell(UNIVERSE* u, size_t* off){
+    *off = lseek(u->out.fd, 0, SEEK_CUR);
+    return 0;
+}
+static int i2h_universe_writelen(UNIVERSE* u, size_t off, size_t end){
+    uint32_t len = end-off;
+    
+    if(end-off > UINT32_MAX)
+        i2hmessageexit(EINVAL, stderr, "ISO box size too large (%zu > %zu)!\n",
+                       end-off, (size_t)UINT32_MAX);
+    
+    len = benz_htobe32(len);
+    
+    return pwritefully(u->out.fd, (char*)&len, sizeof(len), off) != 4;
 }
 
 /**
@@ -578,7 +715,7 @@ static inline int i2h_is_imagelike_stream(AVFormatContext* avfctx, int stream){
  * @return 0.
  */
 
-static int i2h_frame_fixup(AVFrame* f){
+static int i2h_frame_fixup                        (AVFrame* f){
     switch(f->format){
         #define FIXUPFORMAT(p)                         \
             case AV_PIX_FMT_YUVJ ## p:                 \
@@ -632,7 +769,9 @@ static int i2h_frame_fixup(AVFrame* f){
  * @return 0 if successful; !0 otherwise.
  */
 
-static int i2h_frame_apply_graph(AVFrame* out, const char* graphstr, AVFrame* in){
+static int i2h_frame_apply_graph                  (AVFrame*    out,
+                                                   const char* graphstr,
+                                                   AVFrame*    in){
     AVFilterGraph*     graph         = NULL;
     AVFilterInOut*     inputs        = NULL;
     AVFilterInOut*     outputs       = NULL;
@@ -780,7 +919,7 @@ static int i2h_frame_apply_graph(AVFrame* out, const char* graphstr, AVFrame* in
  * @return 0 if successful; !0 otherwise.
  */
 
-static int i2h_frame_canonicalize_pixfmt(AVFrame* out, AVFrame* in){
+static int i2h_frame_canonicalize_pixfmt          (AVFrame* out, AVFrame* in){
     const char* colorrangestr;
     int mpegrange;
     enum AVPixelFormat canonical = i2h_pick_pix_fmt(in->format);
@@ -818,13 +957,13 @@ static int i2h_frame_canonicalize_pixfmt(AVFrame* out, AVFrame* in){
  * @return 0 if successful; !0 otherwise.
  */
 
-static int i2h_frame_scale_and_pad(AVFrame*           dst,
-                                   AVFrame*           src,
-                                   enum AVPixelFormat dst_pix_fmt,
-                                   int                dst_width,
-                                   int                dst_height,
-                                   int                tile_width,
-                                   int                tile_height){
+static int i2h_frame_scale_and_pad                (AVFrame*           dst,
+                                                   AVFrame*           src,
+                                                   enum AVPixelFormat dst_pix_fmt,
+                                                   int                dst_width,
+                                                   int                dst_height,
+                                                   int                tile_width,
+                                                   int                tile_height){
     char        graphstr[1024] = {0}, *p;
     const char* src_range, *src_space, *dst_space, *dst_fmt_name;
     int         i, l, src_is_rgb, src_is_yuv444, dst_scaled;
@@ -891,7 +1030,7 @@ static int i2h_frame_scale_and_pad(AVFrame*           dst,
  * @return 0 if successful, !0 otherwise.
  */
 
-static int   i2h_packetlist_append            (PACKETLIST** list, AVPacket* packet){
+static int   i2h_packetlist_append                (PACKETLIST** list, AVPacket* packet){
     PACKETLIST* node;
     
     if(!list || !packet){return 1;}
@@ -913,7 +1052,7 @@ static int   i2h_packetlist_append            (PACKETLIST** list, AVPacket* pack
  * @param [in]  A list of packets to be freed. 
  */
 
-static void  i2h_packetlist_free              (PACKETLIST** list){
+static void  i2h_packetlist_free                  (PACKETLIST** list){
     PACKETLIST* node;
     PACKETLIST* next;
     
@@ -939,7 +1078,7 @@ static void  i2h_packetlist_free              (PACKETLIST** list){
  * @return The new item.
  */
 
-static ITEM* i2h_item_new                     (void){
+static ITEM* i2h_item_new                         (void){
     ITEM* item = malloc(sizeof(*item));
     i2h_item_init(item);
     return item;
@@ -952,12 +1091,41 @@ static ITEM* i2h_item_new                     (void){
  * @return 0.
  */
 
-static int   i2h_item_init                    (ITEM* item){
+static int   i2h_item_init                        (ITEM* item){
     memset(item, 0, sizeof(*item));
     item->name           = "";
-    item->mime.type      = "application/octet-stream";
-    memcpy(item->type, "pict", 4);
+    item->mime_type      = "application/octet-stream";
+    memcpy(item->type, "hvc1", 4);
     return 0;
+}
+
+/**
+ * @brief Insert the item in sorted order in the list.
+ * 
+ * @param [in,out]  items  The head of the linked list of items.
+ * @param [in,out]  item   The item to be inserted.
+ * @return 0.
+ */
+
+static int   i2h_item_insert                      (ITEM** items, ITEM* item){
+    while(*items && (*items)->id < item->id){
+        items = &(*items)->next;
+    }
+    item->next = *items;
+    *items     = item;
+    return 0;
+}
+
+/**
+ * @brief Check whether item is of given type.
+ * 
+ * @param [in]  item        The item whose type we are checking.
+ * @param [in]  type        The type we are comparing against.
+ * @return 1 if item is of given type; 0 otherwise.
+ */
+
+static int   i2h_item_type_is                     (ITEM* item, const char* type){
+    return memcmp(item->type, type, sizeof(item->type)) == 0;
 }
 
 /**
@@ -967,8 +1135,10 @@ static int   i2h_item_init                    (ITEM* item){
  * @return 1 if pict-type item; 0 otherwise.
  */
 
-static int   i2h_item_is_pict                 (ITEM* item){
-    return memcmp(item->type, "pict", sizeof(item->type)) == 0;
+static int   i2h_item_type_is_picture             (ITEM* item){
+    return i2h_item_type_is(item, "jpeg") ||
+           i2h_item_type_is(item, "avc1") ||
+           i2h_item_type_is(item, "hvc1");
 }
 
 /**
@@ -978,7 +1148,7 @@ static int   i2h_item_is_pict                 (ITEM* item){
  * @return 0 if successful; !0 otherwise.
  */
 
-static int   i2h_item_pict_read_frame         (ITEM* item){
+static int   i2h_item_picture_read_frame          (ITEM* item){
     int                ret;
     AVFormatContext*   format_ctx    = NULL;
     int                format_stream = 0;
@@ -1001,6 +1171,7 @@ static int   i2h_item_pict_read_frame         (ITEM* item){
     if(!i2h_is_imagelike_stream(format_ctx, format_stream))
         i2hmessageexit(EINVAL, stderr, "No image data in media \"%s\"!\n", item->path);
     
+    item->pict.is_source_jpeg = format_ctx->iformat == av_find_input_format("jpeg");
     codec_par = format_ctx->streams[format_stream]->codecpar;
     codec     = avcodec_find_decoder(codec_par->codec_id);
     codec_ctx = avcodec_alloc_context3(codec);
@@ -1049,23 +1220,60 @@ static int   i2h_item_pict_read_frame         (ITEM* item){
     
     
     /* Exit */
+    item->pict.size.w = item->pict.frame->width;
+    item->pict.size.h = item->pict.frame->height;
     return ret;
 }
 
 /**
- * @brief Insert the item in sorted order in the list.
+ * @brief Plan the encoding job.
  * 
- * @param [in,out]  items  The head of the linked list of items.
- * @param [in,out]  item   The item to be inserted.
- * @return 0.
+ * @param [in,out]  item        The item we're planning to encode for.
+ * @return 0 if successful; !0 otherwise.
  */
 
-static int   i2h_item_insert                  (ITEM** items, ITEM* item){
-    while(*items && (*items)->id < item->id){
-        items = &(*items)->next;
+static int   i2h_item_picture_encoder_plan        (ITEM* item){
+    /* Compute scaling parameters */
+    item->pict.single_tile   = item->pict.frame->width  <= (int)item->tile.w &&
+                               item->pict.frame->height <= (int)item->tile.h;
+    item->pict.letter_boxing = ((uint64_t)item->pict.frame->width  * item->tile.h) >=
+                               ((uint64_t)item->pict.frame->height * item->tile.w);
+    
+    if(item->pict.single_tile){
+        item->pict.thumb.clap.w = item->pict.frame->width;
+        item->pict.thumb.clap.h = item->pict.frame->height;
+    }else if(item->pict.letter_boxing){
+        item->pict.thumb.clap.w = item->tile.w;
+        item->pict.thumb.clap.h = round(item->pict.thumb.clap.w * 1.0 *
+                                        item->pict.frame->height /
+                                        item->pict.frame->width);
+    }else{
+        item->pict.thumb.clap.h = item->tile.h;
+        item->pict.thumb.clap.w = round(item->pict.thumb.clap.h * 1.0 *
+                                        item->pict.frame->width /
+                                        item->pict.frame->height);
     }
-    item->next = *items;
-    *items     = item;
+    
+    /* If we want a thumbnail, create the item for it. */
+    if(item->want_thumbnail){
+        item->pict.thumb_item  = i2h_item_new();
+        memcpy(item->pict.thumb_item, item, sizeof(*item));
+        item->pict.thumb_item->id              = 0;
+        item->pict.thumb_item->name            = "";
+        item->pict.thumb_item->mime_type       = "";
+        item->pict.thumb_item->primary         = 0;
+        item->pict.thumb_item->hidden          = 0;
+        item->pict.thumb_item->want_thumbnail  = 0;
+        item->pict.thumb_item->packetlist      = NULL;
+        item->pict.thumb_item->refs            = NULL;
+        item->pict.thumb_item->children        = NULL;
+        item->pict.thumb_item->next            = NULL;
+        item->pict.thumb_item->pict.codec_ctx  = NULL;
+        item->pict.thumb_item->pict.frame      = NULL;
+        item->pict.thumb_item->pict.thumb_item = NULL;
+        item->pict.thumb_item->pict.grid_items = NULL;
+    }
+    
     return 0;
 }
 
@@ -1082,9 +1290,9 @@ static int   i2h_item_insert                  (ITEM** items, ITEM* item){
  * @return 0 if successful; !0 otherwise.
  */
 
-static int  i2h_item_pict_encoder_configure   (ITEM*     item,
-                                               AVFrame*  frame,
-                                               UNIVERSE* u){
+static int  i2h_item_picture_encoder_configure    (ITEM*     item,
+                                                   AVFrame*  frame,
+                                                   UNIVERSE* u){
     int           ret;
     char          x26x_params_str[1024];
     const char*   x26x_params;
@@ -1098,11 +1306,24 @@ static int  i2h_item_pict_encoder_configure   (ITEM*     item,
     
     
     /* Do not configure encoder for non-pict items. */
-    if(!i2h_item_is_pict(item)){return 0;}
+    if(!i2h_item_type_is_picture(item)){return 0;}
     
     
     /* Allocate context. */
-    item->pict.codec_ctx = avcodec_alloc_context3(u->out.codec);
+    if      (i2h_item_type_is(item, "avc1")){
+        item->pict.codec = avcodec_find_encoder_by_name("libx264");
+        if(!item->pict.codec)
+            i2hmessageexit(EINVAL, stderr, "Cannot transcode! Please rebuild Benzina with an "
+                                           "FFmpeg configured with --enable-libx264.\n");
+    }else if(i2h_item_type_is(item, "hvc1")){
+        item->pict.codec = avcodec_find_encoder_by_name("libx265");
+        if(!item->pict.codec)
+            i2hmessageexit(EINVAL, stderr, "Cannot transcode! Please rebuild Benzina with an "
+                                           "FFmpeg configured with --enable-libx265.\n");
+    }else{
+        i2hmessageexit(EINVAL, stderr, "Unknown item type %4.4s!\n", item->type);
+    }
+    item->pict.codec_ctx = avcodec_alloc_context3(item->pict.codec);
     if(!item->pict.codec_ctx)
         i2hmessageexit(ENOMEM, stderr, "Could not allocate encoder!\n");
     
@@ -1114,14 +1335,15 @@ static int  i2h_item_pict_encoder_configure   (ITEM*     item,
     transfer_str    = transfer_str    ? transfer_str    : i2h_x264_color_trc      (AVCOL_TRC_IEC61966_2_1);
     colormatrix_str = i2h_x264_color_space    (frame->colorspace);
     colormatrix_str = colormatrix_str ? colormatrix_str : i2h_x264_color_space    (AVCOL_SPC_BT470BG);
-    if(i2h_is_codec_x264(u->out.codec)){
+    if(i2h_is_codec_x264(item->pict.codec)){
         x26x_params      = "x264-params";
         x26x_params_args = u->out.x264_params ? u->out.x264_params : "";
         x26x_profile     = "high444";
         colorrange_str   = frame->color_range==AVCOL_RANGE_MPEG ? "on" : "off";
         snprintf(x26x_params_str, sizeof(x26x_params_str),
                  "ref=1:chromaloc=%d:log=-1:log-level=none:stitchable=1:slices-max=32:"
-                 "fullrange=%s:colorprim=%s:transfer=%s:colormatrix=%s%s%s",
+                 "fullrange=%s:colorprim=%s:transfer=%s:colormatrix=%s%s%s:"
+                 "annexb=0",
                  i2h_av2benzinachromaloc(frame->chroma_location),
                  colorrange_str, colorprim_str, transfer_str, colormatrix_str,
                  *x26x_params_args ? ":"              : "",
@@ -1132,8 +1354,9 @@ static int  i2h_item_pict_encoder_configure   (ITEM*     item,
         x26x_profile     = "main444-stillpicture";
         colorrange_str   = frame->color_range==AVCOL_RANGE_MPEG ? "limited" : "full";
         snprintf(x26x_params_str, sizeof(x26x_params_str),
-                 "ref=1:chromaloc=%d:log=-1:log-level=none:"
-                 "range=%s:colorprim=%s:transfer=%s:colormatrix=%s%s%s",
+                 "ref=1:chromaloc=%d:log=-1:log-level=none:info=0:"
+                 "range=%s:colorprim=%s:transfer=%s:colormatrix=%s%s%s:"
+                 "annexb=0:temporal-layers=0",
                  i2h_av2benzinachromaloc(frame->chroma_location),
                  colorrange_str, colorprim_str, transfer_str, colormatrix_str,
                  *x26x_params_args ? ":"              : "",
@@ -1151,7 +1374,8 @@ static int  i2h_item_pict_encoder_configure   (ITEM*     item,
     item->pict.codec_ctx->color_trc              = frame->color_trc;
     item->pict.codec_ctx->colorspace             = frame->colorspace;
     item->pict.codec_ctx->sample_aspect_ratio    = frame->sample_aspect_ratio;
-    item->pict.codec_ctx->flags                 |= AV_CODEC_FLAG_LOOP_FILTER;
+    item->pict.codec_ctx->flags                 |= AV_CODEC_FLAG_LOOP_FILTER |
+                                                   AV_CODEC_FLAG_GLOBAL_HEADER;
     item->pict.codec_ctx->thread_count           = 1;
     item->pict.codec_ctx->thread_type            = FF_THREAD_FRAME;
     item->pict.codec_ctx->slices                 = 1;
@@ -1164,7 +1388,7 @@ static int  i2h_item_pict_encoder_configure   (ITEM*     item,
     
     
     /* Open context. */
-    ret = avcodec_open2(item->pict.codec_ctx, u->out.codec, &codec_ctx_opt);
+    ret = avcodec_open2(item->pict.codec_ctx, item->pict.codec, &codec_ctx_opt);
     if(av_dict_count(codec_ctx_opt)){
         AVDictionaryEntry* entry = NULL;
         i2hmessage(stderr, "Warning: codec ignored %d options!\n",
@@ -1179,9 +1403,9 @@ static int  i2h_item_pict_encoder_configure   (ITEM*     item,
     
     return 0;
 }
-static void i2h_item_pict_encoder_deconfigure (ITEM* item){
+static void i2h_item_picture_encoder_deconfigure  (ITEM* item){
     /* Do not deconfigure encoder for non-pict items. */
-    if(!i2h_item_is_pict(item)){return;}
+    if(!i2h_item_type_is_picture(item)){return;}
     
     avcodec_free_context(&item->pict.codec_ctx);
 }
@@ -1195,14 +1419,14 @@ static void i2h_item_pict_encoder_deconfigure (ITEM* item){
  * @return 0 if successful; !0 otherwise.
  */
 
-static int   i2h_item_pict_push_grid_frames   (ITEM* item){
+static int   i2h_item_picture_push_grid_frames    (ITEM* item){
     int j, tile_w=item->pict.codec_ctx->width;
     int i, tile_h=item->pict.codec_ctx->height;
     int grid_rows=item->pict.grid.ispe.h/tile_h;
     int grid_cols=item->pict.grid.ispe.w/tile_w;
     int ret;
     
-    if(!i2h_item_is_pict(item)){return 0;}
+    if(!i2h_item_type_is_picture(item)){return 0;}
     
     for(i=0;i<grid_rows;i++){
         for(j=0;j<grid_cols;j++){
@@ -1216,7 +1440,7 @@ static int   i2h_item_pict_push_grid_frames   (ITEM* item){
             if(ret < 0)
                 i2hmessageexit(ret, stderr, "Error applying cropping (%d)!\n", ret);
             
-            ret = i2h_item_pict_push_frame(item, frame);
+            ret = i2h_item_picture_push_frame(item, frame);
             if(ret != 0)
                 i2hmessageexit(ret, stderr, "Error pushing grid tile into encoder (%d)!\n", ret);
             
@@ -1227,8 +1451,8 @@ static int   i2h_item_pict_push_grid_frames   (ITEM* item){
     
     return 0;
 }
-static int   i2h_item_pict_push_thumb_frames  (ITEM* item){
-    int ret = i2h_item_pict_push_frame(item, item->pict.thumb.frame);
+static int   i2h_item_picture_push_thumb_frames   (ITEM* item){
+    int ret = i2h_item_picture_push_frame(item, item->pict.thumb.frame);
     if(ret != 0)
         i2hmessageexit(ret, stderr, "Error pushing thumbnail tile into encoder (%d)!\n", ret);
     
@@ -1244,7 +1468,7 @@ static int   i2h_item_pict_push_thumb_frames  (ITEM* item){
  * @return 0 if successful, !0 otherwise.
  */
 
-static int   i2h_item_pict_push_frame         (ITEM* item, AVFrame* frame){
+static int   i2h_item_picture_push_frame          (ITEM* item, AVFrame* frame){
     int retpush, retpull;
     
     if(frame){
@@ -1287,7 +1511,7 @@ static int   i2h_item_pict_push_frame         (ITEM* item, AVFrame* frame){
  * @return 0 if successful, !0 otherwise.
  */
 
-static int   i2h_item_append_packet           (ITEM* item, AVPacket* packet){
+static int   i2h_item_append_packet               (ITEM* item, AVPacket* packet){
     return i2h_packetlist_append(&item->packetlist, packet);
 }
 
@@ -1302,7 +1526,7 @@ static int   i2h_item_append_packet           (ITEM* item, AVPacket* packet){
  * @return 0.
  */
 
-static int  i2h_iref_append                   (IREF** refs, IREF* iref){
+static int  i2h_iref_append                       (IREF** refs, IREF* iref){
     iref->next = *refs;
     *refs = iref;
     return 0;
@@ -1319,18 +1543,18 @@ static int  i2h_iref_append                   (IREF** refs, IREF* iref){
  * @return 0.
  */
 
-static int  i2h_universe_init                 (UNIVERSE* u){
+static int  i2h_universe_init                     (UNIVERSE* u){
     u->items              = NULL;
     u->item               = i2h_item_new();
+    u->num_items          = 0;
     
-    u->out.codec          = avcodec_find_encoder_by_name("libx265");
     u->out.tile.w         = 512;
     u->out.tile.h         = 512;
     u->out.crf            = 10;
     u->out.chroma_format  = BENZINA_CHROMAFMT_YUV420;
     u->out.x264_params    = "";
     u->out.x265_params    = "";
-    u->out.url            = NULL;
+    u->out.url            = "out.heif";
     
     return 0;
 }
@@ -1342,7 +1566,7 @@ static int  i2h_universe_init                 (UNIVERSE* u){
  * @return The item, if found; NULL otherwise.
  */
 
-static ITEM* i2h_universe_item_find_by_id     (UNIVERSE* u, uint32_t id){
+static ITEM* i2h_universe_item_find_by_id         (UNIVERSE* u, uint32_t id){
     ITEM* item;
     for(item=u->items; item; item=item->next){
         if(item->id == id){
@@ -1361,7 +1585,7 @@ static ITEM* i2h_universe_item_find_by_id     (UNIVERSE* u, uint32_t id){
  * @return 0 if no free ID available; !0 otherwise.
  */
 
-static int  i2h_universe_item_find_free_id    (UNIVERSE* u, uint32_t* id_out){
+static int  i2h_universe_item_find_free_id        (UNIVERSE* u, uint32_t* id_out){
     uint32_t id;
     ITEM*    item;
     
@@ -1380,52 +1604,54 @@ static int  i2h_universe_item_find_free_id    (UNIVERSE* u, uint32_t* id_out){
 }
 
 /**
- * @brief Handle the completion of a new item
+ * @brief Append a new item to the list
  * @param [in]  u     The universe we're operating over.
  * @param [in]  item  The completed item we'd like to process.
  * @return 0 if successful; !0 otherwise.
  */
 
-static int  i2h_universe_item_handle          (UNIVERSE* u, ITEM* item){
-    if      (memcmp(item->type, "pict", 4) == 0){
-        return i2h_universe_item_handle_pict(u, item);
-    }else if(memcmp(item->type, "mime", 4) == 0){
-        return i2h_universe_item_handle_mime(u, item);
-    }
-    return 1;
+static int  i2h_universe_item_append              (UNIVERSE* u, ITEM* item){
+    i2h_item_insert(&u->items, item);
+    u->num_items++;
+    return 0;
 }
 
 /**
- * @brief Handle the completion of a new MIME item
+ * @brief Handle the completion of a new item.
+ * 
  * @param [in]  u     The universe we're operating over.
  * @param [in]  item  The completed item we'd like to process.
- * @return 0.
+ * @return 0 if successful; !0 otherwise.
  */
 
-static int  i2h_universe_item_handle_mime     (UNIVERSE* u, ITEM* item){
-    (void)u;
+static int  i2h_universe_item_handle              (UNIVERSE* u, ITEM* item){
+    /**
+     * The following item types may be specified via the command line:
+     * 
+     *   - avc1
+     *   - Exif
+     *   - hvc1
+     *   - jpeg
+     *   - mime
+     *   - uri%20
+     * 
+     * The avc1/hvc1 types may be autosubstituted with the following, on an
+     * as-needed basis:
+     * 
+     *   - iden
+     *   - grid
+     */
     
-    int         fd;
-    struct stat buf;
-    ssize_t     len;
-    
-    fd = open(item->path, O_RDONLY|O_CLOEXEC);
-    if(fd<0)
-        i2hmessageexit(EIO, stderr, "Error opening path '%s'!\n", item->path);
-    
-    if(fstat(fd, &buf) < 0)
-        i2hmessageexit(EIO, stderr, "Cannot stat path '%s'!\n", item->path);
-    
-    item->mime.size = buf.st_size;
-    item->mime.data = malloc(item->mime.size);
-    
-    len = read(fd, item->mime.data, item->mime.size);
-    if(len != (ssize_t)item->mime.size)
-        i2hmessageexit(EIO, stderr, "Failed to read '%s' fully!\n", item->path);
-    
-    close(fd);
-    
-    return 0;
+    if      (i2h_item_type_is_picture(item)){
+        return i2h_universe_item_handle_picture(u, item);
+    }else if(i2h_item_type_is(item, "mime") ||
+             i2h_item_type_is(item, "Exif") ||
+             i2h_item_type_is(item, "uri ")){
+        return i2h_universe_item_handle_binary(u, item);
+    }else{
+        i2hmessageexit(EINVAL, stderr, "Unknown item type %4.4s!\n", item->type);
+    }
+    return 1;
 }
 
 /**
@@ -1435,54 +1661,40 @@ static int  i2h_universe_item_handle_mime     (UNIVERSE* u, ITEM* item){
  * @return 0.
  */
 
-static int  i2h_universe_item_handle_pict     (UNIVERSE* u, ITEM* item){
+static int  i2h_universe_item_handle_picture      (UNIVERSE* u, ITEM* item){
     /* FFmpeg state. */
-    int                singletile, letterboxing, ret;
-    enum AVPixelFormat pix_fmt = i2h_benzina2avpixfmt(u->out.chroma_format);
+    enum AVPixelFormat pix_fmt;
+    int ret;
+    //uint32_t thumb_width, thumb_height;
     
     
-    /* Read one frame. */
-    ret = i2h_item_pict_read_frame(item);
+    /* Copy current desired tile width/height/pixel format. */
+    item->tile.w = u->out.tile.w;
+    item->tile.h = u->out.tile.h;
+    pix_fmt = i2h_benzina2avpixfmt(u->out.chroma_format);
+    
+    
+    /* Read one frame, then fixup and canonicalize it. */
+    ret = i2h_item_picture_read_frame(item);
     if(ret != 0)
         i2hmessageexit(ret, stderr, "Failed to read frame from input media \"%s\"! (%d)\n", item->path, ret);
-    
-    
-    /* Fixup the frame and canonicalize its pixel format. */
     i2h_frame_fixup(item->pict.frame);
     i2h_frame_canonicalize_pixfmt(item->pict.frame, item->pict.frame);
+    
+    
     item->pict.grid.clap.w = item->pict.frame->width;
     item->pict.grid.clap.h = item->pict.frame->height;
     
     
-    /* Compute scaling parameters */
-    singletile   = item->pict.frame->width  <= (int)u->out.tile.w &&
-                   item->pict.frame->height <= (int)u->out.tile.h;
-    letterboxing = ((uint64_t)item->pict.frame->width  * u->out.tile.h) >=
-                   ((uint64_t)item->pict.frame->height * u->out.tile.w );
-    if(singletile){
-        item->pict.thumb.clap.w = item->pict.frame->width;
-        item->pict.thumb.clap.h = item->pict.frame->height;
-    }else if(letterboxing){
-        item->pict.thumb.clap.w = u->out.tile.w;
-        item->pict.thumb.clap.h = round(item->pict.thumb.clap.w  * 1.0 *
-                                        item->pict.frame->height /
-                                        item->pict.frame->width);
-    }else{
-        item->pict.thumb.clap.h = u->out.tile.h;
-        item->pict.thumb.clap.w = round(item->pict.thumb.clap.h * 1.0 *
-                                        item->pict.frame->width /
-                                        item->pict.frame->height);
-    }
-    
-    
     /* Create grid/single-tile frames */
+    i2h_item_picture_encoder_plan(item);
     item->pict.grid.frame = av_frame_alloc();
     if(!item->pict.grid.frame)
         i2hmessageexit(ENOMEM, stderr, "Error allocating frame!\n");
     
     i2h_frame_scale_and_pad(item->pict.grid.frame,  item->pict.frame, pix_fmt,
                             item->pict.grid.clap.w, item->pict.grid.clap.h,
-                            u->out.tile.w,          u->out.tile.h);
+                            item->tile.w,           item->tile.h);
     item->pict.grid.ispe.w = item->pict.grid.frame->width;
     item->pict.grid.ispe.h = item->pict.grid.frame->height;
     
@@ -1491,12 +1703,12 @@ static int  i2h_universe_item_handle_pict     (UNIVERSE* u, ITEM* item){
         if(!item->pict.thumb.frame)
             i2hmessageexit(ENOMEM, stderr, "Error allocating frame!\n");
         
-        if(singletile){
+        if(item->pict.single_tile){
             av_frame_ref(item->pict.thumb.frame, item->pict.grid.frame);
         }else{
             i2h_frame_scale_and_pad(item->pict.thumb.frame,  item->pict.frame, pix_fmt,
                                     item->pict.thumb.clap.w, item->pict.thumb.clap.h,
-                                    u->out.tile.w,           u->out.tile.h);
+                                    item->tile.w,            item->tile.h);
         }
         
         item->pict.thumb.ispe.w = item->pict.thumb.frame->width;
@@ -1511,13 +1723,13 @@ static int  i2h_universe_item_handle_pict     (UNIVERSE* u, ITEM* item){
      * Flushing the input encode pipeline requires pushing in a NULL frame.
      */
     
-    i2h_item_pict_encoder_configure(item, item->pict.grid.frame, u);
-    i2h_item_pict_push_grid_frames(item);
+    i2h_item_picture_encoder_configure(item, item->pict.grid.frame, u);
+    i2h_item_picture_push_grid_frames(item);
     if(item->want_thumbnail){
-        i2h_item_pict_push_thumb_frames(item);
+        i2h_item_picture_push_thumb_frames(item);
     }
-    i2h_item_pict_push_frame(item, NULL);
-    i2h_item_pict_encoder_deconfigure(item);
+    i2h_item_picture_push_frame(item, NULL);
+    i2h_item_picture_encoder_deconfigure(item);
     
     
 #if 1
@@ -1559,17 +1771,368 @@ static int  i2h_universe_item_handle_pict     (UNIVERSE* u, ITEM* item){
 }
 
 /**
+ * @brief Handle the completion of a new MIME item
+ * @param [in]  u     The universe we're operating over.
+ * @param [in]  item  The completed item we'd like to process.
+ * @return 0.
+ */
+
+static int  i2h_universe_item_handle_binary       (UNIVERSE* u, ITEM* item){
+    (void)u;
+    
+    int         fd, ret;
+    struct stat buf;
+    ssize_t     len;
+    AVPacket*   packet;
+    
+    fd = open(item->path, O_RDONLY|O_CLOEXEC);
+    if(fd<0)
+        i2hmessageexit(EIO, stderr, "Error opening path '%s'!\n", item->path);
+    
+    if(fstat(fd, &buf) < 0)
+        i2hmessageexit(EIO, stderr, "Cannot stat path '%s'!\n", item->path);
+    
+    if(buf.st_size > INT_MAX)
+        i2hmessageexit(EINVAL, stderr, "Oversize file '%s' >%d bytes!\n", item->path, INT_MAX);
+    
+    packet = av_packet_alloc();
+    if(!packet)
+        i2hmessageexit(ENOMEM, stderr, "Cannot allocate packet!\n");
+    
+    ret = av_new_packet(packet, buf.st_size);
+    if(ret != 0)
+        i2hmessageexit(ENOMEM, stderr, "Cannot allocate %zu bytes of memory for packet!\n", (size_t)buf.st_size);
+    
+    len = read(fd, packet->data, packet->size);
+    if(len != (ssize_t)packet->size)
+        i2hmessageexit(EIO, stderr, "Failed to read '%s' fully!\n", item->path);
+    
+    close(fd);
+    
+    if(i2h_packetlist_append(&item->packetlist, packet) != 0)
+        i2hmessageexit(ENOMEM, stderr, "Failed to append packet to list!\n");
+    
+    return 0;
+}
+
+/**
+ * @brief Transform the universe's tree of items into a single flat list ordered by ID.
+ * 
+ * @param [in]  u  The universe we're operating over.
+ * @return 0 if successful; !0 otherwise.
+ */
+
+static int  i2h_universe_flatten                  (UNIVERSE* u){
+    ITEM* i;
+    ITEM* n;
+    
+    for(i=u->items; i; i=i->next){
+        if(i2h_item_type_is_picture(i)){
+            if(i->want_thumbnail){
+                n = i2h_item_new();
+                i2h_universe_item_find_free_id(u, &n->id);
+                n->path = i->path;
+                n->name = "";
+                memcpy(n->type, i->type, 4);
+                n->primary = 0;
+                n->hidden = 0;
+                n->want_thumbnail = 0;
+                
+            }
+        }
+    }
+    
+    return 0;
+}
+
+/**
  * @brief Output a HEIF file with the given items.
  * 
  * @param [in]  u  The universe we're operating over.
  * @return 0 if successful; !0 otherwise.
  */
 
-static int  i2h_universe_do_output          (UNIVERSE*        u){
-    ITEM* i = u->items;
+static int  i2h_universe_do_output_i8                 (UNIVERSE*        u, uint8_t  v){
+    writefully(u->out.fd, &v, sizeof(v));
+    return 0;
+}
+static int  i2h_universe_do_output_i16                (UNIVERSE*        u, uint16_t v){
+    v = benz_htobe16(v);
+    writefully(u->out.fd, &v, sizeof(v));
+    return 0;
+}
+static int  i2h_universe_do_output_i32                (UNIVERSE*        u, uint32_t v){
+    v = benz_htobe32(v);
+    writefully(u->out.fd, &v, sizeof(v));
+    return 0;
+}
+static int  i2h_universe_do_output_i64                (UNIVERSE*        u, uint64_t v){
+    v = benz_htobe64(v);
+    writefully(u->out.fd, &v, sizeof(v));
+    return 0;
+}
+static int  i2h_universe_do_output_bytes              (UNIVERSE*        u, const void* buf, size_t len){
+    writefully(u->out.fd, buf, len);
+    return 0;
+}
+static int  i2h_universe_do_output_ascii              (UNIVERSE*        u, const void* str){
+    return i2h_universe_do_output_bytes(u, str, strlen(str));
+}
+static int  i2h_universe_do_output_asciz              (UNIVERSE*        u, const void* str){
+    return i2h_universe_do_output_bytes(u, str, strlen(str)+1);/* *with* NUL-terminator */
+}
+static int  i2h_universe_do_output_box                (UNIVERSE*        u, const char name[static 4]){
+    i2h_universe_do_output_i32  (u, 0);
+    i2h_universe_do_output_bytes(u, name, 4);
+    return 0;
+}
+static int  i2h_universe_do_output_fullbox            (UNIVERSE*        u, const char name[static 4], uint32_t version, uint32_t flags){
+    version <<= 24;
+    version  |= flags & 0x00FFFFFFU;
+    i2h_universe_do_output_box(u, name);
+    i2h_universe_do_output_i32(u, version);
+    return 0;
+}
+static int  i2h_universe_do_output_mdat               (UNIVERSE*        u){
+    ITEM* i;
+    
+    size_t start, end;
+    i2h_universe_fdtell(u, &start);
+    i2h_universe_do_output_box(u, "mdat");
+    for(i=u->items; i; i=i->next){
+        if(i2h_item_type_is_picture(i)){
+            PACKETLIST* pkt;
+            for(pkt=i->packetlist;pkt;pkt=pkt->next){
+                writefully(u->out.fd, pkt->packet->data, pkt->packet->size);
+            }
+        }
+    }
+    i2h_universe_fdtell(u, &end);
+    i2h_universe_writelen(u, start, end);
+    return 0;
+}
+static int  i2h_universe_do_output_meta_hdlr          (UNIVERSE*        u, const char* track_name){
+    size_t start, end;
+    
+    track_name = track_name ? track_name : "";
+    
+    i2h_universe_fdtell(u, &start);
+    i2h_universe_do_output_fullbox(u, "hdlr", 0, 0);
+    i2h_universe_do_output_i32  (u, 0);         /* predefined */
+    i2h_universe_do_output_ascii(u, "pict");    /* handler */
+    i2h_universe_do_output_i32  (u, 0);         /* reserved[0] */
+    i2h_universe_do_output_i32  (u, 0);         /* reserved[1] */
+    i2h_universe_do_output_i32  (u, 0);         /* reserved[2] */
+    i2h_universe_do_output_asciz(u, track_name);/* name */
+    i2h_universe_fdtell(u, &end);
+    i2h_universe_writelen(u, start, end);
+    return 0;
+}
+static int  i2h_universe_do_output_meta_pitm          (UNIVERSE*        u){
+    ITEM* i;
+    uint32_t primaryid=0;
+    size_t start, end;
+    i2h_universe_fdtell(u, &start);
+    i2h_universe_do_output_fullbox(u, "pitm", 1, 0);
+    for(i=u->items; i; i=i->next){
+        if(i->primary){
+            primaryid = i->id;
+            break;
+        }
+    }
+    i2h_universe_do_output_i32(u, primaryid);
+    i2h_universe_fdtell(u, &end);
+    i2h_universe_writelen(u, start, end);
+    return 0;
+}
+static int  i2h_universe_do_output_meta_dinf_dref_url (UNIVERSE*        u, const char* url){
+    size_t start, end;
+    i2h_universe_fdtell(u, &start);
+    i2h_universe_do_output_fullbox(u, "url ", 0, !url);
+    if(url){
+        /* url == NULL indicates "same file". */
+        i2h_universe_do_output_asciz(u, url);
+    }
+    i2h_universe_fdtell(u, &end);
+    i2h_universe_writelen(u, start, end);
+    return 0;
+}
+static int  i2h_universe_do_output_meta_dinf_dref     (UNIVERSE*        u){
+    size_t start, end;
+    i2h_universe_fdtell(u, &start);
+    i2h_universe_do_output_fullbox(u, "dref", 0, 0);
+    i2h_universe_do_output_i32(u, 1);
+    i2h_universe_do_output_meta_dinf_dref_url(u, NULL);
+    i2h_universe_fdtell(u, &end);
+    i2h_universe_writelen(u, start, end);
+    return 0;
+}
+static int  i2h_universe_do_output_meta_dinf          (UNIVERSE*        u){
+    size_t start, end;
+    i2h_universe_fdtell(u, &start);
+    i2h_universe_do_output_box(u, "dinf");
+    i2h_universe_do_output_meta_dinf_dref(u);
+    i2h_universe_fdtell(u, &end);
+    i2h_universe_writelen(u, start, end);
+    return 0;
+}
+static int  i2h_universe_do_output_meta_iloc          (UNIVERSE*        u){
+    size_t start, end, i;
+    i2h_universe_fdtell(u, &start);
+    i2h_universe_do_output_fullbox(u, "iloc", 2, 0);
+    i2h_universe_do_output_i16(u, 0x4400);
+    
+    i2h_universe_do_output_i32(u, u->num_items);
+    for(i=0;i<u->num_items;i++){
+        
+    }
+    i2h_universe_fdtell(u, &end);
+    i2h_universe_writelen(u, start, end);
+    return 0;
+}
+static int  i2h_universe_do_output_meta_infe          (UNIVERSE*        u){
+    size_t start, end, i;
+    i2h_universe_fdtell(u, &start);
+    i2h_universe_do_output_fullbox(u, "infe", 1, 0);
+    
+    i2h_universe_do_output_i32(u, u->num_items);
+    for(i=0;i<u->num_items;i++){
+        
+    }
+    i2h_universe_fdtell(u, &end);
+    i2h_universe_writelen(u, start, end);
+    return 0;
+}
+static int  i2h_universe_do_output_meta_iinf          (UNIVERSE*        u){
+    size_t start, end, i;
+    i2h_universe_fdtell(u, &start);
+    i2h_universe_do_output_fullbox(u, "iinf", 1, 0);
+    
+    i2h_universe_do_output_i32(u, u->num_items);
+    for(i=0;i<u->num_items;i++){
+        
+    }
+    i2h_universe_fdtell(u, &end);
+    i2h_universe_writelen(u, start, end);
+    return 0;
+}
+static int  i2h_universe_do_output_meta_iref          (UNIVERSE*        u){
+    size_t start, end;
+    i2h_universe_fdtell(u, &start);
+    i2h_universe_do_output_fullbox(u, "iref", 1, 0);
+    for(;0;){
+        //SingleItemTypeReferenceBoxLarge
+    }
+    i2h_universe_fdtell(u, &end);
+    i2h_universe_writelen(u, start, end);
+    return 0;
+}
+static int  i2h_universe_do_output_meta_iprp_ipco     (UNIVERSE*        u){
+    ITEM* i;
+    size_t start, end;
+    
+    i2h_universe_fdtell(u, &start);
+    i2h_universe_do_output_box(u, "ipco");
+    i2h_universe_do_output_bytes(u, "\x00\x00\x00\x10pixi\x00\x00\x00\x00\x03\x08\x08\x08", 16);// Item Property 1: 3-plane, 8-bit color.
+    for(i=u->items;i;i=i->next){
+        if(i2h_item_type_is_picture(i)){
+            // ItemProperty or ItemFullProperty
+            av_pix_fmt_desc_get(i->pict.grid.frame->format);
+        }
+    }
+    i2h_universe_fdtell(u, &end);
+    i2h_universe_writelen(u, start, end);
+    return 0;
+}
+static int  i2h_universe_do_output_meta_iprp_ipma     (UNIVERSE*        u){
+    size_t start, end;
+    i2h_universe_fdtell(u, &start);
+    i2h_universe_do_output_fullbox(u, "ipma", 1, 1);
+    for(;0;){
+        // Associations
+    }
+    i2h_universe_fdtell(u, &end);
+    i2h_universe_writelen(u, start, end);
+    return 0;
+}
+static int  i2h_universe_do_output_meta_iprp          (UNIVERSE*        u){
+    size_t start, end;
+    i2h_universe_fdtell(u, &start);
+    i2h_universe_do_output_box(u, "iprp");
+    i2h_universe_do_output_meta_iprp_ipco(u);
+    i2h_universe_do_output_meta_iprp_ipma(u);
+    i2h_universe_fdtell(u, &end);
+    i2h_universe_writelen(u, start, end);
+    return 0;
+}
+static int  i2h_universe_do_output_meta               (UNIVERSE*        u){
+    size_t start, end;
+    i2h_universe_fdtell(u, &start);
+    i2h_universe_do_output_fullbox(u, "meta", 0, 0);
+    i2h_universe_do_output_meta_hdlr(u, "");
+    i2h_universe_do_output_meta_pitm(u);
+    i2h_universe_do_output_meta_dinf(u);
+    i2h_universe_do_output_meta_iloc(u);
+    i2h_universe_do_output_meta_iinf(u);
+    i2h_universe_do_output_meta_iref(u);
+    i2h_universe_do_output_meta_iprp(u);
+    i2h_universe_fdtell(u, &end);
+    i2h_universe_writelen(u, start, end);
+    return 0;
+}
+static int  i2h_universe_do_output_ftyp               (UNIVERSE*        u){
+    ITEM* i;
+    int uses_h264=0, uses_h265=0;
+    
+    /* Sweep over the file to find codecs in use. */
+    for(i=u->items; i; i=i->next){
+        if(i2h_item_type_is_picture(i)){
+            uses_h264 |= i2h_is_codec_x264(i->pict.codec);
+            uses_h265 |= i2h_is_codec_x265(i->pict.codec);
+        }
+    }
+    
+    /* Write out header and compatible brands. */
+    if(uses_h265 && uses_h264){
+        writefully(u->out.fd, "\x00\x00\x00\x1c" "ftyp" "heic"
+                              "\x00\x00\x00\x00" "mif1avciheic", 28);
+    }else if(uses_h265){
+        writefully(u->out.fd, "\x00\x00\x00\x18" "ftyp" "heic"
+                              "\x00\x00\x00\x00" "mif1heic", 24);
+    }else if(uses_h264){
+        writefully(u->out.fd, "\x00\x00\x00\x18" "ftyp" "avci"
+                              "\x00\x00\x00\x00" "mif1avci", 24);
+    }else{
+        writefully(u->out.fd, "\x00\x00\x00\x14" "ftyp" "mif1"
+                              "\x00\x00\x00\x00" "mif1", 20);
+    }
+    
+    return 0;
+}
+static int  i2h_universe_do_output                    (UNIVERSE*        u){
+    #if 0
+    ITEM* i;
+    i = u->items;
     for(;i;i=i->next){
         printf("id=%3u,name=%s\n", i->id, i->name);
     }
+    #endif
+    
+    /* Flatten Item Hierarchy */
+    i2h_universe_flatten(u);
+    
+    /* Open File */
+    u->out.fd = open(u->out.url, O_CREAT|O_RDWR|O_TRUNC|O_CLOEXEC, 0644);
+    if(u->out.fd<0)
+        i2hmessageexit(EIO, stderr, "Failed to open/create file %s for writing!\n",
+                       u->out.url);
+    
+    i2h_universe_do_output_ftyp(u);
+    i2h_universe_do_output_meta(u);
+    i2h_universe_do_output_mdat(u);
+    
+    /* Close File */
+    close(u->out.fd);
     return 0;
 }
 
@@ -1630,27 +2193,6 @@ static int i2h_parse_noconsume  (char*** argv){
         case '=':  i2hmessageexit(EINVAL, stderr, "Option takes no arguments!\n");
         default:   return 1;
     }
-}
-static int i2h_parse_codec      (UNIVERSE* u, char*** argv){
-    const char* codec;
-    
-    if(!i2h_parse_consumeequals(argv) || !i2h_parse_consumecstr(argv, &codec))
-        i2hmessageexit(EINVAL, stderr, "Option --codec consumes an argument!\n");
-    
-    if      (streq(codec, "h264") || streq(codec, "x264")){
-        codec = "libx264";
-    }else if(streq(codec, "hevc") || streq(codec, "h265") || streq(codec, "x265")){
-        codec = "libx265";
-    }
-    if(strne(codec, "libx264") && strne(codec, "libx265"))
-        i2hmessageexit(EINVAL, stderr, "--codec must be one of 'libx264' or 'libx265'!\n");
-    
-    u->out.codec = avcodec_find_encoder_by_name(codec);
-    if(!u->out.codec)
-        i2hmessageexit(EINVAL, stderr, "Cannot transcode! Please rebuild Benzina with an "
-                                       "FFmpeg configured with --enable-%s.\n", codec);
-    
-    return 1;
 }
 static int i2h_parse_tile       (UNIVERSE* u, char*** argv){
     char tile_chroma_format[21] = "yuv420";
@@ -1727,7 +2269,7 @@ static int i2h_parse_name       (UNIVERSE* u, char*** argv){
     return 1;
 }
 static int i2h_parse_mime       (UNIVERSE* u, char*** argv){
-    if(!i2h_parse_consumeequals(argv) || !i2h_parse_consumecstr(argv, &u->item->mime.type))
+    if(!i2h_parse_consumeequals(argv) || !i2h_parse_consumecstr(argv, &u->item->mime_type))
         i2hmessageexit(EINVAL, stderr, "Option --mime consumes an argument!\n");
     return 1;
 }
@@ -1798,7 +2340,8 @@ static int i2h_parse_item       (UNIVERSE* u, char*** argv){
             if(i2h_universe_item_find_by_id(u, u->item->id))
                 i2hmessageexit(EINVAL, stderr, "Pre-existing item with same ID %"PRIu32"!\n", u->item->id);
         }else if(strstartswith(p, "type=")){
-            memcpy(u->item->type, p+=5, 4);
+            p += 5;
+            memcpy(u->item->type, p, 4);
             p += 4;
         }else if(strstartswith(p, "path=")){
             u->item->path = (p+=5);
@@ -1825,7 +2368,7 @@ static int i2h_parse_item       (UNIVERSE* u, char*** argv){
         i2hmessageexit(EINVAL, stderr, "Too many items added, no item IDs remaining!\n");
     
     /* Process completed item. */
-    i2h_item_insert(&u->items, u->item);
+    i2h_universe_item_append(u, u->item);
     i2h_universe_item_handle(u, u->item);
     u->item = i2h_item_new();
     
@@ -1892,8 +2435,6 @@ static int  i2h_parse_args      (UNIVERSE*        u,
                 /* We fell off the end of a series of short options. */
                 ++*argv;
             }
-        }else if(i2h_parse_longopt(argv, "--codec")){
-            i2h_parse_codec(u, argv);
         }else if(i2h_parse_longopt(argv, "--tile")){
             i2h_parse_tile(u, argv);
         }else if(i2h_parse_longopt(argv, "--x264-params")){
@@ -1934,7 +2475,6 @@ static int  i2h_parse_args      (UNIVERSE*        u,
  * Supports the following arguments:
  * 
  *   "Sticky" Parameters (preserved across picture items until changed)
- *     --codec=S                Codec selection. Default "h265", synonym "hevc", alternative "h264".
  *     --tile=W:H[:F]           Tile configuration. Width:Height:Chroma Format. Default 512:512:yuv420.
  *     --x264-params=S          Additional x264 parameters. Default "".
  *     --x265-params=S          Additional x265 parameters. Default "".
@@ -1942,7 +2482,7 @@ static int  i2h_parse_args      (UNIVERSE*        u,
  * 
  *   "Unsticky" Parameters (used for only one item)
  *     -H, --hidden             Set hidden bit. Default false. Incompatible with -p.
- *     -p, --primary            Mark as primary item. Default false. Incompatible with -h.
+ *     -p, --primary            Mark as primary item. Default false. Incompatible with -H.
  *     -t, --thumb              Want (single-tile) thumbnail.
  *     -n, --name=S             Name of item.
  *     -m, --mime=S             MIME-type of item. Default "application/octet-stream".
@@ -1951,10 +2491,10 @@ static int  i2h_parse_args      (UNIVERSE*        u,
  *   Item Declaration
  *     -i, --item=[id=N,][type=T,]path=S   Source file. Examples:
  *     -i path=image.png        Add item with next-lowest-numbered ID of type
- *                              "pict" from image.png
- *     -i id=4,path=image.png   Add item with ID=4 of type "pict" from image.png
- *     -i id=4,type=pict,path=image.png 
- *                              Add item with ID=4 of type "pict" from image.png
+ *                              "hvc1" from image.png
+ *     -i id=4,path=image.png   Add item with ID=4 of type "hvc1" from image.png
+ *     -i id=4,type=hvc1,path=image.png 
+ *                              Add item with ID=4 of type "hvc1" from image.png
  *     --mime application/octet-stream -i type=mime,path=target.bin
  *                              Add item with next-lowest-numbered ID of MIME
  *                              type "application/octet-stream" from target.bin.
@@ -2716,3 +3256,185 @@ i2hKernel_gbrp_to_yuv420p(void* __restrict const dstYPtr,
  *     followed by the sharpening post-filter [-0.25, +1.5, -0.25].
  *     http://www.johncostella.com/magic/
  */
+
+#if 0
+aligned(8) class ColourInformationBox extends Box('colr'){
+    unsigned int(32) colour_type;
+    if (colour_type == 'nclx'){/* on-screen colours */
+        unsigned int(16) colour_primaries;
+        unsigned int(16) transfer_characteristics;
+        unsigned int(16) matrix_coefficients;
+        unsigned int(1)  full_range_flag;
+        unsigned int(7)  reserved = 0;
+    }else if(colour_type == 'rICC'){
+        ICC_profile; // restricted ICC profile
+    }else if(colour_type == 'prof'){
+        ICC_profile; // unrestricted ICC profile
+    }
+}
+
+aligned(8) class MetaBox(handler_type) extends FullBox('meta', version = 0, 0){
+    HandlerBox(handler_type) theHandler;
+    PrimaryItemBox           primary_resource; // optional
+    DataInformationBox       file_locations;   // optional
+    ItemLocationBox          item_locations;   // optional
+    ItemProtectionBox        protections;      // optional
+    ItemInfoBox              item_infos;       // optional
+    IPMPControlBox           IPMP_control;     // optional
+    ItemReferenceBox         item_refs;        // optional
+    ItemDataBox              item_data;        // optional
+    Box                      other_boxes[];    // optional
+}
+
+aligned(8) class ItemLocationBox extends FullBox('iloc', version, 0){
+    unsigned int(4) offset_size;
+    unsigned int(4) length_size;
+    unsigned int(4) base_offset_size;
+    if((version == 1) || (version == 2)){
+        unsigned int(4) index_size;
+    }else{
+        unsigned int(4) reserved;
+    }
+    if(version < 2){
+        unsigned int(16) item_count;
+    }else if(version == 2){
+        unsigned int(32) item_count;
+    }
+    for(i=0; i<item_count; i++){
+        if(version < 2){
+            unsigned int(16) item_ID;
+        }else if(version == 2){
+            unsigned int(32) item_ID;
+        }
+        if((version == 1) || (version == 2)){
+            unsigned int(12) reserved = 0;
+            unsigned int(4)  construction_method;
+        }
+        unsigned int(16)                 data_reference_index;
+        unsigned int(base_offset_size*8) base_offset;
+        unsigned int(16)                 extent_count;
+        for(j=0; j<extent_count; j++){
+            if(((version == 1) || (version == 2)) && (index_size > 0)){
+                unsigned int(index_size*8) extent_index;
+            }
+            unsigned int(offset_size*8) extent_offset;
+            unsigned int(length_size*8) extent_length;
+        }
+    }
+}
+
+aligned(8) class ItemInfoBox extends FullBox('iinf', version, 0){
+    if (version == 0) {
+        unsigned int(16) entry_count;
+    } else {
+        unsigned int(32) entry_count;
+    }
+    ItemInfoEntry[entry_count] item_infos;
+}
+
+aligned(8) class ItemInfoEntry extends FullBox('infe', version, 0){
+    if((version == 0) || (version == 1)){
+        unsigned int(16) item_ID;
+        unsigned int(16) item_protection_index
+        string item_name;
+        string content_type;
+        string content_encoding; //optional
+    }
+    if(version == 1){
+        unsigned int(32) extension_type; //optional
+        ItemInfoExtension(extension_type); //optional
+    }
+    if(version >= 2){
+        if(version == 2) {
+            unsigned int(16) item_ID;
+        }else if(version == 3){
+            unsigned int(32) item_ID;
+        }
+        unsigned int(16) item_protection_index;
+        unsigned int(32) item_type;
+        string item_name;
+        if(item_type=='mime'){
+            string content_type;
+            string content_encoding; //optional
+        }else if(item_type == 'uri '){
+            string item_uri_type;
+        }
+    }
+}
+
+aligned(8) class ItemDataBox extends Box('idat'){
+    bit(8) data[];
+}
+
+aligned(8) class ItemReferenceBox extends FullBox('iref', version, 0){
+    if(version==0){
+        SingleItemTypeReferenceBox      references[];
+    }else if(version==1){
+        SingleItemTypeReferenceBoxLarge references[];
+    }
+}
+
+aligned(8) class SingleItemTypeReferenceBox(referenceType) extends Box(referenceType){
+    unsigned int(16) from_item_ID;
+    unsigned int(16) reference_count;
+    for(j=0; j<reference_count; j++){
+        unsigned int(16) to_item_ID;
+    }
+}
+
+aligned(8) class SingleItemTypeReferenceBoxLarge(referenceType) extends Box(referenceType){
+    unsigned int(32) from_item_ID;
+    unsigned int(16) reference_count;
+    for(j=0; j<reference_count; j++){
+        unsigned int(32) to_item_ID;
+    }
+}
+
+aligned(8) class HEVCConfigurationBox extends Box(‘hvcC’){
+    HEVCDecoderConfigurationRecord() HEVCConfig;
+}
+
+aligned(8) class HEVCSampleEntry() extends VisualSampleEntry('hvc1' or 'hev1'){
+    HEVCConfigurationBox config;
+    MPEG4BitRateBox();              // optional
+    MPEG4ExtensionDescriptorsBox(); // optional
+    extra_boxes          boxes[];   // optional
+}
+
+aligned(8) class HEVCDecoderConfigurationRecord {
+    unsigned int(8)  configurationVersion = 1;
+    unsigned int(2)  general_profile_space;
+    unsigned int(1)  general_tier_flag;
+    unsigned int(5)  general_profile_idc;
+    unsigned int(32) general_profile_compatibility_flags;
+    unsigned int(48) general_constraint_indicator_flags;
+    unsigned int(8)  general_level_idc;
+    bit(4) reserved = ‘1111’b;
+    unsigned int(12) min_spatial_segmentation_idc;
+    bit(6) reserved = ‘111111’b;
+    unsigned int(2)  parallelismType;
+    bit(6) reserved = ‘111111’b;
+    unsigned int(2)  chromaFormat;
+    bit(5) reserved = ‘11111’b;
+    unsigned int(3)  bitDepthLumaMinus8;
+    bit(5) reserved = ‘11111’b;
+    unsigned int(3)  bitDepthChromaMinus8;
+    bit(16)          avgFrameRate;
+    bit(2)           constantFrameRate;
+    bit(3)           numTemporalLayers;
+    bit(1)           temporalIdNested;
+    unsigned int(2)  lengthSizeMinusOne;
+    unsigned int(8)  numOfArrays;
+    
+    for(j=0; j<numOfArrays; j++){
+        bit(1)           array_completeness;
+        unsigned int(1)  reserved = 0;
+        unsigned int(6)  NAL_unit_type;
+        unsigned int(16) numNalus;
+        for(i=0; i<numNalus; i++){
+            unsigned int(16)     nalUnitLength;
+            bit(8*nalUnitLength) nalUnit;//Includes 2-byte nal_unit_header().
+        }
+    }
+}
+#endif
