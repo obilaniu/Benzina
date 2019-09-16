@@ -92,30 +92,95 @@ struct PACKETLIST{
 struct ITEM{
     uint32_t    id;
     char        type[4];
-    const char* path;
     const char* name;
     const char* mime_type;
-    struct{uint32_t w,h;} tile;
     unsigned    primary        : 1;
     unsigned    hidden         : 1;
-    unsigned    want_thumbnail : 1;
+    
+    /**
+     * @brief Argument section.
+     * 
+     * Contains per-item fields that are not semantically part of a HEIF item.
+     */
     
     struct{
-        AVCodec*        codec;
+        const char*           path;
+        struct{uint32_t w,h;} tile;
+        enum AVPixelFormat    pix_fmt;
+        unsigned              want_thumbnail : 1;
+    } args;
+    
+    /**
+     * @brief Frontend section.
+     * 
+     * Contains per-item fields that are decompressed intermediaries on the way
+     * to crafting a HEIF item.
+     */
+    
+    union{
+        struct{
+            struct{uint32_t w,h;} grid_clap,  grid_ispe,
+                                  thumb_clap, thumb_ispe;
+            AVFrame* frame;
+            AVFrame* grid_frame;
+            AVFrame* thumb_frame;
+            AVCodec* codec;
+            unsigned is_source_jpeg   : 1;
+            unsigned single_tile      : 1;
+            unsigned single_tile_ltbx : 1;
+        } pict;
+    } frontend;
+    
+    /**
+     * @brief Middleend section.
+     * 
+     * Contains per-item fields related to encoding/compression on the way to
+     * crafting a HEIF item.
+     */
+    
+    union{
+        struct{
+            AVCodecContext* codec_ctx;
+            
+        } pict;
+    } middleend;
+    
+    /**
+     * @brief Backend section.
+     * 
+     * Contains per-item fields that are semantically part of a HEIF item.
+     */
+    
+    union{
+        struct{
+            struct{uint32_t w,h;} grid_clap, ispe;
+            AVFrame* frame;
+        } pict;
+        struct{
+            struct{uint32_t w,h;} grid_clap, ispe;
+            AVFrame* frame;
+            ITEM* refs;
+        } iden;
+        struct{
+            struct{uint32_t w,h;} grid_clap, ispe, tile;
+            AVFrame* frame;
+            ITEM* refs;
+        } grid;
+        struct{
+            
+        } Exif, mime, uri_;
+    } backend;
+    
+    struct{
         AVCodecContext* codec_ctx;
-        AVFrame*        frame;
-        AVFrame*        padded_frame;
         ITEM*           thumb_item;
         ITEM*           grid_items;
         struct{
-            struct{uint32_t w, h;} clap, ispe;
+            struct{uint32_t w, h;} grid_clap, ispe;
             AVFrame* frame;
             uint32_t num_packets;
         } grid, thumb;
-        struct{uint32_t w, h;} tile, size;
-        unsigned        is_source_jpeg : 1;
-        unsigned        single_tile    : 1;
-        unsigned        letter_boxing  : 1;
+        struct{uint32_t w, h;} tile;
     } pict;
     struct{
         
@@ -126,9 +191,6 @@ struct ITEM{
     struct{
         
     } mime;
-    union{
-        
-    } data;
     
     PACKETLIST* packetlist;
     IREF*       refs;
@@ -214,8 +276,9 @@ static int   i2h_item_init                        (ITEM* item);
 static int   i2h_item_insert                      (ITEM** items, ITEM* item);
 static int   i2h_item_type_is                     (ITEM* item, const char* type);
 static int   i2h_item_type_is_picture             (ITEM* item);
-static int   i2h_item_picture_read_frame          (ITEM* item);
-static int   i2h_item_picture_encoder_plan        (ITEM* item);
+static int   i2h_item_picture_fe_read_frame       (ITEM* item);
+static int   i2h_item_picture_fe_make_grid_frame  (ITEM* item);
+static int   i2h_item_picture_fe_make_thumb_frame (ITEM* item);
 static int   i2h_item_picture_encoder_configure   (ITEM* item, AVFrame* frame, UNIVERSE* u);
 static void  i2h_item_picture_encoder_deconfigure (ITEM* item);
 static int   i2h_item_picture_push_grid_frames    (ITEM* item);
@@ -1148,7 +1211,7 @@ static int   i2h_item_type_is_picture             (ITEM* item){
  * @return 0 if successful; !0 otherwise.
  */
 
-static int   i2h_item_picture_read_frame          (ITEM* item){
+static int   i2h_item_picture_fe_read_frame       (ITEM* item){
     int                ret;
     AVFormatContext*   format_ctx    = NULL;
     int                format_stream = 0;
@@ -1159,19 +1222,19 @@ static int   i2h_item_picture_read_frame          (ITEM* item){
     
     
     /* Input Init */
-    ret   = avformat_open_input(&format_ctx, item->path, NULL, NULL);
+    ret   = avformat_open_input(&format_ctx, item->args.path, NULL, NULL);
     if(ret < 0)
-        i2hmessageexit(ret, stderr, "Cannot open input media \"%s\"! (%d)\n", item->path, ret);
+        i2hmessageexit(ret, stderr, "Cannot open input media \"%s\"! (%d)\n", item->args.path, ret);
     
     ret   = avformat_find_stream_info(format_ctx, NULL);
     if(ret < 0)
-        i2hmessageexit(EIO,    stderr, "Cannot understand input media \"%s\"! (%d)\n", item->path, ret);
+        i2hmessageexit(EIO,    stderr, "Cannot understand input media \"%s\"! (%d)\n", item->args.path, ret);
     
     format_stream = av_find_default_stream_index(format_ctx);
     if(!i2h_is_imagelike_stream(format_ctx, format_stream))
-        i2hmessageexit(EINVAL, stderr, "No image data in media \"%s\"!\n", item->path);
+        i2hmessageexit(EINVAL, stderr, "No image data in media \"%s\"!\n", item->args.path);
     
-    item->pict.is_source_jpeg = format_ctx->iformat == av_find_input_format("jpeg");
+    item->frontend.pict.is_source_jpeg = format_ctx->iformat == av_find_input_format("jpeg");
     codec_par = format_ctx->streams[format_stream]->codecpar;
     codec     = avcodec_find_decoder(codec_par->codec_id);
     codec_ctx = avcodec_alloc_context3(codec);
@@ -1192,7 +1255,7 @@ static int   i2h_item_picture_read_frame          (ITEM* item){
         ret = av_read_frame(format_ctx, packet);
         if(ret < 0)
             i2hmessageexit(ret, stderr, "Error or end-of-file reading media \"%s\" (%d)!\n",
-                                        item->path, ret);
+                                        item->args.path, ret);
         
         if(packet->stream_index != format_stream){
             av_packet_free(&packet);
@@ -1202,11 +1265,11 @@ static int   i2h_item_picture_read_frame          (ITEM* item){
             if(ret)
                 i2hmessageexit(ret, stderr, "Error pushing packet! (%d)\n", ret);
             
-            item->pict.frame = av_frame_alloc();
-            if(!item->pict.frame)
+            item->frontend.pict.frame = av_frame_alloc();
+            if(!item->frontend.pict.frame)
                 i2hmessageexit(ENOMEM, stderr, "Error allocating frame!\n");
             
-            ret = avcodec_receive_frame(codec_ctx, item->pict.frame);
+            ret = avcodec_receive_frame(codec_ctx, item->frontend.pict.frame);
             if(ret)
                 i2hmessageexit(ret, stderr, "Error pulling frame! (%d)\n",  ret);
             break;
@@ -1219,62 +1282,109 @@ static int   i2h_item_picture_read_frame          (ITEM* item){
     avformat_close_input(&format_ctx);
     
     
+    /* Fixup and canonicalize pixel format. */
+    i2h_frame_fixup(item->frontend.pict.frame);
+    i2h_frame_canonicalize_pixfmt(item->frontend.pict.frame,
+                                  item->frontend.pict.frame);
+    
+    
+    /* Record image spatial-extent and clean-aperture information. */
+    item->frontend.pict.thumb_ispe.w     = item->args.tile.w;
+    item->frontend.pict.thumb_ispe.h     = item->args.tile.h;
+    item->frontend.pict.grid_clap.w      = item->frontend.pict.frame->width;
+    item->frontend.pict.grid_clap.h      = item->frontend.pict.frame->height;
+    item->frontend.pict.grid_ispe.w      = (item->frontend.pict.grid_clap.w + item->args.tile.w - 1)/item->args.tile.w;
+    item->frontend.pict.grid_ispe.h      = (item->frontend.pict.grid_clap.h + item->args.tile.h - 1)/item->args.tile.h;
+    item->frontend.pict.single_tile      = item->frontend.pict.grid_clap.w <= item->args.tile.w &&
+                                           item->frontend.pict.grid_clap.h <= item->args.tile.h;
+    item->frontend.pict.single_tile_ltbx = (uint64_t)item->frontend.pict.grid_clap.w*item->args.tile.h >=
+                                           (uint64_t)item->frontend.pict.grid_clap.h*item->args.tile.w;
+    if(item->frontend.pict.single_tile){
+        item->frontend.pict.thumb_clap.w  = item->frontend.pict.grid_clap.w;
+        item->frontend.pict.thumb_clap.h  = item->frontend.pict.grid_clap.h;
+    }else if(item->frontend.pict.single_tile_ltbx){
+        item->frontend.pict.thumb_clap.w = item->args.tile.w;
+        item->frontend.pict.thumb_clap.h = round(item->frontend.pict.thumb_clap.w * 1.0 *
+                                                 item->frontend.pict.grid_clap.h /
+                                                 item->frontend.pict.grid_clap.w);
+    }else{
+        item->frontend.pict.thumb_clap.h = item->args.tile.h;
+        item->frontend.pict.thumb_clap.w = round(item->frontend.pict.thumb_clap.h * 1.0 *
+                                                 item->frontend.pict.grid_clap.w /
+                                                 item->frontend.pict.grid_clap.h);
+    }
+    
+    
+    /* Select codec. */
+    if      (i2h_item_type_is(item, "avc1")){
+        item->frontend.pict.codec = avcodec_find_encoder_by_name("libx264");
+        if(!item->frontend.pict.codec)
+            i2hmessageexit(EINVAL, stderr, "Cannot transcode! Please rebuild Benzina with an "
+                                           "FFmpeg configured with --enable-libx264.\n");
+    }else if(i2h_item_type_is(item, "hvc1")){
+        item->frontend.pict.codec = avcodec_find_encoder_by_name("libx265");
+        if(!item->frontend.pict.codec)
+            i2hmessageexit(EINVAL, stderr, "Cannot transcode! Please rebuild Benzina with an "
+                                           "FFmpeg configured with --enable-libx265.\n");
+    }else{
+        i2hmessageexit(EINVAL, stderr, "Unknown item type %4.4s!\n", item->type);
+    }
+    
+    
     /* Exit */
-    item->pict.size.w = item->pict.frame->width;
-    item->pict.size.h = item->pict.frame->height;
     return ret;
 }
 
 /**
- * @brief Plan the encoding job.
+ * @brief Make padded grid frame for image item.
  * 
- * @param [in,out]  item        The item we're planning to encode for.
+ * @param [in,out]  item    The item for which we're creating a padded grid frame.
  * @return 0 if successful; !0 otherwise.
  */
 
-static int   i2h_item_picture_encoder_plan        (ITEM* item){
-    /* Compute scaling parameters */
-    item->pict.single_tile   = item->pict.frame->width  <= (int)item->tile.w &&
-                               item->pict.frame->height <= (int)item->tile.h;
-    item->pict.letter_boxing = ((uint64_t)item->pict.frame->width  * item->tile.h) >=
-                               ((uint64_t)item->pict.frame->height * item->tile.w);
+static int   i2h_item_picture_fe_make_grid_frame  (ITEM* item){
+    item->frontend.pict.grid_frame = av_frame_alloc();
+    if(!item->frontend.pict.grid_frame)
+        i2hmessageexit(ENOMEM, stderr, "Error allocating frame!\n");
     
-    if(item->pict.single_tile){
-        item->pict.thumb.clap.w = item->pict.frame->width;
-        item->pict.thumb.clap.h = item->pict.frame->height;
-    }else if(item->pict.letter_boxing){
-        item->pict.thumb.clap.w = item->tile.w;
-        item->pict.thumb.clap.h = round(item->pict.thumb.clap.w * 1.0 *
-                                        item->pict.frame->height /
-                                        item->pict.frame->width);
+    return i2h_frame_scale_and_pad(item->frontend.pict.grid_frame,
+                                   item->frontend.pict.frame,
+                                   item->args.pix_fmt,
+                                   item->frontend.pict.grid_clap.w,
+                                   item->frontend.pict.grid_clap.h,
+                                   item->args.tile.w,
+                                   item->args.tile.h);
+}
+
+/**
+ * @brief Make thumbnail frame for image item.
+ * 
+ * If the item does not require a thumbnail, skip.
+ * 
+ * @param [in,out]  item    The item for which we're creating a thumbnail frame.
+ * @return 0 if successful; !0 otherwise.
+ */
+
+static int   i2h_item_picture_fe_make_thumb_frame (ITEM* item){
+    if(!item->args.want_thumbnail)
+        return 0;
+    
+    item->frontend.pict.thumb_frame = av_frame_alloc();
+    if(!item->frontend.pict.thumb_frame)
+        i2hmessageexit(ENOMEM, stderr, "Error allocating frame!\n");
+    
+    if(item->frontend.pict.single_tile){
+        return av_frame_ref(item->frontend.pict.thumb_frame,
+                            item->frontend.pict.grid_frame);
     }else{
-        item->pict.thumb.clap.h = item->tile.h;
-        item->pict.thumb.clap.w = round(item->pict.thumb.clap.h * 1.0 *
-                                        item->pict.frame->width /
-                                        item->pict.frame->height);
+        return i2h_frame_scale_and_pad(item->frontend.pict.thumb_frame,
+                                       item->frontend.pict.frame,
+                                       item->args.pix_fmt,
+                                       item->frontend.pict.thumb_clap.w,
+                                       item->frontend.pict.thumb_clap.h,
+                                       item->args.tile.w,
+                                       item->args.tile.h);
     }
-    
-    /* If we want a thumbnail, create the item for it. */
-    if(item->want_thumbnail){
-        item->pict.thumb_item  = i2h_item_new();
-        memcpy(item->pict.thumb_item, item, sizeof(*item));
-        item->pict.thumb_item->id              = 0;
-        item->pict.thumb_item->name            = "";
-        item->pict.thumb_item->mime_type       = "";
-        item->pict.thumb_item->primary         = 0;
-        item->pict.thumb_item->hidden          = 0;
-        item->pict.thumb_item->want_thumbnail  = 0;
-        item->pict.thumb_item->packetlist      = NULL;
-        item->pict.thumb_item->refs            = NULL;
-        item->pict.thumb_item->children        = NULL;
-        item->pict.thumb_item->next            = NULL;
-        item->pict.thumb_item->pict.codec_ctx  = NULL;
-        item->pict.thumb_item->pict.frame      = NULL;
-        item->pict.thumb_item->pict.thumb_item = NULL;
-        item->pict.thumb_item->pict.grid_items = NULL;
-    }
-    
-    return 0;
 }
 
 /**
@@ -1305,25 +1415,8 @@ static int  i2h_item_picture_encoder_configure    (ITEM*     item,
     AVDictionary* codec_ctx_opt = NULL;
     
     
-    /* Do not configure encoder for non-pict items. */
-    if(!i2h_item_type_is_picture(item)){return 0;}
-    
-    
     /* Allocate context. */
-    if      (i2h_item_type_is(item, "avc1")){
-        item->pict.codec = avcodec_find_encoder_by_name("libx264");
-        if(!item->pict.codec)
-            i2hmessageexit(EINVAL, stderr, "Cannot transcode! Please rebuild Benzina with an "
-                                           "FFmpeg configured with --enable-libx264.\n");
-    }else if(i2h_item_type_is(item, "hvc1")){
-        item->pict.codec = avcodec_find_encoder_by_name("libx265");
-        if(!item->pict.codec)
-            i2hmessageexit(EINVAL, stderr, "Cannot transcode! Please rebuild Benzina with an "
-                                           "FFmpeg configured with --enable-libx265.\n");
-    }else{
-        i2hmessageexit(EINVAL, stderr, "Unknown item type %4.4s!\n", item->type);
-    }
-    item->pict.codec_ctx = avcodec_alloc_context3(item->pict.codec);
+    item->pict.codec_ctx = avcodec_alloc_context3(item->frontend.pict.codec);
     if(!item->pict.codec_ctx)
         i2hmessageexit(ENOMEM, stderr, "Could not allocate encoder!\n");
     
@@ -1335,7 +1428,7 @@ static int  i2h_item_picture_encoder_configure    (ITEM*     item,
     transfer_str    = transfer_str    ? transfer_str    : i2h_x264_color_trc      (AVCOL_TRC_IEC61966_2_1);
     colormatrix_str = i2h_x264_color_space    (frame->colorspace);
     colormatrix_str = colormatrix_str ? colormatrix_str : i2h_x264_color_space    (AVCOL_SPC_BT470BG);
-    if(i2h_is_codec_x264(item->pict.codec)){
+    if(i2h_is_codec_x264(item->frontend.pict.codec)){
         x26x_params      = "x264-params";
         x26x_params_args = u->out.x264_params ? u->out.x264_params : "";
         x26x_profile     = "high444";
@@ -1362,8 +1455,8 @@ static int  i2h_item_picture_encoder_configure    (ITEM*     item,
                  *x26x_params_args ? ":"              : "",
                  *x26x_params_args ? x26x_params_args : "");
     }
-    item->pict.codec_ctx->width                  = u->out.tile.w;
-    item->pict.codec_ctx->height                 = u->out.tile.h;
+    item->pict.codec_ctx->width                  = item->args.tile.w;
+    item->pict.codec_ctx->height                 = item->args.tile.h;
     item->pict.codec_ctx->time_base.num          =  1;  /* Nominal 30 fps */
     item->pict.codec_ctx->time_base.den          = 30;  /* Nominal 30 fps */
     item->pict.codec_ctx->gop_size               =  0;  /* Intra only */
@@ -1388,7 +1481,7 @@ static int  i2h_item_picture_encoder_configure    (ITEM*     item,
     
     
     /* Open context. */
-    ret = avcodec_open2(item->pict.codec_ctx, item->pict.codec, &codec_ctx_opt);
+    ret = avcodec_open2(item->pict.codec_ctx, item->frontend.pict.codec, &codec_ctx_opt);
     if(av_dict_count(codec_ctx_opt)){
         AVDictionaryEntry* entry = NULL;
         i2hmessage(stderr, "Warning: codec ignored %d options!\n",
@@ -1663,58 +1756,45 @@ static int  i2h_universe_item_handle              (UNIVERSE* u, ITEM* item){
 
 static int  i2h_universe_item_handle_picture      (UNIVERSE* u, ITEM* item){
     /* FFmpeg state. */
-    enum AVPixelFormat pix_fmt;
     int ret;
-    //uint32_t thumb_width, thumb_height;
     
     
-    /* Copy current desired tile width/height/pixel format. */
-    item->tile.w = u->out.tile.w;
-    item->tile.h = u->out.tile.h;
-    pix_fmt = i2h_benzina2avpixfmt(u->out.chroma_format);
+    /* PREP: Copy current desired tile width/height/pixel format. */
+    item->args.tile.w  = u->out.tile.w;
+    item->args.tile.h  = u->out.tile.h;
+    item->args.pix_fmt = i2h_benzina2avpixfmt(u->out.chroma_format);
     
     
-    /* Read one frame, then fixup and canonicalize it. */
-    ret = i2h_item_picture_read_frame(item);
+    /**
+     * FRONTEND:
+     *    1. Read one frame
+     *    2. Fixup and canonicalize the frame
+     *    3. Make (padded) grid image.
+     *    4. (Optional) Make thumbnail image.
+     */
+    
+    ret = i2h_item_picture_fe_read_frame(item);
     if(ret != 0)
-        i2hmessageexit(ret, stderr, "Failed to read frame from input media \"%s\"! (%d)\n", item->path, ret);
-    i2h_frame_fixup(item->pict.frame);
-    i2h_frame_canonicalize_pixfmt(item->pict.frame, item->pict.frame);
+        i2hmessageexit(ret, stderr, "Failed to read frame from input media \"%s\"! (%d)\n", item->args.path, ret);
+    ret = i2h_item_picture_fe_make_grid_frame(item);
+    if(ret != 0)
+        i2hmessageexit(ret, stderr, "Failed to make grid for input \"%s\"! (%d)\n", item->args.path, ret);
+    ret = i2h_item_picture_fe_make_thumb_frame(item);
+    if(ret != 0)
+        i2hmessageexit(ret, stderr, "Failed to make thumbnail for input \"%s\"! (%d)\n", item->args.path, ret);
     
     
-    item->pict.grid.clap.w = item->pict.frame->width;
-    item->pict.grid.clap.h = item->pict.frame->height;
-    
-    
-    /* Create grid/single-tile frames */
-    i2h_item_picture_encoder_plan(item);
-    item->pict.grid.frame = av_frame_alloc();
-    if(!item->pict.grid.frame)
-        i2hmessageexit(ENOMEM, stderr, "Error allocating frame!\n");
-    
-    i2h_frame_scale_and_pad(item->pict.grid.frame,  item->pict.frame, pix_fmt,
-                            item->pict.grid.clap.w, item->pict.grid.clap.h,
-                            item->tile.w,           item->tile.h);
-    item->pict.grid.ispe.w = item->pict.grid.frame->width;
-    item->pict.grid.ispe.h = item->pict.grid.frame->height;
-    
-    if(item->want_thumbnail){
-        item->pict.thumb.frame = av_frame_alloc();
-        if(!item->pict.thumb.frame)
-            i2hmessageexit(ENOMEM, stderr, "Error allocating frame!\n");
-        
-        if(item->pict.single_tile){
-            av_frame_ref(item->pict.thumb.frame, item->pict.grid.frame);
-        }else{
-            i2h_frame_scale_and_pad(item->pict.thumb.frame,  item->pict.frame, pix_fmt,
-                                    item->pict.thumb.clap.w, item->pict.thumb.clap.h,
-                                    item->tile.w,            item->tile.h);
-        }
-        
-        item->pict.thumb.ispe.w = item->pict.thumb.frame->width;
-        item->pict.thumb.ispe.h = item->pict.thumb.frame->height;
-    }
-    
+    /**
+     * MIDDLEEND:
+     *    1. (Optional) Encode thumbnail tile.
+     *    2. Encode grid tiles.
+     *    3. Flush encoder.
+     *    4. Split/duplicate single list of packets between thumbnail and grid tiles.
+     *    5. Create new items and fill them.
+     *    6. If this item is not single-tile,
+     *        6.1 Transmute to "grid".
+     *        6.2 Compute grid references.
+     */
     
     /**
      * Push encoded tiles into the encoder.
@@ -1725,7 +1805,7 @@ static int  i2h_universe_item_handle_picture      (UNIVERSE* u, ITEM* item){
     
     i2h_item_picture_encoder_configure(item, item->pict.grid.frame, u);
     i2h_item_picture_push_grid_frames(item);
-    if(item->want_thumbnail){
+    if(item->args.want_thumbnail){
         i2h_item_picture_push_thumb_frames(item);
     }
     i2h_item_picture_push_frame(item, NULL);
@@ -1734,14 +1814,14 @@ static int  i2h_universe_item_handle_picture      (UNIVERSE* u, ITEM* item){
     
 #if 1
     fprintf(stdout, "ID %u: %ux%u %s %s\n",
-            item->id, item->pict.frame->width, item->pict.frame->height,
-            av_get_pix_fmt_name(item->pict.frame->format),
-            item->pict.frame->color_range == AVCOL_RANGE_JPEG ? "jpeg" : "mpeg");
+            item->id, item->frontend.pict.frame->width, item->frontend.pict.frame->height,
+            av_get_pix_fmt_name(item->frontend.pict.frame->format),
+            item->frontend.pict.frame->color_range == AVCOL_RANGE_JPEG ? "jpeg" : "mpeg");
     fprintf(stdout, "Grid:  %ux%u %s %s\n",
-            item->pict.grid.frame->width, item->pict.grid.frame->height,
-            av_get_pix_fmt_name(item->pict.grid.frame->format),
-            item->pict.grid.frame->color_range == AVCOL_RANGE_JPEG ? "jpeg" : "mpeg");
-    if(item->want_thumbnail){
+            item->frontend.pict.grid_frame->width, item->frontend.pict.grid_frame->height,
+            av_get_pix_fmt_name(item->frontend.pict.grid_frame->format),
+            item->frontend.pict.grid_frame->color_range == AVCOL_RANGE_JPEG ? "jpeg" : "mpeg");
+    if(item->args.want_thumbnail){
         fprintf(stdout, "Tile:  %ux%u %s %s (%d encoded bytes)\n",
                 item->pict.thumb.frame->width, item->pict.thumb.frame->height,
                 av_get_pix_fmt_name(item->pict.thumb.frame->format),
@@ -1785,15 +1865,15 @@ static int  i2h_universe_item_handle_binary       (UNIVERSE* u, ITEM* item){
     ssize_t     len;
     AVPacket*   packet;
     
-    fd = open(item->path, O_RDONLY|O_CLOEXEC);
+    fd = open(item->args.path, O_RDONLY|O_CLOEXEC);
     if(fd<0)
-        i2hmessageexit(EIO, stderr, "Error opening path '%s'!\n", item->path);
+        i2hmessageexit(EIO, stderr, "Error opening path '%s'!\n", item->args.path);
     
     if(fstat(fd, &buf) < 0)
-        i2hmessageexit(EIO, stderr, "Cannot stat path '%s'!\n", item->path);
+        i2hmessageexit(EIO, stderr, "Cannot stat path '%s'!\n", item->args.path);
     
     if(buf.st_size > INT_MAX)
-        i2hmessageexit(EINVAL, stderr, "Oversize file '%s' >%d bytes!\n", item->path, INT_MAX);
+        i2hmessageexit(EINVAL, stderr, "Oversize file '%s' >%d bytes!\n", item->args.path, INT_MAX);
     
     packet = av_packet_alloc();
     if(!packet)
@@ -1805,7 +1885,7 @@ static int  i2h_universe_item_handle_binary       (UNIVERSE* u, ITEM* item){
     
     len = read(fd, packet->data, packet->size);
     if(len != (ssize_t)packet->size)
-        i2hmessageexit(EIO, stderr, "Failed to read '%s' fully!\n", item->path);
+        i2hmessageexit(EIO, stderr, "Failed to read '%s' fully!\n", item->args.path);
     
     close(fd);
     
@@ -1828,15 +1908,15 @@ static int  i2h_universe_flatten                  (UNIVERSE* u){
     
     for(i=u->items; i; i=i->next){
         if(i2h_item_type_is_picture(i)){
-            if(i->want_thumbnail){
+            if(i->args.want_thumbnail){
                 n = i2h_item_new();
                 i2h_universe_item_find_free_id(u, &n->id);
-                n->path = i->path;
+                n->args.path = i->args.path;
                 n->name = "";
                 memcpy(n->type, i->type, 4);
                 n->primary = 0;
                 n->hidden = 0;
-                n->want_thumbnail = 0;
+                n->args.want_thumbnail = 0;
                 
             }
         }
@@ -2087,8 +2167,8 @@ static int  i2h_universe_do_output_ftyp               (UNIVERSE*        u){
     /* Sweep over the file to find codecs in use. */
     for(i=u->items; i; i=i->next){
         if(i2h_item_type_is_picture(i)){
-            uses_h264 |= i2h_is_codec_x264(i->pict.codec);
-            uses_h265 |= i2h_is_codec_x265(i->pict.codec);
+            uses_h264 |= i2h_is_codec_x264(i->frontend.pict.codec);
+            uses_h265 |= i2h_is_codec_x265(i->frontend.pict.codec);
         }
     }
     
@@ -2260,7 +2340,7 @@ static int i2h_parse_primary    (UNIVERSE* u, char*** argv){
 static int i2h_parse_thumbnail  (UNIVERSE* u, char*** argv){
     if(!i2h_parse_noconsume(argv))
         i2hmessageexit(EINVAL, stderr, "Option --thumb does not consume an argument!\n");
-    u->item->want_thumbnail = 1;
+    u->item->args.want_thumbnail = 1;
     return 1;
 }
 static int i2h_parse_name       (UNIVERSE* u, char*** argv){
@@ -2344,7 +2424,7 @@ static int i2h_parse_item       (UNIVERSE* u, char*** argv){
             memcpy(u->item->type, p, 4);
             p += 4;
         }else if(strstartswith(p, "path=")){
-            u->item->path = (p+=5);
+            u->item->args.path = (p+=5);
             break;
         }else{
             i2hmessageexit(EINVAL, stderr, "Unknown key '%s'\n", p);
