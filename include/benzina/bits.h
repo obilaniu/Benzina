@@ -211,6 +211,69 @@
 
 
 /**
+ * H.264 NALU nal_unit_types
+ * 
+ * A H.264 bitstream, at the Network Abstraction Layer (NAL), is divided into
+ * NALUs, of which there is a limited number of types only. The nal_unit_type
+ * is signalled in bits 4 downto 0 inclusive of the single-byte NAL unit header
+ * that begins the NALU.
+ * 
+ *     nal_unit(NumBytesInNALunit){
+ *         forbidden_zero_bit                f(1)    // Always == 0
+ *         nal_ref_idc                       u(2)
+ *         nal_unit_type                     u(5)
+ *         ... // 2-3 extension bytes if nal_unit_type in {14,20,21}...
+ *         ... // Escaped Raw Byte Sequence Payload
+ *     }
+ * 
+ * A small number of these NALU types are considered Video Coding Layer (VCL)
+ * NALU types, while most of them are not. Whether a NALU type is VCL or not
+ * depends on whether decoding is performed under the profiles described in
+ * Annex A, G/H or I/J.
+ * 
+ * References:
+ *     ITU-T H.264      2017-04    Table 7-1.
+ * 
+ *                                     nal_unit_type | VCL | Notes...                                                                                        | Syntax
+ *                                                   |Annex|                                                                                                 |
+ *                                                   | AGI |                                                                                                 |
+ */
+#define BENZINA_H264_NALU_TYPE_UNSPEC0          0  //| nnn | Unspecified                                                                                     |
+#define BENZINA_H264_NALU_TYPE_NOPART           1  //| yyy | Coded slice of a non-IDR picture                                                                | slice_layer_without_partitioning_rbsp()
+#define BENZINA_H264_NALU_TYPE_PARTA            2  //| ynn | Coded slice data partition A                                                                    | slice_data_partition_a_layer_rbsp()
+#define BENZINA_H264_NALU_TYPE_PARTB            3  //| ynn | Coded slice data partition B                                                                    | slice_data_partition_b_layer_rbsp()
+#define BENZINA_H264_NALU_TYPE_PARTC            4  //| ynn | Coded slice data partition C                                                                    | slice_data_partition_c_layer_rbsp()
+#define BENZINA_H264_NALU_TYPE_IDR              5  //| yyy | Coded slice of an IDR picture                                                                   | slice_layer_without_partitioning_rbsp()
+#define BENZINA_H264_NALU_TYPE_SEI              6  //| nnn | Supplemental Enhancement Information (SEI)                                                      | sei_rbsp()
+#define BENZINA_H264_NALU_TYPE_SPS              7  //| nnn | Sequence Parameter Set (SPS)                                                                    | seq_parameter_set_rbsp()
+#define BENZINA_H264_NALU_TYPE_PPS              8  //| nnn | Picture  Parameter Set (PPS)                                                                    | pic_parameter_set_rbsp()
+#define BENZINA_H264_NALU_TYPE_AUD              9  //| nnn | Access Unit Delimiter  (AUD)                                                                    | access_unit_delimiter_rbsp()
+#define BENZINA_H264_NALU_TYPE_ENDOFSEQUENCE   10  //| nnn | End Of Sequence        (EOSequence)                                                             | end_of_seq_rbsp()
+#define BENZINA_H264_NALU_TYPE_ENDOFSTREAM     11  //| nnn | End Of Stream          (EOStream)                                                               | end_of_stream_rbsp()
+#define BENZINA_H264_NALU_TYPE_FD              12  //| nnn | Filler Data            (FD)                                                                     | filler_data_rbsp()
+#define BENZINA_H264_NALU_TYPE_SPSX            13  //| nnn | Sequence Parameter Set Extension                                                                | seq_parameter_set_extension_rbsp()
+#define BENZINA_H264_NALU_TYPE_PREFIX          14  //| n?? | Prefix NAL unit                                                                                 | prefix_nal_unit_rbsp()
+#define BENZINA_H264_NALU_TYPE_SSPS            15  //| nnn | Subset Sequence Parameter Set                                                                   | subset_seq_parameter_set_rbsp()
+#define BENZINA_H264_NALU_TYPE_DPS             16  //| nnn | Depth Parameter Set                                                                             | depth_parameter_set_rbsp()
+#define BENZINA_H264_NALU_TYPE_RSV_NVCL22      17  //| nnn | Reserved non-VCL NAL unit type                                                                  |
+#define BENZINA_H264_NALU_TYPE_RSV_NVCL23      18  //| nnn | Reserved non-VCL NAL unit type                                                                  |
+#define BENZINA_H264_NALU_TYPE_IDR_W_RADL      19  //| nnn | Coded slice of an auxiliary coded picture without partitioning                                  | slice_layer_without_partitioning_rbsp()
+#define BENZINA_H264_NALU_TYPE_IDR_N_LP        20  //| nyy | Coded slice extension                                                                           | slice_layer_extension_rbsp()
+#define BENZINA_H264_NALU_TYPE_CRA_NUT         21  //| nny | Coded slice extension for a depth/3D-AVC texture view component                                 | slice_layer_extension_rbsp()
+#define BENZINA_H264_NALU_TYPE_RSV_VCL22       22  //| nny | Reserved                                                                                        |
+#define BENZINA_H264_NALU_TYPE_RSV_VCL23       23  //| nny | Reserved                                                                                        |
+#define BENZINA_H264_NALU_TYPE_UNSPEC24        24  //| nnn | Unspecified                                                                                     |
+#define BENZINA_H264_NALU_TYPE_UNSPEC25        25  //| nnn | Unspecified                                                                                     |
+#define BENZINA_H264_NALU_TYPE_UNSPEC26        26  //| nnn | Unspecified                                                                                     |
+#define BENZINA_H264_NALU_TYPE_UNSPEC27        27  //| nnn | Unspecified                                                                                     |
+#define BENZINA_H264_NALU_TYPE_UNSPEC28        28  //| nnn | Unspecified                                                                                     |
+#define BENZINA_H264_NALU_TYPE_UNSPEC29        29  //| nnn | Unspecified                                                                                     |
+#define BENZINA_H264_NALU_TYPE_UNSPEC30        30  //| nnn | Unspecified                                                                                     |
+#define BENZINA_H264_NALU_TYPE_UNSPEC31        31  //| nnn | Unspecified                                                                                     |
+
+
+
+/**
  * H.265 NALU nal_unit_types
  * 
  * A H.265 bitstream, at the Network Abstraction Layer (NAL), is divided into
