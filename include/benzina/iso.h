@@ -31,7 +31,7 @@ extern "C" {
 
 /* Data Structures Forward Declarations and Typedefs */
 typedef enum BENZ_BOX_TYPE             BENZ_BOX_TYPE;
-typedef const char*                    BENZ_BOX;
+typedef const void*                    BENZ_BOX;
 
 
 
@@ -89,30 +89,90 @@ enum BENZ_BOX_TYPE{
  * Inline Function Definitions for ISO BMFF support.
  */
 
-BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE uint8_t     benz_iso_as_u8                   (const char* p){
-    return *p;
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE uint8_t     benz_iso_as_u8                   (const void* p){
+    uint8_t x;
+    memcpy(&x, p, sizeof(x));
+    return x;
 }
-BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE uint16_t    benz_iso_as_u16                  (const char* p){
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE uint16_t    benz_iso_as_u16                  (const void* p){
     uint16_t x;
     memcpy(&x, p, sizeof(x));
     return benz_be16toh(x);
 }
-BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE uint32_t    benz_iso_as_u32                  (const char* p){
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE uint32_t    benz_iso_as_u32                  (const void* p){
     uint32_t x;
     memcpy(&x, p, sizeof(x));
     return benz_be32toh(x);
 }
-BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE uint64_t    benz_iso_as_u64                  (const char* p){
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE uint64_t    benz_iso_as_u64                  (const void* p){
     uint64_t x;
     memcpy(&x, p, sizeof(x));
     return benz_be64toh(x);
 }
-BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE uint64_t    benz_iso_is_type_equal           (const char* p, const char* type){
-    return memcmp(p, type, 4) == 0;
+BENZINA_PUBLIC                        BENZINA_INLINE uint8_t     benz_iso_get_u8                  (const void* p, const void** pOut){
+    uint8_t x = benz_iso_as_u8(p);
+    *pOut = (const char*)p + sizeof(x);
+    return x;
+}
+BENZINA_PUBLIC                        BENZINA_INLINE uint16_t    benz_iso_get_u16                 (const void* p, const void** pOut){
+    uint16_t x = benz_iso_as_u16(p);
+    *pOut = (const char*)p + sizeof(x);
+    return x;
+}
+BENZINA_PUBLIC                        BENZINA_INLINE uint32_t    benz_iso_get_u32                 (const void* p, const void** pOut){
+    uint32_t x = benz_iso_as_u32(p);
+    *pOut = (const char*)p + sizeof(x);
+    return x;
+}
+BENZINA_PUBLIC                        BENZINA_INLINE uint64_t    benz_iso_get_u64                 (const void* p, const void** pOut){
+    uint64_t x = benz_iso_as_u64(p);
+    *pOut = (const char*)p + sizeof(x);
+    return x;
+}
+BENZINA_PUBLIC                        BENZINA_INLINE const char* benz_iso_get_asciz               (const void* p, const void** pOut){
+    size_t len = strlen(p);
+    *pOut = (const char*)p + len + 1;
+    return p;
+}
+BENZINA_PUBLIC                        BENZINA_INLINE void*       benz_iso_put_u8                  (void*       p, uint8_t  x){
+    memcpy(p, &x, sizeof(x));
+    return (char*)p + sizeof(x);
+}
+BENZINA_PUBLIC                        BENZINA_INLINE void*       benz_iso_put_u16                 (void*       p, uint16_t x){
+    x = benz_htobe16(x);
+    memcpy(p, &x, sizeof(x));
+    return (char*)p + sizeof(x);
+}
+BENZINA_PUBLIC                        BENZINA_INLINE void*       benz_iso_put_u32                 (void*       p, uint32_t x){
+    x = benz_htobe32(x);
+    memcpy(p, &x, sizeof(x));
+    return (char*)p + sizeof(x);
+}
+BENZINA_PUBLIC                        BENZINA_INLINE void*       benz_iso_put_u64                 (void*       p, uint64_t x){
+    x = benz_htobe64(x);
+    memcpy(p, &x, sizeof(x));
+    return (char*)p + sizeof(x);
+}
+BENZINA_PUBLIC                        BENZINA_INLINE void*       benz_iso_put_ascii               (void*       p, const char* str){
+    size_t len = strlen(str);
+    memcpy(p, str, len);
+    return (char*)p + len;
+}
+BENZINA_PUBLIC                        BENZINA_INLINE void*       benz_iso_put_asciz               (void*       p, const char* str){
+    size_t len = strlen(str)+1;
+    memcpy(p, str, len);
+    return (char*)p + len;
+}
+BENZINA_PUBLIC                        BENZINA_INLINE void*       benz_iso_put_bytes               (void*       p, const void* buf, uint64_t len){
+    memcpy(p, buf, len);
+    return (char*)p + len;
+}
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE int         benz_iso_is_type_equal           (const void* p, const void* type){
+    return memcmp(p, type, sizeof(uint32_t)) == 0;
 }
 BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE uint64_t    benz_iso_box_get_size            (BENZ_BOX    p){
-    uint32_t size = benz_iso_as_u32(p+0);
-    return size != 1 ? size : benz_iso_as_u64(p+8);
+    uint32_t size = benz_iso_as_u32(p);
+    return size != 1 ? size : benz_iso_as_u64((const char*)p+8);
 }
 BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE uint64_t    benz_iso_box_get_size_bounded    (BENZ_BOX    p, uint64_t max_size){
     if(max_size < 8){return max_size;}
@@ -120,24 +180,24 @@ BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE uint64_t    benz_iso_box_ge
     return size && size <= max_size ? size : max_size;
 }
 BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE const char* benz_iso_box_get_type_str        (BENZ_BOX    p){
-    return p+4;
+    return (const char*)p+4;
 }
 BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE uint32_t    benz_iso_box_get_type            (BENZ_BOX    p){
-    return benz_iso_as_u32(p+4);
+    return benz_iso_as_u32((const char*)p+4);
 }
-BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE int         benz_iso_box_is_type             (BENZ_BOX    p, const char* type){
-    return benz_iso_is_type_equal(p+4, type);
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE int         benz_iso_box_is_type             (BENZ_BOX    p, const void* type){
+    return benz_iso_is_type_equal((const char*)p+4, type);
 }
 BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE const char* benz_iso_box_get_exttype         (BENZ_BOX    p){
     size_t offset;
     if(!benz_iso_box_is_type(p, "uuid")){return NULL;}
-    offset = benz_iso_as_u32(p+0) == 1 ? 16 : 8;
+    offset = benz_iso_as_u32(p) == 1 ? 16 : 8;
     return (const char*)p + offset;
 }
-BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE const char* benz_iso_box_get_payload         (BENZ_BOX    p){
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE const void* benz_iso_box_get_payload         (BENZ_BOX    p){
     size_t   offset = 8;
     offset += benz_iso_box_is_type(p, "uuid") ? 16 : 0;
-    offset += benz_iso_as_u32(p+0)       == 1 ?  8 : 0;
+    offset += benz_iso_as_u32(p)         == 1 ?  8 : 0;
     return (const char*)p + offset;
 }
 BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE uint64_t    benz_iso_fullbox_get_size        (BENZ_BOX    p){
@@ -152,7 +212,7 @@ BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE const char* benz_iso_fullbo
 BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE uint64_t    benz_iso_fullbox_get_type        (BENZ_BOX    p){
     return benz_iso_box_get_type(p);
 }
-BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE int         benz_iso_fullbox_is_type         (BENZ_BOX    p, const char* type){
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE int         benz_iso_fullbox_is_type         (BENZ_BOX    p, const void* type){
     return benz_iso_box_is_type(p, type);
 }
 BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE const char* benz_iso_fullbox_get_exttype     (BENZ_BOX    p){
@@ -167,8 +227,8 @@ BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE uint32_t    benz_iso_fullbo
 BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE uint32_t    benz_iso_fullbox_get_flags       (BENZ_BOX    p){
     return benz_iso_fullbox_get_flagver(p) & 0xFFFFFFUL;
 }
-BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE const char* benz_iso_fullbox_get_payload     (BENZ_BOX    p){
-    return benz_iso_box_get_payload(p) + 4;
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE const void* benz_iso_fullbox_get_payload     (BENZ_BOX    p){
+    return (const char*)benz_iso_box_get_payload(p) + 4;
 }
 
 
