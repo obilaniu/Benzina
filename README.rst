@@ -9,7 +9,6 @@
 |pypi| |docs|
 
 
-=================
 Бензина / Benzina
 =================
 
@@ -20,7 +19,7 @@ Description of the project
 Benzina is an image loading library that accelerates image loading and preprocessing
 by making use of the hardware decoder in NVIDIA's GPUs.
 
-Since it minimize the use of the CPU and of the GPU computing units, it's easier
+Since it minimizes the use of the CPU and of the GPU computing units, it is easier
 to reach saturation of GPU computing power / CPU. In our tests using ResNet18 models
 in PyTorch on the ImageNet 2012 dataset, we could observe an increase by 2.4x the
 amount of images loaded, preprocessed then processed by the model when using a
@@ -76,7 +75,7 @@ how this can be done with an ImageNet dataset. It is based on the
         batch_size=256,
         sampler=train_sampler,
         seed=seed,
-        shape=(224,224),
+        shape=(224, 224),
         bias_transform=bias,
         norm_transform=std,
         warp_transform=ops.SimilarityTransform(flip_h=0.5))
@@ -85,7 +84,7 @@ how this can be done with an ImageNet dataset. It is based on the
         batch_size=512,
         sampler=valid_sampler,
         seed=seed,
-        shape=(224,224),
+        shape=(224, 224),
         bias_transform=bias,
         norm_transform=std,
         warp_transform=ops.SimilarityTransform())
@@ -98,29 +97,25 @@ how this can be done with an ImageNet dataset. It is based on the
         accuracy = validate(valid_dataloader, ...)
 
 
-==========================================
 `Objectives <https://benzina.readthedocs.io/en/latest/objectives.html>`_
-==========================================
-
-
-=============================================
-`Known limitations <https://benzina.readthedocs.io/en/latest/limits.html>`_
-=============================================
-
-
-====================================
-`Roadmap <https://benzina.readthedocs.io/en/latest/roadmap.html>`_
-====================================
-
-
-==========================================================
-`How to Contribute <https://benzina.readthedocs.io/en/latest/contribution/_index.html>`_
-==========================================================
-
-
-`Submitting bugs <https://benzina.readthedocs.io/en/latest/contribution/_index.html#submitting-bugs>`_
 ========================================================================
 
 
+`Known limitations <https://benzina.readthedocs.io/en/latest/limits.html>`_
+===========================================================================
+
+
+`Roadmap <https://benzina.readthedocs.io/en/latest/roadmap.html>`_
+==================================================================
+
+
+`How to Contribute <https://benzina.readthedocs.io/en/latest/contribution/_index.html>`_
+========================================================================================
+
+
+`Submitting bugs <https://benzina.readthedocs.io/en/latest/contribution/_index.html#submitting-bugs>`_
+======================================================================================================
+
+
 `Contributing changes <https://benzina.readthedocs.io/en/latest/contribution/_index.html#contributing-changes>`_
-==================================================================================
+================================================================================================================
