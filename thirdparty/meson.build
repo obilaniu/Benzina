@@ -67,6 +67,7 @@ endif
 # The driver version determines the NVIDIA Video Codec SDK version available.
 # Note down some useful constants.
 #
+NVIDIA_DRIVER_9_1 = IS_HOST_WINDOWS ? '436.15' : '435.21'
 NVIDIA_DRIVER_9_0 = IS_HOST_WINDOWS ? '418.81' : '418.30'
 NVIDIA_DRIVER_8_2 = IS_HOST_WINDOWS ? '397.93' : '396.24'
 NVIDIA_DRIVER_8_1 = IS_HOST_WINDOWS ? '390.77' : '390.25'
@@ -78,7 +79,7 @@ NVIDIA_DRIVER_8_0 = IS_HOST_WINDOWS ? '378.66' : '378.13'
 # or the CUDA Toolkit is missing. Either way, decide which NVIDIA driver version
 # we will build for by progressively bracketing it down.
 #
-NVIDIA_DRIVER_MAX = IS_HOST_WINDOWS ? '419.67' : '418.56'
+NVIDIA_DRIVER_MAX = IS_HOST_WINDOWS ? '436.15' : '435.21'
 NVIDIA_DRIVER_MIN = IS_HOST_WINDOWS ? '378.66' : '378.13'
 if CUDA_VERSION != 'unknown'
   NVIDIA_DRIVER_MIN = CUDA_MODULE.min_driver_version(CUDA_VERSION)
