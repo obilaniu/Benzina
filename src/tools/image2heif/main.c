@@ -141,9 +141,7 @@ struct ITEM{
     union{
         struct{
             AVCodecContext* codec_ctx;
-            PACKETLIST*     packet_list;
-            PACKETLIST*     thumb_packet_list;
-            PACKETLIST*     grid_packet_list;
+            
         } pict;
     } middleend;
     
@@ -174,10 +172,25 @@ struct ITEM{
     } backend;
     
     struct{
+        AVCodecContext* codec_ctx;
+        ITEM*           thumb_item;
+        ITEM*           grid_items;
         struct{
+            struct{uint32_t w, h;} grid_clap, ispe;
             AVFrame* frame;
+            uint32_t num_packets;
         } grid, thumb;
+        struct{uint32_t w, h;} tile;
     } pict;
+    struct{
+        
+    } grid;
+    struct{
+        
+    } iden;
+    struct{
+        
+    } mime;
     
     PACKETLIST* packetlist;
     IREF*       refs;
@@ -266,12 +279,11 @@ static int   i2h_item_type_is_picture             (ITEM* item);
 static int   i2h_item_picture_fe_read_frame       (ITEM* item);
 static int   i2h_item_picture_fe_make_grid_frame  (ITEM* item);
 static int   i2h_item_picture_fe_make_thumb_frame (ITEM* item);
-static int   i2h_item_picture_me_encoder_configure(ITEM* item, UNIVERSE* u);
-static int   i2h_item_picture_me_encoder_deconfigure(ITEM* item);
-static int   i2h_item_picture_me_push_grid_frames (ITEM* item);
-static int   i2h_item_picture_me_push_thumb_frames(ITEM* item);
-static int   i2h_item_picture_me_push_frame       (ITEM* item, AVFrame* frame);
-static int   i2h_item_picture_me_append_packet    (ITEM* item, AVPacket* packet);
+static int   i2h_item_picture_encoder_configure   (ITEM* item, AVFrame* frame, UNIVERSE* u);
+static void  i2h_item_picture_encoder_deconfigure (ITEM* item);
+static int   i2h_item_picture_push_grid_frames    (ITEM* item);
+static int   i2h_item_picture_push_thumb_frames   (ITEM* item);
+static int   i2h_item_picture_push_frame          (ITEM* item, AVFrame* frame);
 static int   i2h_item_append_packet               (ITEM* item, AVPacket* packet);
 
 static int   i2h_iref_append                      (IREF** refs, IREF* iref);
@@ -1281,8 +1293,8 @@ static int   i2h_item_picture_fe_read_frame       (ITEM* item){
     item->frontend.pict.thumb_ispe.h     = item->args.tile.h;
     item->frontend.pict.grid_clap.w      = item->frontend.pict.frame->width;
     item->frontend.pict.grid_clap.h      = item->frontend.pict.frame->height;
-    item->frontend.pict.grid_ispe.w      = (item->frontend.pict.grid_clap.w + item->args.tile.w - 1)/item->args.tile.w*item->args.tile.w;
-    item->frontend.pict.grid_ispe.h      = (item->frontend.pict.grid_clap.h + item->args.tile.h - 1)/item->args.tile.h*item->args.tile.h;
+    item->frontend.pict.grid_ispe.w      = (item->frontend.pict.grid_clap.w + item->args.tile.w - 1)/item->args.tile.w;
+    item->frontend.pict.grid_ispe.h      = (item->frontend.pict.grid_clap.h + item->args.tile.h - 1)/item->args.tile.h;
     item->frontend.pict.single_tile      = item->frontend.pict.grid_clap.w <= item->args.tile.w &&
                                            item->frontend.pict.grid_clap.h <= item->args.tile.h;
     item->frontend.pict.single_tile_ltbx = (uint64_t)item->frontend.pict.grid_clap.w*item->args.tile.h >=
@@ -1388,7 +1400,8 @@ static int   i2h_item_picture_fe_make_thumb_frame (ITEM* item){
  * @return 0 if successful; !0 otherwise.
  */
 
-static int   i2h_item_picture_me_encoder_configure(ITEM*     item,
+static int  i2h_item_picture_encoder_configure    (ITEM*     item,
+                                                   AVFrame*  frame,
                                                    UNIVERSE* u){
     int           ret;
     char          x26x_params_str[1024];
@@ -1400,13 +1413,11 @@ static int   i2h_item_picture_me_encoder_configure(ITEM*     item,
     const char*   transfer_str;
     const char*   colormatrix_str;
     AVDictionary* codec_ctx_opt = NULL;
-    AVFrame*      frame = item->frontend.pict.frame;
-    unsigned      crf = u->out.crf;
     
     
     /* Allocate context. */
-    item->middleend.pict.codec_ctx = avcodec_alloc_context3(item->frontend.pict.codec);
-    if(!item->middleend.pict.codec_ctx)
+    item->pict.codec_ctx = avcodec_alloc_context3(item->frontend.pict.codec);
+    if(!item->pict.codec_ctx)
         i2hmessageexit(ENOMEM, stderr, "Could not allocate encoder!\n");
     
     
@@ -1444,35 +1455,33 @@ static int   i2h_item_picture_me_encoder_configure(ITEM*     item,
                  *x26x_params_args ? ":"              : "",
                  *x26x_params_args ? x26x_params_args : "");
     }
-    item->middleend.pict.codec_ctx->width                  = item->args.tile.w;
-    item->middleend.pict.codec_ctx->height                 = item->args.tile.h;
-    item->middleend.pict.codec_ctx->time_base.num          =  1;  /* Nominal 30 fps */
-    item->middleend.pict.codec_ctx->time_base.den          = 30;  /* Nominal 30 fps */
-    item->middleend.pict.codec_ctx->gop_size               =  0;  /* Intra only */
-    item->middleend.pict.codec_ctx->pix_fmt                = frame->format;
-    item->middleend.pict.codec_ctx->chroma_sample_location = frame->chroma_location;
-    item->middleend.pict.codec_ctx->color_range            = frame->color_range;
-    item->middleend.pict.codec_ctx->color_primaries        = frame->color_primaries;
-    item->middleend.pict.codec_ctx->color_trc              = frame->color_trc;
-    item->middleend.pict.codec_ctx->colorspace             = frame->colorspace;
-    item->middleend.pict.codec_ctx->sample_aspect_ratio    = frame->sample_aspect_ratio;
-    item->middleend.pict.codec_ctx->flags                 |= AV_CODEC_FLAG_LOOP_FILTER |
-                                                             AV_CODEC_FLAG_GLOBAL_HEADER;
-    item->middleend.pict.codec_ctx->thread_count           = 1;
-    item->middleend.pict.codec_ctx->thread_type            = FF_THREAD_FRAME;
-    item->middleend.pict.codec_ctx->slices                 = 1;
+    item->pict.codec_ctx->width                  = item->args.tile.w;
+    item->pict.codec_ctx->height                 = item->args.tile.h;
+    item->pict.codec_ctx->time_base.num          =  1;  /* Nominal 30 fps */
+    item->pict.codec_ctx->time_base.den          = 30;  /* Nominal 30 fps */
+    item->pict.codec_ctx->gop_size               =  0;  /* Intra only */
+    item->pict.codec_ctx->pix_fmt                = frame->format;
+    item->pict.codec_ctx->chroma_sample_location = frame->chroma_location;
+    item->pict.codec_ctx->color_range            = frame->color_range;
+    item->pict.codec_ctx->color_primaries        = frame->color_primaries;
+    item->pict.codec_ctx->color_trc              = frame->color_trc;
+    item->pict.codec_ctx->colorspace             = frame->colorspace;
+    item->pict.codec_ctx->sample_aspect_ratio    = frame->sample_aspect_ratio;
+    item->pict.codec_ctx->flags                 |= AV_CODEC_FLAG_LOOP_FILTER |
+                                                   AV_CODEC_FLAG_GLOBAL_HEADER;
+    item->pict.codec_ctx->thread_count           = 1;
+    item->pict.codec_ctx->thread_type            = FF_THREAD_FRAME;
+    item->pict.codec_ctx->slices                 = 1;
     av_dict_set    (&codec_ctx_opt, "profile",    x26x_profile,    0);
     av_dict_set    (&codec_ctx_opt, "preset",     "placebo",       0);
     av_dict_set    (&codec_ctx_opt, "tune",       "ssim",          0);
     av_dict_set_int(&codec_ctx_opt, "forced-idr", 1,               0);
-    av_dict_set_int(&codec_ctx_opt, "crf",        crf,             0);
+    av_dict_set_int(&codec_ctx_opt, "crf",        u->out.crf,      0);
     av_dict_set    (&codec_ctx_opt, x26x_params,  x26x_params_str, 0);
     
     
     /* Open context. */
-    ret = avcodec_open2(item->middleend.pict.codec_ctx,
-                        item->frontend.pict.codec,
-                        &codec_ctx_opt);
+    ret = avcodec_open2(item->pict.codec_ctx, item->frontend.pict.codec, &codec_ctx_opt);
     if(av_dict_count(codec_ctx_opt)){
         AVDictionaryEntry* entry = NULL;
         i2hmessage(stderr, "Warning: codec ignored %d options!\n",
@@ -1482,45 +1491,39 @@ static int   i2h_item_picture_me_encoder_configure(ITEM*     item,
         }
     }
     av_dict_free(&codec_ctx_opt);
+    if(ret < 0)
+        i2hmessageexit(ret, stderr, "Could not open encoder! (%d)\n", ret);
     
-    
-    /* Exit */
-    return ret;
-}
-static int   i2h_item_picture_me_encoder_deconfigure(ITEM* item){
-    avcodec_free_context(&item->middleend.pict.codec_ctx);
     return 0;
+}
+static void i2h_item_picture_encoder_deconfigure  (ITEM* item){
+    /* Do not deconfigure encoder for non-pict items. */
+    if(!i2h_item_type_is_picture(item)){return;}
+    
+    avcodec_free_context(&item->pict.codec_ctx);
 }
 
 /**
- * @brief Push picture grid/tile frames.
+ * @brief Make picture grid/tile items.
  * 
  * @param [in,out]  u           The universe we're operating over.
- * @param [in,out]  item        The item for which a grid and tile frames are to
- *                              be encoded.
+ * @param [in,out]  item        The item for which a grid and tile items are to
+ *                              be generated.
  * @return 0 if successful; !0 otherwise.
  */
 
-static int   i2h_item_picture_me_push_grid_frames (ITEM* item){
-    int j, tile_w=item->args.tile.w;
-    int i, tile_h=item->args.tile.h;
-    int grid_rows=item->frontend.pict.grid_ispe.h/tile_h;
-    int grid_cols=item->frontend.pict.grid_ispe.w/tile_w;
+static int   i2h_item_picture_push_grid_frames    (ITEM* item){
+    int j, tile_w=item->pict.codec_ctx->width;
+    int i, tile_h=item->pict.codec_ctx->height;
+    int grid_rows=item->pict.grid.ispe.h/tile_h;
+    int grid_cols=item->pict.grid.ispe.w/tile_w;
     int ret;
     
-    if(item->args.want_thumbnail &&
-       item->frontend.pict.single_tile){
-        /**
-         * The single tile to encode was already pushed in for
-         * the thumbnail image.
-         */
-        
-        return 0;
-    }
+    if(!i2h_item_type_is_picture(item)){return 0;}
     
     for(i=0;i<grid_rows;i++){
         for(j=0;j<grid_cols;j++){
-            AVFrame* frame = av_frame_clone(item->frontend.pict.grid_frame);
+            AVFrame* frame = av_frame_clone(item->pict.grid.frame);
             frame->crop_top    = tile_h * (i);
             frame->crop_bottom = tile_h * (grid_rows-i-1);
             frame->crop_left   = tile_w * (j);
@@ -1530,25 +1533,23 @@ static int   i2h_item_picture_me_push_grid_frames (ITEM* item){
             if(ret < 0)
                 i2hmessageexit(ret, stderr, "Error applying cropping (%d)!\n", ret);
             
-            ret = i2h_item_picture_me_push_frame(item, frame);
+            ret = i2h_item_picture_push_frame(item, frame);
             if(ret != 0)
                 i2hmessageexit(ret, stderr, "Error pushing grid tile into encoder (%d)!\n", ret);
             
+            item->pict.grid.num_packets++;
             av_frame_free(&frame);
         }
     }
     
     return 0;
 }
-static int   i2h_item_picture_me_push_thumb_frames(ITEM* item){
-    int ret;
-    
-    if(!item->args.want_thumbnail)
-        return 0;
-    
-    ret = i2h_item_picture_me_push_frame(item, item->frontend.pict.thumb_frame);
+static int   i2h_item_picture_push_thumb_frames   (ITEM* item){
+    int ret = i2h_item_picture_push_frame(item, item->pict.thumb.frame);
     if(ret != 0)
         i2hmessageexit(ret, stderr, "Error pushing thumbnail tile into encoder (%d)!\n", ret);
+    
+    item->pict.thumb.num_packets++;
     
     return ret;
 }
@@ -1560,8 +1561,8 @@ static int   i2h_item_picture_me_push_thumb_frames(ITEM* item){
  * @return 0 if successful, !0 otherwise.
  */
 
-static int   i2h_item_picture_me_push_frame       (ITEM* item, AVFrame* frame){
-    int retpush, retpull=0, flush=!frame, retrypush;
+static int   i2h_item_picture_push_frame          (ITEM* item, AVFrame* frame){
+    int retpush, retpull;
     
     if(frame){
         frame->pts = frame->best_effort_timestamp;
@@ -1570,34 +1571,20 @@ static int   i2h_item_picture_me_push_frame       (ITEM* item, AVFrame* frame){
     }
     
     do{
-        retpush   = avcodec_send_frame(item->middleend.pict.codec_ctx, frame);
-        retrypush = retpush == AVERROR(EAGAIN);
-        if(retrypush || flush){
-            /**
-             * Encoder wants us to pull out packets from its output. We do so
-             * to allow ourselves to reattempt pushing frames into the encoder.
-             */
+        retpush = avcodec_send_frame(item->pict.codec_ctx, frame);
+        do{
+            AVPacket* packet = av_packet_alloc();
+            if(!packet)
+                i2hmessageexit(ENOMEM, stderr, "Failed to allocate packet object!\n");
             
-            do{
-                AVPacket* packet = av_packet_alloc();
-                if(!packet)
-                    i2hmessageexit(ENOMEM, stderr, "Failed to allocate packet object!\n");
-                
-                retpull = avcodec_receive_packet(item->middleend.pict.codec_ctx, packet);
-                if(retpull == 0){
-                    i2h_item_picture_me_append_packet(item, packet);
-                }else{
-                    /**
-                     * The probable reason for ending up here is AVERROR(EAGAIN),
-                     * indicating that the encoder no longer has packets to give
-                     * us from its output. This is not problematic per se.
-                     */
-                    
-                    av_packet_free(&packet);
-                }
-            }while(retpull == 0);
-        }
-    }while(retrypush);
+            retpull = avcodec_receive_packet(item->pict.codec_ctx, packet);
+            if(retpull >= 0){
+                i2h_item_append_packet(item, packet);
+            }else{
+                av_packet_free(&packet);
+            }
+        }while(retpull >= 0);
+    }while(retpush == AVERROR(EAGAIN));
     
     if(retpush < 0){
         if(frame){
@@ -1611,20 +1598,7 @@ static int   i2h_item_picture_me_push_frame       (ITEM* item, AVFrame* frame){
 }
 
 /**
- * @brief Append packet to picture item's packet list.
- * 
- * @param [in,out]  Item to which to append a packet.
- * @param [in]      Packet to append.
- * @return 0 if successful, !0 otherwise.
- */
-
-static int   i2h_item_picture_me_append_packet    (ITEM* item, AVPacket* packet){
-    return i2h_packetlist_append(&item->middleend.pict.packet_list, packet);
-}
-
-/**
  * @brief Append packet to item.
- * 
  * @param [in,out]  Item to which to append a packet.
  * @param [in]      Packet to append.
  * @return 0 if successful, !0 otherwise.
@@ -1812,33 +1786,30 @@ static int  i2h_universe_item_handle_picture      (UNIVERSE* u, ITEM* item){
     
     /**
      * MIDDLEEND:
-     *    1. Configure encoder.
-     *    2. (Optional) Encode thumbnail tile.
-     *    3. Encode grid tiles.
-     *    4. Flush encoder.
-     *    5. Release encoder.
-     *    6. Split/duplicate single list of packets between thumbnail and grid tiles.
-     *    7. Create new items and fill them.
-     *    8. If this item is not single-tile,
-     *        8.1 Transmute to "grid".
-     *        8.2 Compute grid references.
+     *    1. (Optional) Encode thumbnail tile.
+     *    2. Encode grid tiles.
+     *    3. Flush encoder.
+     *    4. Split/duplicate single list of packets between thumbnail and grid tiles.
+     *    5. Create new items and fill them.
+     *    6. If this item is not single-tile,
+     *        6.1 Transmute to "grid".
+     *        6.2 Compute grid references.
      */
     
-    ret = i2h_item_picture_me_encoder_configure(item, u);
-    if(ret < 0)
-        i2hmessageexit(ret, stderr, "Could not open encoder! (%d)\n", ret);
-    ret = i2h_item_picture_me_push_thumb_frames(item);
-    if(ret < 0)
-        i2hmessageexit(ret, stderr, "Error pushing thumbnail frame into encoder! (%d)\n", ret);
-    ret = i2h_item_picture_me_push_grid_frames(item);
-    if(ret < 0)
-        i2hmessageexit(ret, stderr, "Error pushing grid frames into encoder! (%d)\n", ret);
-    ret = i2h_item_picture_me_push_frame(item, NULL);
-    if(ret < 0)
-        i2hmessageexit(ret, stderr, "Failed to flush encoder! (%d)\n", ret);
-    ret = i2h_item_picture_me_encoder_deconfigure(item);
-    if(ret < 0)
-        i2hmessageexit(ret, stderr, "Failed to deallocate encoder! (%d)\n", ret);
+    /**
+     * Push encoded tiles into the encoder.
+     * Pull the output packet from the encoder.
+     * 
+     * Flushing the input encode pipeline requires pushing in a NULL frame.
+     */
+    
+    i2h_item_picture_encoder_configure(item, item->pict.grid.frame, u);
+    i2h_item_picture_push_grid_frames(item);
+    if(item->args.want_thumbnail){
+        i2h_item_picture_push_thumb_frames(item);
+    }
+    i2h_item_picture_push_frame(item, NULL);
+    i2h_item_picture_encoder_deconfigure(item);
     
     
 #if 1
