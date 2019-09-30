@@ -5,12 +5,13 @@
 # parsing code.
 #
 
-libbenzina_srcs    = files('benzina.c',
-                           'benzinaproto.c',
-                           'endian.c',
-                           'init.c',
-                           'iso.c',
-                           'version.c')
+libbenzina_srcs     = files('benzina.c',
+                            'benzinaproto.c',
+                            'bitops.c',
+                            'endian.c',
+                            'init.c',
+                            'iso.c',
+                            'version.c')
 libbenzina_map_name = 'libbenzina.map'
 libbenzina_map_file = files(libbenzina_map_name)
 libbenzina_map      = meson.current_source_dir()/libbenzina_map_name
