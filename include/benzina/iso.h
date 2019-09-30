@@ -90,24 +90,16 @@ enum BENZ_BOX_TYPE{
  */
 
 BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE uint8_t     benz_iso_as_u8                   (const void* p){
-    uint8_t x;
-    memcpy(&x, p, sizeof(x));
-    return x;
+    return benz_getbe8(p);
 }
 BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE uint16_t    benz_iso_as_u16                  (const void* p){
-    uint16_t x;
-    memcpy(&x, p, sizeof(x));
-    return benz_be16toh(x);
+    return benz_getbe16(p);
 }
 BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE uint32_t    benz_iso_as_u32                  (const void* p){
-    uint32_t x;
-    memcpy(&x, p, sizeof(x));
-    return benz_be32toh(x);
+    return benz_getbe32(p);
 }
 BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE uint64_t    benz_iso_as_u64                  (const void* p){
-    uint64_t x;
-    memcpy(&x, p, sizeof(x));
-    return benz_be64toh(x);
+    return benz_getbe64(p);
 }
 BENZINA_PUBLIC                        BENZINA_INLINE uint8_t     benz_iso_get_u8                  (const void* p, const void** pOut){
     uint8_t x = benz_iso_as_u8(p);
@@ -135,22 +127,19 @@ BENZINA_PUBLIC                        BENZINA_INLINE const char* benz_iso_get_as
     return p;
 }
 BENZINA_PUBLIC                        BENZINA_INLINE void*       benz_iso_put_u8                  (void*       p, uint8_t  x){
-    memcpy(p, &x, sizeof(x));
+    benz_putbe8(p, x);
     return (char*)p + sizeof(x);
 }
 BENZINA_PUBLIC                        BENZINA_INLINE void*       benz_iso_put_u16                 (void*       p, uint16_t x){
-    x = benz_htobe16(x);
-    memcpy(p, &x, sizeof(x));
+    benz_putbe16(p, x);
     return (char*)p + sizeof(x);
 }
 BENZINA_PUBLIC                        BENZINA_INLINE void*       benz_iso_put_u32                 (void*       p, uint32_t x){
-    x = benz_htobe32(x);
-    memcpy(p, &x, sizeof(x));
+    benz_putbe32(p, x);
     return (char*)p + sizeof(x);
 }
 BENZINA_PUBLIC                        BENZINA_INLINE void*       benz_iso_put_u64                 (void*       p, uint64_t x){
-    x = benz_htobe64(x);
-    memcpy(p, &x, sizeof(x));
+    benz_putbe64(p, x);
     return (char*)p + sizeof(x);
 }
 BENZINA_PUBLIC                        BENZINA_INLINE void*       benz_iso_put_ascii               (void*       p, const char* str){

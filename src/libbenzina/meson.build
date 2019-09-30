@@ -7,9 +7,9 @@
 
 libbenzina_srcs     = files('benzina.c',
                             'benzinaproto.c',
-                            'bitops.c',
                             'endian.c',
                             'init.c',
+                            'intops.c',
                             'iso.c',
                             'version.c')
 subdir('itu')

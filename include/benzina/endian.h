@@ -8,6 +8,7 @@
  */
 
 #include <stdint.h>
+#include <string.h>
 #include "benzina/config.h"
 #include "benzina/inline.h"
 #include "benzina/visibility.h"
@@ -55,6 +56,87 @@ BENZINA_PUBLIC BENZINA_ATTRIBUTE_ALWAYSINLINE BENZINA_ATTRIBUTE_CONST BENZINA_IN
 BENZINA_PUBLIC BENZINA_ATTRIBUTE_ALWAYSINLINE BENZINA_ATTRIBUTE_CONST BENZINA_INLINE uint64_t benz_le64toh(uint64_t x){return BENZ_PICK_BE_LE(benz_bswap64(x), x);}
 
 #undef BENZ_PICK_BE_LE
+
+
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_ALWAYSINLINE                         BENZINA_INLINE uint8_t  benz_getbe8 (const void* p){
+    uint8_t x;
+    memcpy(&x, p, sizeof(x));
+    return x;
+}
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_ALWAYSINLINE                         BENZINA_INLINE uint16_t benz_getbe16(const void* p){
+    uint16_t x;
+    memcpy(&x, p, sizeof(x));
+    return benz_be16toh(x);
+}
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_ALWAYSINLINE                         BENZINA_INLINE uint32_t benz_getbe32(const void* p){
+    uint32_t x;
+    memcpy(&x, p, sizeof(x));
+    return benz_be32toh(x);
+}
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_ALWAYSINLINE                         BENZINA_INLINE uint64_t benz_getbe64(const void* p){
+    uint64_t x;
+    memcpy(&x, p, sizeof(x));
+    return benz_be64toh(x);
+}
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_ALWAYSINLINE                         BENZINA_INLINE uint8_t  benz_getle8 (const void* p){
+    uint8_t x;
+    memcpy(&x, p, sizeof(x));
+    return x;
+}
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_ALWAYSINLINE                         BENZINA_INLINE uint16_t benz_getle16(const void* p){
+    uint16_t x;
+    memcpy(&x, p, sizeof(x));
+    return benz_le16toh(x);
+}
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_ALWAYSINLINE                         BENZINA_INLINE uint32_t benz_getle32(const void* p){
+    uint32_t x;
+    memcpy(&x, p, sizeof(x));
+    return benz_le32toh(x);
+}
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_ALWAYSINLINE                         BENZINA_INLINE uint64_t benz_getle64(const void* p){
+    uint64_t x;
+    memcpy(&x, p, sizeof(x));
+    return benz_le64toh(x);
+}
+
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_ALWAYSINLINE                         BENZINA_INLINE uint8_t  benz_putbe8 (void* p, uint8_t  x){
+    memcpy(p, &x, sizeof(x));
+    return x;
+}
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_ALWAYSINLINE                         BENZINA_INLINE uint16_t benz_putbe16(void* p, uint16_t x){
+    uint16_t y = benz_htobe16(x);
+    memcpy(p, &y, sizeof(y));
+    return x;
+}
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_ALWAYSINLINE                         BENZINA_INLINE uint32_t benz_putbe32(void* p, uint32_t x){
+    uint32_t y = benz_htobe32(x);
+    memcpy(p, &y, sizeof(y));
+    return x;
+}
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_ALWAYSINLINE                         BENZINA_INLINE uint64_t benz_putbe64(void* p, uint64_t x){
+    uint64_t y = benz_htobe64(x);
+    memcpy(p, &y, sizeof(y));
+    return x;
+}
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_ALWAYSINLINE                         BENZINA_INLINE uint8_t  benz_putle8 (void* p, uint8_t  x){
+    memcpy(p, &x, sizeof(x));
+    return x;
+}
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_ALWAYSINLINE                         BENZINA_INLINE uint16_t benz_putle16(void* p, uint16_t x){
+    uint16_t y = benz_htole16(x);
+    memcpy(p, &y, sizeof(y));
+    return x;
+}
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_ALWAYSINLINE                         BENZINA_INLINE uint32_t benz_putle32(void* p, uint32_t x){
+    uint32_t y = benz_htole32(x);
+    memcpy(p, &y, sizeof(y));
+    return x;
+}
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_ALWAYSINLINE                         BENZINA_INLINE uint64_t benz_putle64(void* p, uint64_t x){
+    uint64_t y = benz_htole64(x);
+    memcpy(p, &y, sizeof(y));
+    return x;
+}
 
 
 /* End Extern "C" and Include Guard */
