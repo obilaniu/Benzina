@@ -27,4 +27,5 @@ install_headers('attribute.h',
                 'visibility.h',
                 install_dir: includedir/'benzina')
 
+subdir('itu')
 subdir('plugins')

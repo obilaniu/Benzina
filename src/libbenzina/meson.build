@@ -12,6 +12,7 @@ libbenzina_srcs     = files('benzina.c',
                             'init.c',
                             'iso.c',
                             'version.c')
+subdir('itu')
 libbenzina_map_name = 'libbenzina.map'
 libbenzina_map_file = files(libbenzina_map_name)
 libbenzina_map      = meson.current_source_dir()/libbenzina_map_name
