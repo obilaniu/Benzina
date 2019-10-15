@@ -5,14 +5,6 @@
 # parsing code.
 #
 
-libbenzina_srcs     = files('benzina.c',
-                            'benzinaproto.c',
-                            'endian.c',
-                            'init.c',
-                            'intops.c',
-                            'iso.c',
-                            'version.c')
-subdir('itu')
 libbenzina_map_name = 'libbenzina.map'
 libbenzina_map_file = files(libbenzina_map_name)
 libbenzina_map      = meson.current_source_dir()/libbenzina_map_name
@@ -23,6 +15,16 @@ libbenzina_linkargs = []
 if cc.get_id() == 'gcc'
   libbenzina_linkargs += ['-Wl,--version-script='+libbenzina_map]
 endif
+libbenzina_srcs     = files('benzina.c',
+                            'benzinaproto.c',
+                            'endian.c',
+                            'init.c',
+                            'intops.c',
+                            'iso.c',
+                            'version.c')
+
+subdir('itu')
+
 libbenzina_sha = shared_library('benzina',             libbenzina_srcs,
                                 include_directories  : libbenzina_incs,
                                 dependencies         : libbenzina_deps,
