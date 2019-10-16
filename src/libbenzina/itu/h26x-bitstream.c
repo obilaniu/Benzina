@@ -26,8 +26,9 @@ BENZINA_PUBLIC BENZINA_EXTERN_INLINE void        benz_itu_h26xbs_skip_xn(BENZ_H2
 BENZINA_PUBLIC BENZINA_EXTERN_INLINE void        benz_itu_h26xbs_skip_xe(BENZ_H26XBS* bs);
 BENZINA_PUBLIC BENZINA_EXTERN_INLINE void        benz_itu_h26xbs_realign(BENZ_H26XBS* bs);
 
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint32_t    benz_itu_h26xbs_markcor(BENZ_H26XBS* bs);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h26xbs_eos    (BENZ_H26XBS* bs);
 BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint32_t    benz_itu_h26xbs_err    (BENZ_H26XBS* bs);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint32_t    benz_itu_h26xbs_markcor(BENZ_H26XBS* bs);
 
 
 

@@ -102,8 +102,9 @@ BENZINA_PUBLIC BENZINA_INLINE int64_t     benz_itu_h26xbs_read_se(BENZ_H26XBS* b
 BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_skip_xn(BENZ_H26XBS* bs, unsigned n);
 BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_skip_xe(BENZ_H26XBS* bs);
 
-BENZINA_PUBLIC BENZINA_INLINE uint32_t    benz_itu_h26xbs_markcor(BENZ_H26XBS* bs);
+BENZINA_PUBLIC BENZINA_INLINE int         benz_itu_h26xbs_eos    (BENZ_H26XBS* bs);
 BENZINA_PUBLIC BENZINA_INLINE uint32_t    benz_itu_h26xbs_err    (BENZ_H26XBS* bs);
+BENZINA_PUBLIC BENZINA_INLINE uint32_t    benz_itu_h26xbs_markcor(BENZ_H26XBS* bs);
 
 BENZINA_PUBLIC                void        benz_itu_h26xbs_bigfill(BENZ_H26XBS* bs);
 BENZINA_PUBLIC                void        benz_itu_h26xbs_bigskip(BENZ_H26XBS* bs, uint64_t n);
@@ -266,14 +267,14 @@ BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_realign(BENZ_H26XBS* b
 }
 
 /**
- * @brief Mark bitstream corrupt.
+ * @brief Check if bitstream parser is at end of stream.
  * 
  * @param [in]  bs  Bitstream Parser
- * @return Error mask.
+ * @return !0 if at EOS, 0 otherwise.
  */
 
-BENZINA_PUBLIC BENZINA_INLINE uint32_t    benz_itu_h26xbs_markcor(BENZ_H26XBS* bs){
-    return bs->errmask |= BENZ_H26XBS_ERR_CORRUPT;
+BENZINA_PUBLIC BENZINA_INLINE int         benz_itu_h26xbs_eos    (BENZ_H26XBS* bs){
+    return bs->nalulen==0 && bs->sregoff >= bs->headoff;
 }
 
 /**
@@ -287,6 +288,17 @@ BENZINA_PUBLIC BENZINA_INLINE uint32_t    benz_itu_h26xbs_err    (BENZ_H26XBS* b
     bs->errmask |= bs->sregoff <= bs->tailoff+64 ? 0 : BENZ_H26XBS_ERR_OVERREAD;
     bs->errmask |= bs->sregoff <= bs->headoff    ? 0 : BENZ_H26XBS_ERR_OVERREAD;
     return bs->errmask;
+}
+
+/**
+ * @brief Mark bitstream corrupt.
+ * 
+ * @param [in]  bs  Bitstream Parser
+ * @return Error mask.
+ */
+
+BENZINA_PUBLIC BENZINA_INLINE uint32_t    benz_itu_h26xbs_markcor(BENZ_H26XBS* bs){
+    return bs->errmask |= BENZ_H26XBS_ERR_CORRUPT;
 }
 
 /**
