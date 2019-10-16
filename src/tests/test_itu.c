@@ -50,7 +50,7 @@ int main(void){
     BENZ_H26XBS bs_STACK, *bs = &bs_STACK;
     
     
-    tstmessageflush(stdout, "1..24\n");
+    tstmessageflush(stdout, "1..33\n");
     
     
     /* Null pointer, 0 bytes {} */
@@ -73,30 +73,39 @@ int main(void){
     
     /* Non-null pointer, 1 bytes {0x03} */
     benz_itu_h26xbs_init(bs, "\x03", 1);
-    tstmessagetap(bs->naluptr != NULL,                  "non-null init, 1 bytes ptr");
-    tstmessagetap(!benz_itu_h26xbs_eos(bs),             "non-null init, 1 bytes !EOS");
-    tstmessagetap(!benz_itu_h26xbs_err(bs),             "non-null init, 1 bytes !ERR");
-    tstmessagetap(benz_itu_h26xbs_read_1b(bs)    == 0,  "non-null init, 1 bytes, 1 bit read");
-    tstmessagetap(benz_itu_h26xbs_read_un(bs, 2) == 0,  "non-null init, 1 bytes, 2 bit unsigned read");
-    tstmessagetap(benz_itu_h26xbs_read_sn(bs, 3) == 0,  "non-null init, 1 bytes, 3 bit signed read");
-    tstmessagetap(benz_itu_h26xbs_read_ue(bs)    == 0,  "non-null init, 1 bytes, unsigned Exp-Golomb");
-    tstmessagetap(benz_itu_h26xbs_read_ue(bs)    == 0,  "non-null init, 1 bytes, signed Exp-Golomb");
-    tstmessagetap(benz_itu_h26xbs_eos(bs),              "non-null init, 1 bytes EOS");
-    tstmessagetap(!benz_itu_h26xbs_err(bs),             "non-null init, 1 bytes EOS+!ERR");
+    tstmessagetap(bs->naluptr != NULL,                     "non-null init, 1 bytes ptr");
+    tstmessagetap(!benz_itu_h26xbs_eos(bs),                "non-null init, 1 bytes !EOS");
+    tstmessagetap(!benz_itu_h26xbs_err(bs),                "non-null init, 1 bytes !ERR");
+    tstmessagetap(benz_itu_h26xbs_read_1b(bs)    == 0,     "non-null init, 1 bytes, 1 bit read");
+    tstmessagetap(benz_itu_h26xbs_read_un(bs, 2) == 0,     "non-null init, 1 bytes, 2 bit unsigned read");
+    tstmessagetap(benz_itu_h26xbs_read_sn(bs, 3) == 0,     "non-null init, 1 bytes, 3 bit signed read");
+    tstmessagetap(benz_itu_h26xbs_read_ue(bs)    == 0,     "non-null init, 1 bytes, unsigned Exp-Golomb");
+    tstmessagetap(benz_itu_h26xbs_read_ue(bs)    == 0,     "non-null init, 1 bytes, signed Exp-Golomb");
+    tstmessagetap(benz_itu_h26xbs_eos(bs),                 "non-null init, 1 bytes EOS");
+    tstmessagetap(!benz_itu_h26xbs_err(bs),                "non-null init, 1 bytes EOS+!ERR");
     benz_itu_h26xbs_skip_xn(bs, 5);
-    tstmessagetap(bs->sregoff == bs->headoff+5,         "non-null init, 1 bytes, 5 bit overread");
+    tstmessagetap(bs->sregoff == bs->headoff+5,            "non-null init, 1 bytes, 5 bit overread");
     tstmessagetap(benz_itu_h26xbs_err(bs) ==
-                  BENZ_H26XBS_ERR_OVERREAD,             "non-null init, 1 bytes, ERR=overread");
+                  BENZ_H26XBS_ERR_OVERREAD,                "non-null init, 1 bytes, ERR=overread");
     
     /* Non-null pointer, 2 bytes {0x00, 0x03} */
     benz_itu_h26xbs_init(bs, "\x00\x03", 2);
-    tstmessagetap(bs->naluptr != NULL, "non-null init, 2 bytes ptr");
+    tstmessagetap(bs->naluptr != NULL,                     "non-null init, 2 bytes ptr");
+    tstmessagetap(benz_itu_h26xbs_read_un(bs, 16) == 3,    "non-null init, 2 bytes, 16 bit unsigned read");
+    tstmessagetap(benz_itu_h26xbs_eos(bs),                 "non-null init, 2 bytes EOS");
+    tstmessagetap(!benz_itu_h26xbs_err(bs),                "non-null init, 2 bytes EOS+!ERR");
     
     /* Non-null pointer, 3 bytes, EPB {0x00, 0x00, 0x03} */
     benz_itu_h26xbs_init(bs, "\x00\x00\x03", 3);
-    tstmessagetap(bs->naluptr != NULL, "non-null init, 3 bytes, EPB ptr");
+    tstmessagetap(bs->naluptr != NULL,                     "non-null init, 3 bytes, EPB ptr");
+    tstmessagetap(benz_itu_h26xbs_read_sn(bs, 16) == 0,    "non-null init, 3 bytes, EPB 16 bit signed read");
+    tstmessagetap(benz_itu_h26xbs_eos(bs),                 "non-null init, 3 bytes, EPB EOS");
+    tstmessagetap(!benz_itu_h26xbs_err(bs),                "non-null init, 3 bytes, EPB EOS+!ERR");
     
     /* Non-null pointer, 3 bytes, no EPB {0x00, 0x00, 0xFF} */
     benz_itu_h26xbs_init(bs, "\x00\x00\xFF", 3);
-    tstmessagetap(bs->naluptr != NULL, "non-null init, 3 bytes, no EPB ptr");
+    tstmessagetap(bs->naluptr != NULL,                     "non-null init, 3 bytes, no EPB ptr");
+    tstmessagetap(benz_itu_h26xbs_read_sn(bs, 24) == 0xFF, "non-null init, 3 bytes, no EPB 24 bit signed read");
+    tstmessagetap(benz_itu_h26xbs_eos(bs),                 "non-null init, 3 bytes, no EPB EOS");
+    tstmessagetap(!benz_itu_h26xbs_err(bs),                "non-null init, 3 bytes, no EPB EOS+!ERR");
 }
