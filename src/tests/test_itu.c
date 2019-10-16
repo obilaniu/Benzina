@@ -49,8 +49,8 @@
 int main(void){
     BENZ_H26XBS bs_STACK, *bs = &bs_STACK;
     
-    
-    tstmessageflush(stdout, "1..33\n");
+    uint32_t a,b,c;
+    tstmessageflush(stdout, "1..58\n");
     
     
     /* Null pointer, 0 bytes {} */
@@ -108,4 +108,68 @@ int main(void){
     tstmessagetap(benz_itu_h26xbs_read_sn(bs, 24) == 0xFF, "non-null init, 3 bytes, no EPB 24 bit signed read");
     tstmessagetap(benz_itu_h26xbs_eos(bs),                 "non-null init, 3 bytes, no EPB EOS");
     tstmessagetap(!benz_itu_h26xbs_err(bs),                "non-null init, 3 bytes, no EPB EOS+!ERR");
+    
+    /* Fills & Skips */
+    benz_itu_h26xbs_init(bs, "\x01\x02\x03\x04\x05\x06\x07\x08"
+                             "\x09\xAA\xB1\xC2\xD3\xE4\xF5\x10", 16);
+    tstmessagetap(benz_itu_h26xbs_read_ue(bs) == 0x80,     "fill, 16 bytes, unsigned Exp-Golomb");
+    tstmessagetap(bs->sregoff == bs->tailoff+15,           "fill, 16 bytes, unsigned Exp-Golomb 0x80 consumed 15 bits");
+    benz_itu_h26xbs_fill57b(bs);
+    tstmessagetap(bs->sregoff == bs->tailoff+7,            "fill, 16 bytes, fill57b refilled 57 bits");
+    tstmessagetap(bs->sreg    == 0x0182028303840480ULL,    "fill, 16 bytes, shift register contains 57 bits");
+    a = bs->sregoff;
+    benz_itu_h26xbs_fill57b(bs);
+    b = bs->sregoff;
+    tstmessagetap(a           == b,                        "fill, 16 bytes, fill57b idempotent 1");
+    tstmessagetap(bs->sreg    == 0x0182028303840480ULL,    "fill, 16 bytes, fill57b idempotent 2");
+    benz_itu_h26xbs_fill64b(bs);
+    tstmessagetap(bs->sregoff == bs->tailoff,              "fill, 16 bytes, fill64b refilled 64 bits");
+    tstmessagetap(bs->sreg    == 0x01820283038404D5ULL,    "fill, 16 bytes, shift register contains 64 bits");
+    a = bs->sregoff;
+    benz_itu_h26xbs_fill64b(bs);
+    b = bs->sregoff;
+    tstmessagetap(a           == b,                        "fill, 16 bytes, fill64b idempotent 1");
+    tstmessagetap(bs->sreg    == 0x01820283038404D5ULL,    "fill, 16 bytes, fill64b idempotent 2");
+    a = bs->sregoff;
+    benz_itu_h26xbs_bigfill(bs);
+    tstmessagetap(bs->sreg    == 0x01820283038404D5ULL,    "fill, 16 bytes, bigfill refilled 64 bits");
+    b = bs->sregoff;
+    benz_itu_h26xbs_bigfill(bs);
+    c = bs->sregoff;
+    tstmessagetap(a == b && b == c,                        "fill, 16 bytes, bigfill idempotent 1");
+    tstmessagetap(bs->sreg    == 0x01820283038404D5ULL,    "fill, 16 bytes, bigfill idempotent 2");
+    a = bs->sregoff;
+    benz_itu_h26xbs_realign(bs);
+    b = bs->sregoff;
+    benz_itu_h26xbs_realign(bs);
+    c = bs->sregoff;
+    tstmessagetap(a+1 == b && b%8 == 0,                    "fill, 16 bytes, realign on even byte boundary");
+    tstmessagetap(b           == c,                        "fill, 16 bytes, realign idempotent");
+    a = bs->sregoff;
+    benz_itu_h26xbs_fill8B(bs);
+    tstmessagetap(bs->sreg    == 0x03040506070809AAULL,    "fill, 16 bytes, fill8B refilled 8 bytes");
+    a = bs->sregoff;
+    benz_itu_h26xbs_fill8B(bs);
+    b = bs->sregoff;
+    tstmessagetap(a           == b,                        "fill, 16 bytes, fill8B idempotent 1");
+    tstmessagetap(bs->sreg    == 0x03040506070809AAULL,    "fill, 16 bytes, fill8B idempotent 2");
+    a = bs->sregoff;
+    benz_itu_h26xbs_skip_xn(bs, 8);
+    b = bs->sregoff;
+    tstmessagetap(a+8         == b,                        "fill, 16 bytes, skipped 8 bits");
+    tstmessagetap(bs->sreg    == 0x040506070809AA00ULL,    "fill, 16 bytes, consumed 8 bits");
+    a = bs->sregoff;
+    benz_itu_h26xbs_bigskip(bs, 0);
+    b = bs->sregoff;
+    tstmessagetap(a           == b,                        "fill, 16 bytes, bigskip skipped 0 bits");
+    tstmessagetap(bs->sreg    == 0x040506070809AAB1ULL,    "fill, 16 bytes, bigskip refilled 64 bits");
+    a = bs->sregoff;
+    benz_itu_h26xbs_bigskip(bs, 104);
+    b = bs->sregoff;
+    tstmessagetap(a+104       == b,                        "fill, 16 bytes, bigskip skipped 104 bits");
+    tstmessagetap(benz_itu_h26xbs_eos(bs),                 "fill, 16 bytes, EOS");
+    tstmessagetap(!benz_itu_h26xbs_err(bs),                "fill, 16 bytes, !ERR");
+    
+    /* Exit. */
+    return 0;
 }
