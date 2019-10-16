@@ -55,7 +55,7 @@ int main(void){
     
     
     /* Test plan */
-    tstmessageflush(stdout, "1..81\n");
+    tstmessageflush(stdout, "1..83\n");
     
     
     /* Null pointer, 0 bytes {} */
@@ -203,6 +203,7 @@ int main(void){
     tstmessagetap(bs->headoff <= 2048,                     "pathological, headoff in sane bounds");
     tstmessagetap(bs->tailoff <= bs->headoff,              "pathological, tailoff in sane bounds");
     tstmessagetap(bs->sregoff <= 1536,                     "pathological, sregoff in sane bounds");
+    tstmessagetap(bs->headoff >= 1536 || !bs->nalulen,     "pathological, rbsp sufficiently full");
     tstmessagetap(bs->sregoff <= bs->headoff,              "pathological, sregoff <= headoff");
     tstmessagetap(!benz_itu_h26xbs_err(bs),                "pathological, after filter !ERR");
     tstmessagetap(!benz_itu_h26xbs_eos(bs),                "pathological, after filter !EOS");
@@ -210,6 +211,7 @@ int main(void){
     benz_itu_h26xbs_bigskip(bs, 380*8);
     tstmessagetap(!benz_itu_h26xbs_err(bs),                "pathological, after bigskip !ERR");
     tstmessagetap(!benz_itu_h26xbs_eos(bs),                "pathological, after bigskip !EOS");
+    tstmessagetap(bs->headoff >= 1536 || !bs->nalulen,     "pathological, after bigskip rbsp sufficiently full");
     tstmessagetap(benz_itu_h26xbs_read_un(bs, 8) == 0,     "pathological, preprefinal zero byte");
     tstmessagetap(benz_itu_h26xbs_read_un(bs, 8) == 0,     "pathological, prefinal zero byte");
     tstmessagetap(benz_itu_h26xbs_read_un(bs, 8) == 0,     "pathological, final zero byte");
