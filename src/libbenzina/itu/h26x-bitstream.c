@@ -163,6 +163,7 @@ BENZINA_PUBLIC void        benz_itu_h26xbs_init(BENZ_H26XBS* bs,
                                                 const void*  nalu,
                                                 size_t       nalubytelen){
     bs->sreg    = 0;
+    bs->errmask = 0;
     bs->headoff = 0;
     bs->tailoff = 0;
     bs->sregoff = 0;
