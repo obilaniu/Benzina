@@ -10,3 +10,4 @@ subdir('libbenzina-cuda')
 #
 subdir('plugins')
 subdir('tools')
+subdir('tests')
