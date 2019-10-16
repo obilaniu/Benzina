@@ -14,6 +14,7 @@
 #include "benzina/bits.h"
 #include "benzina/config.h"
 #include "benzina/endian.h"
+#include "benzina/intops.h"
 #include "benzina/iso.h"
 #include "benzina/version.h"
 #include "benzina/visibility.h"
