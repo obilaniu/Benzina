@@ -55,7 +55,7 @@ int main(void){
     
     
     /* Test plan */
-    tstmessageflush(stdout, "1..75\n");
+    tstmessageflush(stdout, "1..81\n");
     
     
     /* Null pointer, 0 bytes {} */
@@ -215,6 +215,21 @@ int main(void){
     tstmessagetap(benz_itu_h26xbs_read_un(bs, 8) == 0,     "pathological, final zero byte");
     tstmessagetap(benz_itu_h26xbs_eos(bs),                 "pathological, EOS");
     tstmessagetap(!benz_itu_h26xbs_err(bs),                "pathological, EOS+!ERR");
+    
+    /* Corrupt */
+    benz_itu_h26xbs_init(bs, "\x00\x00\x03\x00\x00\x03\x00\x00"
+                             "\x03\x00\x00\x03\xFF\xFF\xFF\x55", 16);
+    tstmessagetap(!benz_itu_h26xbs_eos(bs),                "corrupt exp-golomb, !EOS");
+    tstmessagetap(!benz_itu_h26xbs_err(bs),                "corrupt exp-golomb, !ERR");
+    tstmessagetap(benz_itu_h26xbs_read_1b(bs) == 0,        "corrupt exp-golomb, read 1 bit");
+    a = bs->sregoff;
+    benz_itu_h26xbs_read_ue(bs);
+    b = bs->sregoff;
+    tstmessagetap(b-a <= 63,                               "corrupt exp-golomb, <=63 bits consumed.");
+    tstmessagetap(!benz_itu_h26xbs_eos(bs),                "corrupt exp-golomb, !EOS");
+    tstmessagetap(benz_itu_h26xbs_err(bs) ==
+                  BENZ_H26XBS_ERR_CORRUPT,                 "corrupt exp-golomb, ERR=corrupt");
+    
     
     /* Exit. */
     return 0;
