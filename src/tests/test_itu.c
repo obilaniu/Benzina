@@ -47,10 +47,15 @@
  */
 
 int main(void){
+    uint8_t buf[1024+64];
     BENZ_H26XBS bs_STACK, *bs = &bs_STACK;
     
     uint32_t a,b,c;
-    tstmessageflush(stdout, "1..58\n");
+    int i,z=0;
+    
+    
+    /* Test plan */
+    tstmessageflush(stdout, "1..75\n");
     
     
     /* Null pointer, 0 bytes {} */
@@ -169,6 +174,47 @@ int main(void){
     tstmessagetap(a+104       == b,                        "fill, 16 bytes, bigskip skipped 104 bits");
     tstmessagetap(benz_itu_h26xbs_eos(bs),                 "fill, 16 bytes, EOS");
     tstmessagetap(!benz_itu_h26xbs_err(bs),                "fill, 16 bytes, !ERR");
+    
+    /**
+     * Mass EPB stripping and mass-skipping test.
+     * 
+     * Synthesize extremely pathological string: {0,0,3}x341 + {0}
+     * Therefore, 341 EPBs will have to be stripped, and the bitstring is
+     * (1024-341)*8 = 5464 bits = 683 bytes.
+     */
+    
+    memset(buf, 0, sizeof(buf));
+    for(i=2;i<1024;i+=3){
+        buf[i] = 3;
+    }
+    benz_itu_h26xbs_init(bs, buf, 1024);
+    tstmessagetap(!benz_itu_h26xbs_err(bs),                "pathological, !ERR");
+    tstmessagetap(!benz_itu_h26xbs_eos(bs),                "pathological, !EOS");
+    tstmessagetap(bs->nalulen > 0,                         "pathological, unfiltered bytes > 0");
+    for(z=0,i=0;i<300;i++){
+        if(i % 100 == 0){
+            benz_itu_h26xbs_bigfill(bs);
+        }
+        benz_itu_h26xbs_fill57b(bs);
+        if(benz_itu_h26xbs_read_un(bs, 8) != 0){
+            z |= 1;
+        }
+    }
+    tstmessagetap(bs->headoff <= 2048,                     "pathological, headoff in sane bounds");
+    tstmessagetap(bs->tailoff <= bs->headoff,              "pathological, tailoff in sane bounds");
+    tstmessagetap(bs->sregoff <= 1536,                     "pathological, sregoff in sane bounds");
+    tstmessagetap(bs->sregoff <= bs->headoff,              "pathological, sregoff <= headoff");
+    tstmessagetap(!benz_itu_h26xbs_err(bs),                "pathological, after filter !ERR");
+    tstmessagetap(!benz_itu_h26xbs_eos(bs),                "pathological, after filter !EOS");
+    tstmessagetap(z == 0,                                  "pathological, 300 filtered bytes all zero");
+    benz_itu_h26xbs_bigskip(bs, 380*8);
+    tstmessagetap(!benz_itu_h26xbs_err(bs),                "pathological, after bigskip !ERR");
+    tstmessagetap(!benz_itu_h26xbs_eos(bs),                "pathological, after bigskip !EOS");
+    tstmessagetap(benz_itu_h26xbs_read_un(bs, 8) == 0,     "pathological, preprefinal zero byte");
+    tstmessagetap(benz_itu_h26xbs_read_un(bs, 8) == 0,     "pathological, prefinal zero byte");
+    tstmessagetap(benz_itu_h26xbs_read_un(bs, 8) == 0,     "pathological, final zero byte");
+    tstmessagetap(benz_itu_h26xbs_eos(bs),                 "pathological, EOS");
+    tstmessagetap(!benz_itu_h26xbs_err(bs),                "pathological, EOS+!ERR");
     
     /* Exit. */
     return 0;
