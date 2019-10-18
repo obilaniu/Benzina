@@ -13,8 +13,8 @@
  * chromaticity coordinates.
  * 
  * References:
- *     ITU-T H.264      2017-04
- *     ITU-T H.265      2018-02
+ *     ITU-T H.264      2019-06
+ *     ITU-T H.265      2019-06
  *     ITU-T H.273      2016-12
  * 
  * 
@@ -54,8 +54,8 @@
  * 
  * 
  * References:
- *     ITU-T H.264      2017-04
- *     ITU-T H.265      2018-02
+ *     ITU-T H.264      2019-06
+ *     ITU-T H.265      2019-06
  *     ITU-T H.273      2016-12
  *     ITU-T H.Supp15   2017-01
  *     ITU-T H.Supp18   2017-10
@@ -109,8 +109,8 @@
  * The color matrix that converts from non-linear RGB to the final colorspace.
  * 
  * References:
- *     ITU-T H.264      2017-04
- *     ITU-T H.265      2018-02
+ *     ITU-T H.264      2019-06
+ *     ITU-T H.265      2019-06
  *     ITU-T H.273      2016-12
  * 
  * 
@@ -140,8 +140,8 @@
  * Determines the chroma subsampling.
  * 
  * References:
- *     ITU-T H.264      2017-04
- *     ITU-T H.265      2018-02
+ *     ITU-T H.264      2019-06
+ *     ITU-T H.265      2019-06
  * 
  *                                    Code   | Notes...
  */
@@ -170,8 +170,8 @@
  * 
  * References:
  *     ITU-T H.263      2005-01
- *     ITU-T H.264      2017-04
- *     ITU-T H.265      2018-02
+ *     ITU-T H.264      2019-06
+ *     ITU-T H.265      2019-06
  * 
  *                                    Code   | Notes...
  */
@@ -232,7 +232,7 @@
  * Annex A, G/H or I/J.
  * 
  * References:
- *     ITU-T H.264      2017-04    Table 7-1.
+ *     ITU-T H.264      2019-06    Table 7-1.
  * 
  *                                     nal_unit_type | VCL | Notes...                                                                                        | Syntax
  *                                                   |Annex|                                                                                                 |
@@ -292,7 +292,7 @@
  * and half of them are not.
  * 
  * References:
- *     ITU-T H.265      2018-02    Table 7-1.
+ *     ITU-T H.265      2019-06    Table 7-1.
  * 
  *                                     nal_unit_type | VCL | Notes...                                                                                        | Syntax
  */
