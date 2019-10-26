@@ -285,7 +285,7 @@
  *         forbidden_zero_bit                f(1)    // Always == 0
  *         nal_unit_type                     u(6)
  *         nuh_layer_id                      u(6)
- *         nuh_temporal_id_plus1             u(3)
+ *         nuh_temporal_id_plus1             u(3)    // Never == 0
  *     }
  * 
  * Half of these NALU types are considered Video Coding Layer (VCL) NALU types,
