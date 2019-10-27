@@ -1,6 +1,6 @@
 /* Includes */
 #include "benzina/itu/h265.h"
-#include "benzina/itu/h26x-bitstream.h"
+#include "benzina/itu/h26x.h"
 
 
 

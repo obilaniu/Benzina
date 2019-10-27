@@ -1,7 +1,9 @@
 /* Includes */
-#include "benzina/itu/h26x-bitstream.h"
-#if defined(__x86_64__) || defined(__i386__) || defined(_M_AMD64) || defined(_M_IX86)
-#include <immintrin.h>
+#include "benzina/itu/h26x.h"
+#if 0
+# if defined(__x86_64__) || defined(__i386__) || defined(_M_AMD64) || defined(_M_IX86)
+#  include <immintrin.h>
+# endif
 #endif
 
 

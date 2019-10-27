@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <benzina/benzina.h>
-#include <benzina/itu/h26x-bitstream.h>
+#include <benzina/itu/h26x.h>
 
 
 
