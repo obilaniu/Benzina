@@ -13,6 +13,7 @@ project('Benzina', 'c', 'cpp',
 #
 # System check
 #
+HOST_SYSTEM     = host_machine.system()
 IS_CROSS        = meson.is_cross_build()
 IS_NATIVE       = not IS_CROSS
 IS_HOST_LE      = host_machine.endian()     == 'little'
@@ -21,9 +22,9 @@ IS_HOST_X86_64  = host_machine.cpu_family() == 'x86_64'
 IS_HOST_AARCH64 = host_machine.cpu_family() == 'aarch64'
 IS_HOST_PPC64   = host_machine.cpu_family() == 'ppc64'
 IS_HOST_PPC64LE = IS_HOST_PPC64 and IS_HOST_LE
-IS_HOST_LINUX   = host_machine.system()     == 'linux'
-IS_HOST_DARWIN  = host_machine.system()     == 'darwin'
-IS_HOST_WINDOWS = host_machine.system()     == 'windows'
+IS_HOST_LINUX   = HOST_SYSTEM               == 'linux'
+IS_HOST_DARWIN  = HOST_SYSTEM               == 'darwin'
+IS_HOST_WINDOWS = HOST_SYSTEM               == 'windows'
 if   not IS_HOST_X86_64 and not IS_HOST_PPC64LE and not IS_HOST_AARCH64
   warning('The CUDA Toolkit is not built for architectures other than x64_64, '+
           'ppc64le and aarch64. No CUDA acceleration of any kind whatsoever is '+

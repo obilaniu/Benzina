@@ -31,7 +31,7 @@ libbenzina_plugin_nvdecodeCuda_objs = nvccCompGen.process(libbenzina_plugin_nvde
     '-Xcompiler', '-fPIC',
     '-Xptxas', '--warn-on-double-precision-use,-O3',
     '--use_fast_math',
-] + libbenzinacuda_cdefs + libbenzina_cdefs + benzina_iflags + plugin_cdefs)
+] + libbenzinacuda_cdefs + benzina_iflags + plugin_cdefs)
 libbenzina_plugin_nvdecodeCuda_sta  = static_library('pre-dlink', libbenzina_plugin_nvdecodeCuda_objs)
 libbenzina_plugin_nvdecodeCuda_dep  = declare_dependency(link_whole: libbenzina_plugin_nvdecodeCuda_sta)
 libbenzina_plugin_nvdecodeCuda_objs = custom_target ('libbenzina_plugin_nvdecodeCuda-dlink',
