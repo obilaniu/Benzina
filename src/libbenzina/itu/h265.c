@@ -41,8 +41,8 @@ BENZINA_STATIC                       const uint8_t* benz_itu_h265_skipbytes(cons
     
     while(off >= 3){
         if(*b > 3){
-            off  -= 3;
-            b += 3;
+            off -= 3;
+            b   += 3;
         }else{
             off -= !benz_itu_h265_epb_present(b++);
         }

@@ -19,7 +19,8 @@ libbenzinacudaCuda_objs = nvccCompGen.process(libbenzinacudaCuda_srcs, extra_arg
     '-Xcompiler', '-fPIC',
     '-Xptxas', '--warn-on-double-precision-use,-O3',
     '-DBENZINA_CUDA_IS_BUILDING=1',
-] + libbenzinacuda_cdefs + libbenzina_cdefs + benzina_iflags)
+    '-DBENZINA_IS_SHARED=1',
+] + libbenzinacuda_cdefs + benzina_iflags)
 libbenzinacudaCuda_sta  = static_library('pre-dlink', libbenzinacudaCuda_objs)
 libbenzinacudaCuda_dep  = declare_dependency(link_whole: libbenzinacudaCuda_sta)
 libbenzinacudaCuda_objs = custom_target ('libbenzinacudaCuda-dlink',
