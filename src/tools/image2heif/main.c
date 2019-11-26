@@ -173,12 +173,6 @@ struct ITEM{
         } Exif, mime, uri_;
     } backend;
     
-    struct{
-        struct{
-            AVFrame* frame;
-        } grid, thumb;
-    } pict;
-    
     PACKETLIST* packetlist;
     IREF*       refs;
     struct{
@@ -192,7 +186,7 @@ struct ITEM{
 /**
  * @brief Item reference.
  * 
- * The valid item types can be found at mp4ra.org, here:
+ * The valid item references can be found at mp4ra.org, here:
  *     https://github.com/mp4ra/mp4ra.github.io/blob/master/CSV/item-references.csv
  * 
  * As of 2019-09-09 its contents are reproduced below:
@@ -1852,9 +1846,9 @@ static int  i2h_universe_item_handle_picture      (UNIVERSE* u, ITEM* item){
             item->frontend.pict.grid_frame->color_range == AVCOL_RANGE_JPEG ? "jpeg" : "mpeg");
     if(item->args.want_thumbnail){
         fprintf(stdout, "Tile:  %ux%u %s %s (%d encoded bytes)\n",
-                item->pict.thumb.frame->width, item->pict.thumb.frame->height,
-                av_get_pix_fmt_name(item->pict.thumb.frame->format),
-                item->pict.thumb.frame->color_range == AVCOL_RANGE_JPEG ? "jpeg" : "mpeg",
+                item->frontend.pict.thumb_frame->width, item->frontend.pict.thumb_frame->height,
+                av_get_pix_fmt_name(item->frontend.pict.thumb_frame->format),
+                item->frontend.pict.thumb_frame->color_range == AVCOL_RANGE_JPEG ? "jpeg" : "mpeg",
                 item->packetlist->packet->size);
     }
 #endif
@@ -2146,7 +2140,7 @@ static int  i2h_universe_do_output_meta_iprp_ipco     (UNIVERSE*        u){
     for(i=u->items;i;i=i->next){
         if(i2h_item_type_is_picture(i)){
             // ItemProperty or ItemFullProperty
-            av_pix_fmt_desc_get(i->pict.grid.frame->format);
+            av_pix_fmt_desc_get(i->frontend.pict.grid_frame->format);
         }
     }
     i2h_universe_fdtell(u, &end);
@@ -2579,7 +2573,7 @@ static int  i2h_parse_args      (UNIVERSE*        u,
 }
 
 /**
- * Main
+ * @brief Main Function
  * 
  * Supports the following arguments:
  * 
@@ -2626,23 +2620,6 @@ int main(int argc, char* argv[]){
 
 
 #if 0
-/**
- * Collection of CUDA kernels that accurately resamples and convert from
- * FFmpeg's better-supported pixel formats to full-range YUV420P.
- * 
- * 
- * Not supported:
- *   - Bayer Pattern:    bayer_*
- *   - Sub-8-bit RGB:    bgr4, rgb4, bgr8, rgb8, bgr4_byte, rgb4_byte,
- *                       bgr444be, bgr444le, rgb444be, rgb444le,
- *                       bgr555be, bgr555le, rgb555be, rgb555le,
- *                       bgr565be, bgr565le, rgb565be, rgb565le
- *   - Hardware formats: ...
- *   - XYZ:              xyz12be, xyz12le
- */
-
-
-
 /* CUDA kernels */
 
 /**
