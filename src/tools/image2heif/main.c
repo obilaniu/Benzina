@@ -266,6 +266,7 @@ static int   i2h_item_picture_me_push_grid_frames (ITEM* item);
 static int   i2h_item_picture_me_push_thumb_frames(ITEM* item);
 static int   i2h_item_picture_me_push_frame       (ITEM* item, AVFrame* frame);
 static int   i2h_item_picture_me_append_packet    (ITEM* item, AVPacket* packet);
+static int   i2h_item_picture_me_split_packet_list(ITEM* item);
 static int   i2h_item_append_packet               (ITEM* item, AVPacket* packet);
 
 static int   i2h_iref_append                      (IREF** refs, IREF* iref);
@@ -1607,14 +1608,50 @@ static int   i2h_item_picture_me_push_frame       (ITEM* item, AVFrame* frame){
 /**
  * @brief Append packet to picture item's packet list.
  * 
- * @param [in,out]  Item to which to append a packet.
- * @param [in]      Packet to append.
+ * @param [in,out] item    Item to which to append a packet.
+ * @param [in]     packet  Packet to append.
  * @return 0 if successful, !0 otherwise.
  */
 
 static int   i2h_item_picture_me_append_packet    (ITEM* item, AVPacket* packet){
     return i2h_packetlist_append(&item->middleend.pict.packet_list, packet);
 }
+
+/**
+ * @brief Split packet list between grid and thumbnail packets.
+ * 
+ * If a picture item is single-item and does want a thumbnail, then nominally
+ * assign the packet to its thumbnail.
+ * 
+ * @param [in,out] item  Item for which to split the packet list.
+ * @return 0 if successful, !0 otherwise.
+ */
+
+static int   i2h_item_picture_me_split_packet_list(ITEM* item){
+    if(item->frontend.pict.single_tile){
+        if(item->args.want_thumbnail){
+            item->middleend.pict.grid_packet_list  = NULL;
+            item->middleend.pict.thumb_packet_list = item->middleend.pict.packet_list;
+        }else{
+            item->middleend.pict.grid_packet_list  = item->middleend.pict.packet_list;
+            item->middleend.pict.thumb_packet_list = NULL;
+        }
+    }else{
+        if(item->args.want_thumbnail){
+            item->middleend.pict.grid_packet_list  = item->middleend.pict.packet_list->next;
+            item->middleend.pict.thumb_packet_list = item->middleend.pict.packet_list;
+            item->middleend.pict.thumb_packet_list->next = NULL;
+        }else{
+            item->middleend.pict.grid_packet_list  = item->middleend.pict.packet_list;
+            item->middleend.pict.thumb_packet_list = NULL;
+        }
+    }
+    
+    item->middleend.pict.packet_list = NULL;
+    
+    return 0;
+}
+
 
 /**
  * @brief Append packet to item.
@@ -1833,6 +1870,10 @@ static int  i2h_universe_item_handle_picture      (UNIVERSE* u, ITEM* item){
     ret = i2h_item_picture_me_encoder_deconfigure(item);
     if(ret < 0)
         i2hmessageexit(ret, stderr, "Failed to deallocate encoder! (%d)\n", ret);
+    ret = i2h_item_picture_me_split_packet_list(item);
+    if(ret < 0)
+        i2hmessageexit(ret, stderr, "Failed to split packet list! (%d)\n", ret);
+    
     
     
 #if 1
