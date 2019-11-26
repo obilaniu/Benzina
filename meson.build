@@ -63,9 +63,10 @@ endif
 #
 cc          = meson.get_compiler('c')
 cxx         = meson.get_compiler('cpp')
+CC_ID       = cc.get_id()
+CXX_ID      = cxx.get_id()
 CC_SYNTAX   = cc.get_argument_syntax()
 CXX_SYNTAX  = cxx.get_argument_syntax()
-# Relax a bit the warning flags on GCC & Clang. -Wpedantic is very noisy.
 if CC_SYNTAX == 'gcc' or CXX_SYNTAX == 'gcc'
   relax_warnings     = ['-Wno-pedantic',
                         '-Wno-implicit-fallthrough',
@@ -82,6 +83,43 @@ libdl       = cc.find_library('dl', required: IS_HOST_LINUX)
 librt       = cc.find_library('rt', required: IS_HOST_LINUX)
 openmp      = dependency('openmp',  required: false)
 threads     = dependency('threads')
+
+
+#
+# Add predefined macros identifying the:
+#   - C & C++ compilers
+#   - CPU family
+#   - Operating System
+#
+MACRO_COMPILER_CC   = 'BENZINA_COMPILER_'
+MACRO_COMPILER_CXX  = 'BENZINA_COMPILER_'
+MACRO_CPU_FAMILY    = 'BENZINA_CPU_FAMILY_'
+MACRO_OS            = 'BENZINA_OS_'
+MACRO_COMPILER_CC  += {'clang-cl': 'clang',
+                       'intel-cl': 'intel'}.get(CC_ID,  CC_ID)
+MACRO_COMPILER_CXX += {'clang-cl': 'clang',
+                       'intel-cl': 'intel'}.get(CXX_ID,  CXX_ID)
+MACRO_CPU_FAMILY   += host_machine.cpu_family()
+MACRO_OS           += host_machine.system()
+MACRO_COMPILER_CC   = MACRO_COMPILER_CC .to_upper().underscorify()
+MACRO_COMPILER_CXX  = MACRO_COMPILER_CXX.to_upper().underscorify()
+MACRO_CPU_FAMILY    = MACRO_CPU_FAMILY  .to_upper().underscorify()
+MACRO_OS            = MACRO_OS          .to_upper().underscorify()
+
+add_project_arguments(['-D'+MACRO_COMPILER_CC+'=1',
+                       '-DBENZINA_COMPILER_IDENTIFIED=1'], language: 'c')
+add_project_arguments(['-D'+MACRO_COMPILER_CXX+'=1',
+                       '-DBENZINA_COMPILER_IDENTIFIED=1'], language: 'cpp')
+
+add_project_arguments(['-D'+MACRO_CPU_FAMILY+'=1',
+                       '-DBENZINA_CPU_FAMILY_IDENTIFIED=1'], language: 'c')
+add_project_arguments(['-D'+MACRO_CPU_FAMILY+'=1',
+                       '-DBENZINA_CPU_FAMILY_IDENTIFIED=1'], language: 'cpp')
+
+add_project_arguments(['-D'+MACRO_OS+'=1',
+                       '-DBENZINA_OS_IDENTIFIED=1'], language: 'c')
+add_project_arguments(['-D'+MACRO_OS+'=1',
+                       '-DBENZINA_OS_IDENTIFIED=1'], language: 'cpp')
 
 
 #

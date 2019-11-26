@@ -25,6 +25,11 @@ libbenzina_dict     = {
 subdir('os')
 subdir('itu')
 
+
+#
+# Define the shared library and dependency.
+#
+
 libbenzina_sha = shared_library('benzina',             libbenzina_dict['srcs'],
                                 objects              : libbenzina_dict['objs'],
                                 include_directories  : libbenzina_dict['incs'],
