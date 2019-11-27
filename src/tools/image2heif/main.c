@@ -1788,6 +1788,11 @@ static int  i2h_universe_item_find_free_id        (UNIVERSE* u, uint32_t* id_out
         return 0;
     }
     
+    if(!u->items){
+        *id_out = 0;
+        return 1;
+    }
+    
     for(id=0,item=u->items; item; id++,item=item->next){
         if(item->id != id){
             *id_out = id;
