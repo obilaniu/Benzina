@@ -145,6 +145,9 @@ struct ITEM{
             PACKETLIST*     thumb_packet_list;
             PACKETLIST*     grid_packet_list;
         } pict;
+        struct{
+            PACKETLIST*     packet_list;
+        } binary;
     } middleend;
     
     /**
@@ -173,7 +176,6 @@ struct ITEM{
         } Exif, mime, uri_;
     } backend;
     
-    PACKETLIST* packetlist;
     IREF*       refs;
     struct{
         IREF*       dimg;
@@ -268,7 +270,7 @@ static int   i2h_item_picture_me_push_frame       (ITEM* item, AVFrame* frame);
 static int   i2h_item_picture_me_pull_packets     (ITEM* item);
 static int   i2h_item_picture_me_append_packet    (ITEM* item, AVPacket* packet);
 static int   i2h_item_picture_me_split_packet_list(ITEM* item);
-static int   i2h_item_append_packet               (ITEM* item, AVPacket* packet);
+static int   i2h_item_binary_me_append_packet     (ITEM* item, AVPacket* packet);
 
 static int   i2h_iref_append                      (IREF** refs, IREF* iref);
 
@@ -1696,17 +1698,16 @@ static int   i2h_item_picture_me_split_packet_list(ITEM* item){
     return 0;
 }
 
-
 /**
- * @brief Append packet to item.
+ * @brief Append packet to binary item's packet list.
  * 
- * @param [in,out]  Item to which to append a packet.
- * @param [in]      Packet to append.
+ * @param [in,out] item    Item to which to append a packet.
+ * @param [in]     packet  Packet to append.
  * @return 0 if successful, !0 otherwise.
  */
 
-static int   i2h_item_append_packet               (ITEM* item, AVPacket* packet){
-    return i2h_packetlist_append(&item->packetlist, packet);
+static int   i2h_item_binary_me_append_packet     (ITEM* item, AVPacket* packet){
+    return i2h_packetlist_append(&item->middleend.binary.packet_list, packet);
 }
 
 
@@ -1860,7 +1861,14 @@ static int  i2h_universe_item_handle_picture      (UNIVERSE* u, ITEM* item){
     int ret;
     
     
-    /* PREP: Copy current desired tile width/height/pixel format. */
+    /**
+     * PREP:
+     *    1. Copy current desired tile properties:
+     *        1.1 Width
+     *        1.2 Height
+     *        1.3 Pixel format
+     */
+    
     item->args.tile.w  = u->out.tile.w;
     item->args.tile.h  = u->out.tile.h;
     item->args.pix_fmt = i2h_benzina2avpixfmt(u->out.chroma_format);
@@ -1893,10 +1901,6 @@ static int  i2h_universe_item_handle_picture      (UNIVERSE* u, ITEM* item){
      *    4. Flush encoder.
      *    5. Release encoder.
      *    6. Split/duplicate single list of packets between thumbnail and grid tiles.
-     *    7. Create new items and fill them.
-     *    8. If this item is not single-tile,
-     *        8.1 Transmute to "grid".
-     *        8.2 Compute grid references.
      */
     
     ret = i2h_item_picture_me_encoder_configure(item, u);
@@ -1919,7 +1923,6 @@ static int  i2h_universe_item_handle_picture      (UNIVERSE* u, ITEM* item){
         i2hmessageexit(ret, stderr, "Failed to split packet list! (%d)\n", ret);
     
     
-    
 #if 1
     fprintf(stdout, "ID %u: %ux%u %s %s\n",
             item->id, item->frontend.pict.frame->width, item->frontend.pict.frame->height,
@@ -1934,7 +1937,7 @@ static int  i2h_universe_item_handle_picture      (UNIVERSE* u, ITEM* item){
                 item->frontend.pict.thumb_frame->width, item->frontend.pict.thumb_frame->height,
                 av_get_pix_fmt_name(item->frontend.pict.thumb_frame->format),
                 item->frontend.pict.thumb_frame->color_range == AVCOL_RANGE_JPEG ? "jpeg" : "mpeg",
-                item->packetlist->packet->size);
+                item->middleend.pict.thumb_packet_list->packet->size);
     }
 #endif
 #if 0
@@ -1997,7 +2000,7 @@ static int  i2h_universe_item_handle_binary       (UNIVERSE* u, ITEM* item){
     
     close(fd);
     
-    if(i2h_packetlist_append(&item->packetlist, packet) != 0)
+    if(i2h_item_binary_me_append_packet(item, packet) != 0)
         i2hmessageexit(ENOMEM, stderr, "Failed to append packet to list!\n");
     
     return 0;
@@ -2090,7 +2093,10 @@ static int  i2h_universe_do_output_mdat               (UNIVERSE*        u){
     for(i=u->items; i; i=i->next){
         if(i2h_item_type_is_picture(i)){
             PACKETLIST* pkt;
-            for(pkt=i->packetlist;pkt;pkt=pkt->next){
+            for(pkt=i->middleend.pict.thumb_packet_list;pkt;pkt=pkt->next){
+                writefully(u->out.fd, pkt->packet->data, pkt->packet->size);
+            }
+            for(pkt=i->middleend.pict.grid_packet_list;pkt;pkt=pkt->next){
                 writefully(u->out.fd, pkt->packet->data, pkt->packet->size);
             }
         }
@@ -2306,7 +2312,16 @@ static int  i2h_universe_do_output                    (UNIVERSE*        u){
     }
     #endif
     
-    /* Flatten Item Hierarchy */
+    /**
+     * BACKEND:
+     *    1. Create new items and fill them.
+     *    2. If some item is not single-tile,
+     *        2.1 Transmute to "grid".
+     *        2.2 Compute grid references.
+     *    3. Flatten Item Hierarchy
+     *    4. Open, write out and close the file.
+     */
+    
     i2h_universe_flatten(u);
     
     /* Open File */
