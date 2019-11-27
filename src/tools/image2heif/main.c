@@ -265,6 +265,7 @@ static int   i2h_item_picture_me_encoder_deconfigure(ITEM* item);
 static int   i2h_item_picture_me_push_grid_frames (ITEM* item);
 static int   i2h_item_picture_me_push_thumb_frames(ITEM* item);
 static int   i2h_item_picture_me_push_frame       (ITEM* item, AVFrame* frame);
+static int   i2h_item_picture_me_pull_packets     (ITEM* item);
 static int   i2h_item_picture_me_append_packet    (ITEM* item, AVPacket* packet);
 static int   i2h_item_picture_me_split_packet_list(ITEM* item);
 static int   i2h_item_append_packet               (ITEM* item, AVPacket* packet);
@@ -1550,59 +1551,102 @@ static int   i2h_item_picture_me_push_thumb_frames(ITEM* item){
 
 /**
  * @brief Push a frame into the encoder with respect to this item.
- * @param [in,out]  Item to which to append a packet.
- * @param [in]      Packet to append.
+ * @param [in,out] item    Item for which we push in frames.
+ * @param [in]     frame   Frame to push in. If NULL, this is a flush frame
+ *                         that signals the encoder to empty itself.
  * @return 0 if successful, !0 otherwise.
  */
 
 static int   i2h_item_picture_me_push_frame       (ITEM* item, AVFrame* frame){
-    int retpush, retpull=0, flush=!frame, retrypush;
+    int retpush, retpull=0;
     
-    if(frame){
+    if(frame)
         frame->pts = frame->best_effort_timestamp;
-    }else{
-        /* This is a flush frame that signals to the encoder to empty itself. */
+    
+    retpush = avcodec_send_frame(item->middleend.pict.codec_ctx, frame);
+    
+    if(retpush == AVERROR(EAGAIN)){
+        /**
+         * The encoder is still open (if it wasn't, we would have gotten AVERROR_EOF),
+         * but needs to be emptied of input first.
+         */
+        
+        retpull = i2h_item_picture_me_pull_packets(item);
+        
+        if(retpull == AVERROR_EOF)
+            return 0;
+        
+        if(retpull == 0)
+            i2hmessageexit(retpull, stderr, "Impossible error, pull packets ended early??? (%d)\n", retpull);
+        
+        if(retpull == AVERROR(ENOMEM))
+            i2hmessageexit(retpull, stderr, "Pulling packets failed, out of memory! (%d)\n", retpull);
+        
+        if(retpull != AVERROR(EAGAIN))
+            i2hmessageexit(retpull, stderr, "Error while pulling frames from encoder! (%d)\n", retpull);
+        
+        retpush = avcodec_send_frame(item->middleend.pict.codec_ctx, frame);
+        
+        if(retpush == AVERROR(EAGAIN))
+            i2hmessageexit(retpush, stderr, "Impossible error, push=EAGAIN after pull=EAGAIN (%d)\n", retpush);
     }
+    
+    if(frame)
+        return retpush;
+    
+    if(retpush != AVERROR_EOF && retpush != 0)
+        return retpush;
+    
+    /**
+     * If we get here, it's a flush frame and it successfully signalled to the
+     * encoder to flush itself. Reap any remaining frames from the encoder.
+     */
+    
+    retpull = i2h_item_picture_me_pull_packets(item);
+    
+    if(retpull == AVERROR_EOF)
+        return 0;
+    
+    if(retpull == 0)
+        i2hmessageexit(retpull, stderr, "Impossible error, pull packets ended early??? (%d)\n", retpull);
+    
+    if(retpull == AVERROR(ENOMEM))
+        i2hmessageexit(retpull, stderr, "Pulling packets failed, out of memory! (%d)\n", retpull);
+    
+    if(retpull != AVERROR(EAGAIN))
+        i2hmessageexit(retpull, stderr, "Error while pulling frames from encoder! (%d)\n", retpull);
+    
+    i2hmessageexit(retpull, stderr, "Impossible error, pull=EAGAIN after flush! (%d)\n", retpull);
+}
+
+/**
+ * @brief Pull as many packets as possible from the encoder.
+ * 
+ * @param [in,out] item    Item for which to pull out packets.
+ * @return A non-zero avcodec_receive_packet() error code representing the
+ *         reason why no more frames can be retrieved. Usually will be
+ *           - AVERROR(EAGAIN), when more input frames must be pushed into the encoder, or
+ *           - AVERROR_EOF,     when the encoder has been fully emptied.
+ */
+
+static int   i2h_item_picture_me_pull_packets     (ITEM* item){
+    AVPacket* packet;
+    int       ret;
     
     do{
-        retpush   = avcodec_send_frame(item->middleend.pict.codec_ctx, frame);
-        retrypush = retpush == AVERROR(EAGAIN);
-        if(retrypush || flush){
-            /**
-             * Encoder wants us to pull out packets from its output. We do so
-             * to allow ourselves to reattempt pushing frames into the encoder.
-             */
-            
-            do{
-                AVPacket* packet = av_packet_alloc();
-                if(!packet)
-                    i2hmessageexit(ENOMEM, stderr, "Failed to allocate packet object!\n");
-                
-                retpull = avcodec_receive_packet(item->middleend.pict.codec_ctx, packet);
-                if(retpull == 0){
-                    i2h_item_picture_me_append_packet(item, packet);
-                }else{
-                    /**
-                     * The probable reason for ending up here is AVERROR(EAGAIN),
-                     * indicating that the encoder no longer has packets to give
-                     * us from its output. This is not problematic per se.
-                     */
-                    
-                    av_packet_free(&packet);
-                }
-            }while(retpull == 0);
-        }
-    }while(retrypush);
-    
-    if(retpush < 0){
-        if(frame){
-            i2hmessageexit(retpush, stderr, "Error pushing frame into encoder! (%d)\n", retpush);
+        packet = av_packet_alloc();
+        if(!packet)
+            i2hmessageexit(ENOMEM, stderr, "Failed to allocate packet object!\n");
+        
+        ret = avcodec_receive_packet(item->middleend.pict.codec_ctx, packet);
+        if(ret == 0){
+            i2h_item_picture_me_append_packet(item, packet);
         }else{
-            i2hmessageexit(retpush, stderr, "Error flushing encoder input! (%d)\n", retpush);
+            av_packet_free(&packet);
         }
-    }
+    }while(ret == 0);
     
-    return 0;
+    return ret;
 }
 
 /**
