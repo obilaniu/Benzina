@@ -14,23 +14,23 @@
 
 
 /* Extern Inline Function Definitions */
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE void        benz_itu_h26xbs_fill57b(BENZ_H26XBS* bs);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE void        benz_itu_h26xbs_fill64b(BENZ_H26XBS* bs);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE void        benz_itu_h26xbs_fill8B (BENZ_H26XBS* bs);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE void        benz_itu_h26xbs_fill57b(BENZ_ITU_H26XBS* bs);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE void        benz_itu_h26xbs_fill64b(BENZ_ITU_H26XBS* bs);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE void        benz_itu_h26xbs_fill8B (BENZ_ITU_H26XBS* bs);
 
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h26xbs_read_1b(BENZ_H26XBS* bs);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint64_t    benz_itu_h26xbs_read_un(BENZ_H26XBS* bs, unsigned n);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE int64_t     benz_itu_h26xbs_read_sn(BENZ_H26XBS* bs, unsigned n);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint64_t    benz_itu_h26xbs_read_ue(BENZ_H26XBS* bs);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE int64_t     benz_itu_h26xbs_read_se(BENZ_H26XBS* bs);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h26xbs_read_1b(BENZ_ITU_H26XBS* bs);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint64_t    benz_itu_h26xbs_read_un(BENZ_ITU_H26XBS* bs, unsigned n);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE int64_t     benz_itu_h26xbs_read_sn(BENZ_ITU_H26XBS* bs, unsigned n);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint64_t    benz_itu_h26xbs_read_ue(BENZ_ITU_H26XBS* bs);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE int64_t     benz_itu_h26xbs_read_se(BENZ_ITU_H26XBS* bs);
 
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE void        benz_itu_h26xbs_skip_xn(BENZ_H26XBS* bs, unsigned n);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE void        benz_itu_h26xbs_skip_xe(BENZ_H26XBS* bs);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE void        benz_itu_h26xbs_realign(BENZ_H26XBS* bs);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE void        benz_itu_h26xbs_skip_xn(BENZ_ITU_H26XBS* bs, unsigned n);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE void        benz_itu_h26xbs_skip_xe(BENZ_ITU_H26XBS* bs);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE void        benz_itu_h26xbs_realign(BENZ_ITU_H26XBS* bs);
 
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h26xbs_eos    (BENZ_H26XBS* bs);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint32_t    benz_itu_h26xbs_err    (BENZ_H26XBS* bs);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint32_t    benz_itu_h26xbs_markcor(BENZ_H26XBS* bs);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h26xbs_eos    (BENZ_ITU_H26XBS* bs);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint32_t    benz_itu_h26xbs_err    (BENZ_ITU_H26XBS* bs);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint32_t    benz_itu_h26xbs_markcor(BENZ_ITU_H26XBS* bs);
 
 
 
@@ -125,7 +125,7 @@ BENZINA_STATIC void        benz_itu_h26xbs_epbstrip_ssse3(BENZ_H26XBS* bs){
     }
 }
 #else
-BENZINA_STATIC void        benz_itu_h26xbs_epbstrip_default(BENZ_H26XBS* bs){
+BENZINA_STATIC void        benz_itu_h26xbs_epbstrip_default(BENZ_ITU_H26XBS* bs){
     while(bs->nalulen > 0 && bs->headoff <= 2040){
         if(bs->naluptr[0]!=3 || bs->naluptr[-1]!=0 || bs->naluptr[-2]!=0){
             bs->rbsp[bs->headoff>>3] = *bs->naluptr;
@@ -140,7 +140,7 @@ BENZINA_STATIC void        benz_itu_h26xbs_epbstrip_default(BENZ_H26XBS* bs){
 
 
 /* Static Function Definitions */
-BENZINA_STATIC void        benz_itu_h26xbs_epbstrip(BENZ_H26XBS* bs){
+BENZINA_STATIC void        benz_itu_h26xbs_epbstrip(BENZ_ITU_H26XBS* bs){
     #if   0 && __SSE2__
     benz_itu_h26xbs_epbstrip_sse2(bs);
     #elif 0 && __SSSE3__
@@ -149,7 +149,7 @@ BENZINA_STATIC void        benz_itu_h26xbs_epbstrip(BENZ_H26XBS* bs){
     benz_itu_h26xbs_epbstrip_default(bs);
     #endif
 }
-BENZINA_STATIC void        benz_itu_h26xbs_markeof(BENZ_H26XBS* bs){
+BENZINA_STATIC void        benz_itu_h26xbs_markeof(BENZ_ITU_H26XBS* bs){
     bs->tailoff  = 0;
     bs->headoff  = 0;
     bs->sregoff  = 0;
@@ -161,7 +161,7 @@ BENZINA_STATIC void        benz_itu_h26xbs_markeof(BENZ_H26XBS* bs){
 
 
 /* Function Definitions */
-BENZINA_PUBLIC void        benz_itu_h26xbs_init(BENZ_H26XBS* bs,
+BENZINA_PUBLIC void        benz_itu_h26xbs_init(BENZ_ITU_H26XBS* bs,
                                                 const void*  nalu,
                                                 size_t       nalubytelen){
     bs->sreg    = 0;
@@ -213,7 +213,7 @@ BENZINA_PUBLIC void        benz_itu_h26xbs_init(BENZ_H26XBS* bs,
     }
 }
 
-BENZINA_PUBLIC void        benz_itu_h26xbs_bigfill(BENZ_H26XBS* bs){
+BENZINA_PUBLIC void        benz_itu_h26xbs_bigfill(BENZ_ITU_H26XBS* bs){
     /**
      * This is the function with the job of sanitizing the state of the
      * bitstream reader at least somewhat, and wrapping the buffer.
@@ -295,7 +295,7 @@ BENZINA_PUBLIC void        benz_itu_h26xbs_bigfill(BENZ_H26XBS* bs){
     benz_itu_h26xbs_fill64b(bs);
 }
 
-BENZINA_PUBLIC void        benz_itu_h26xbs_bigskip(BENZ_H26XBS* bs, uint64_t n){
+BENZINA_PUBLIC void        benz_itu_h26xbs_bigskip(BENZ_ITU_H26XBS* bs, uint64_t n){
     uint64_t m;
     int      overread = bs->sregoff > bs->headoff;
     

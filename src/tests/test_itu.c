@@ -48,7 +48,7 @@
 
 int main(void){
     uint8_t buf[1024+64];
-    BENZ_H26XBS bs_STACK, *bs = &bs_STACK;
+    BENZ_ITU_H26XBS bs_STACK, *bs = &bs_STACK;
     
     uint32_t a,b,c;
     int i,z=0;

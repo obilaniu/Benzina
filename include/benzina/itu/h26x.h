@@ -28,7 +28,7 @@ extern "C" {
 
 
 /* Data Structures Forward Declarations and Typedefs */
-typedef struct BENZ_H26XBS             BENZ_H26XBS;
+typedef struct BENZ_ITU_H26XBS         BENZ_ITU_H26XBS;
 
 
 
@@ -38,7 +38,7 @@ typedef struct BENZ_H26XBS             BENZ_H26XBS;
  * @brief ITU H.26x-standard bitstream parser.
  */
 
-struct BENZ_H26XBS{
+struct BENZ_ITU_H26XBS{
     /** @brief Shift register. */
     uint64_t       sreg;
     
@@ -89,25 +89,25 @@ struct BENZ_H26XBS{
 
 
 /* Public Function Forward Declarations */
-BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_fill57b(BENZ_H26XBS* bs);
-BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_fill64b(BENZ_H26XBS* bs);
-BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_fill8B (BENZ_H26XBS* bs);
+BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_fill57b(BENZ_ITU_H26XBS* bs);
+BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_fill64b(BENZ_ITU_H26XBS* bs);
+BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_fill8B (BENZ_ITU_H26XBS* bs);
 
-BENZINA_PUBLIC BENZINA_INLINE int         benz_itu_h26xbs_read_1b(BENZ_H26XBS* bs);
-BENZINA_PUBLIC BENZINA_INLINE uint64_t    benz_itu_h26xbs_read_un(BENZ_H26XBS* bs, unsigned n);
-BENZINA_PUBLIC BENZINA_INLINE int64_t     benz_itu_h26xbs_read_sn(BENZ_H26XBS* bs, unsigned n);
-BENZINA_PUBLIC BENZINA_INLINE uint64_t    benz_itu_h26xbs_read_ue(BENZ_H26XBS* bs);
-BENZINA_PUBLIC BENZINA_INLINE int64_t     benz_itu_h26xbs_read_se(BENZ_H26XBS* bs);
+BENZINA_PUBLIC BENZINA_INLINE int         benz_itu_h26xbs_read_1b(BENZ_ITU_H26XBS* bs);
+BENZINA_PUBLIC BENZINA_INLINE uint64_t    benz_itu_h26xbs_read_un(BENZ_ITU_H26XBS* bs, unsigned n);
+BENZINA_PUBLIC BENZINA_INLINE int64_t     benz_itu_h26xbs_read_sn(BENZ_ITU_H26XBS* bs, unsigned n);
+BENZINA_PUBLIC BENZINA_INLINE uint64_t    benz_itu_h26xbs_read_ue(BENZ_ITU_H26XBS* bs);
+BENZINA_PUBLIC BENZINA_INLINE int64_t     benz_itu_h26xbs_read_se(BENZ_ITU_H26XBS* bs);
 
-BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_skip_xn(BENZ_H26XBS* bs, unsigned n);
-BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_skip_xe(BENZ_H26XBS* bs);
+BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_skip_xn(BENZ_ITU_H26XBS* bs, unsigned n);
+BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_skip_xe(BENZ_ITU_H26XBS* bs);
 
-BENZINA_PUBLIC BENZINA_INLINE int         benz_itu_h26xbs_eos    (BENZ_H26XBS* bs);
-BENZINA_PUBLIC BENZINA_INLINE uint32_t    benz_itu_h26xbs_err    (BENZ_H26XBS* bs);
-BENZINA_PUBLIC BENZINA_INLINE uint32_t    benz_itu_h26xbs_markcor(BENZ_H26XBS* bs);
+BENZINA_PUBLIC BENZINA_INLINE int         benz_itu_h26xbs_eos    (BENZ_ITU_H26XBS* bs);
+BENZINA_PUBLIC BENZINA_INLINE uint32_t    benz_itu_h26xbs_err    (BENZ_ITU_H26XBS* bs);
+BENZINA_PUBLIC BENZINA_INLINE uint32_t    benz_itu_h26xbs_markcor(BENZ_ITU_H26XBS* bs);
 
-BENZINA_PUBLIC                void        benz_itu_h26xbs_bigfill(BENZ_H26XBS* bs);
-BENZINA_PUBLIC                void        benz_itu_h26xbs_bigskip(BENZ_H26XBS* bs, uint64_t n);
+BENZINA_PUBLIC                void        benz_itu_h26xbs_bigfill(BENZ_ITU_H26XBS* bs);
+BENZINA_PUBLIC                void        benz_itu_h26xbs_bigskip(BENZ_ITU_H26XBS* bs, uint64_t n);
 
 
 
@@ -130,7 +130,7 @@ BENZINA_PUBLIC                void        benz_itu_h26xbs_bigskip(BENZ_H26XBS* b
  * @return 0
  */
 
-BENZINA_PUBLIC                void        benz_itu_h26xbs_init(BENZ_H26XBS* bs,
+BENZINA_PUBLIC                void        benz_itu_h26xbs_init(BENZ_ITU_H26XBS* bs,
                                                                const void*  nalu,
                                                                size_t       nalubytelen);
 
@@ -148,14 +148,14 @@ BENZINA_PUBLIC                void        benz_itu_h26xbs_init(BENZ_H26XBS* bs,
  * @param [in]  bs  Bitstream Parser
  */
 
-BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_fill57b(BENZ_H26XBS* bs){
+BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_fill57b(BENZ_ITU_H26XBS* bs){
     uint32_t sregoff = bs->sregoff;
     uint8_t* rbspptr = bs->rbsp + (sregoff >> 3);
     
     bs->tailoff = sregoff & ~7;
     bs->sreg    = benz_getbe64(rbspptr) << (sregoff & 7);
 }
-BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_fill64b(BENZ_H26XBS* bs){
+BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_fill64b(BENZ_ITU_H26XBS* bs){
     uint32_t sregoff = bs->sregoff;
     uint8_t* rbspptr = bs->rbsp + (sregoff >> 3);
     
@@ -163,7 +163,7 @@ BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_fill64b(BENZ_H26XBS* b
     bs->sreg    = benz_getbe64(rbspptr+0) <<      (sregoff & 7) |
         (uint64_t)benz_getbe8 (rbspptr+8) >> (8 - (sregoff & 7));
 }
-BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_fill8B (BENZ_H26XBS* bs){
+BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_fill8B (BENZ_ITU_H26XBS* bs){
     uint32_t sregoff = bs->sregoff;
     uint8_t* rbspptr = bs->rbsp + (sregoff >> 3);
     
@@ -190,7 +190,7 @@ BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_fill8B (BENZ_H26XBS* b
  * @return The bit or signed/unsigned value in question.
  */
 
-BENZINA_PUBLIC BENZINA_INLINE int         benz_itu_h26xbs_read_1b(BENZ_H26XBS* bs){
+BENZINA_PUBLIC BENZINA_INLINE int         benz_itu_h26xbs_read_1b(BENZ_ITU_H26XBS* bs){
     uint64_t v;
     int      ret;
     
@@ -200,7 +200,7 @@ BENZINA_PUBLIC BENZINA_INLINE int         benz_itu_h26xbs_read_1b(BENZ_H26XBS* b
     bs->sregoff += 1;
     return ret;
 }
-BENZINA_PUBLIC BENZINA_INLINE uint64_t    benz_itu_h26xbs_read_un(BENZ_H26XBS* bs, unsigned n){
+BENZINA_PUBLIC BENZINA_INLINE uint64_t    benz_itu_h26xbs_read_un(BENZ_ITU_H26XBS* bs, unsigned n){
     uint64_t v, ret;
     
     v            = bs->sreg;
@@ -209,7 +209,7 @@ BENZINA_PUBLIC BENZINA_INLINE uint64_t    benz_itu_h26xbs_read_un(BENZ_H26XBS* b
     bs->sregoff += n;
     return ret;
 }
-BENZINA_PUBLIC BENZINA_INLINE int64_t     benz_itu_h26xbs_read_sn(BENZ_H26XBS* bs, unsigned n){
+BENZINA_PUBLIC BENZINA_INLINE int64_t     benz_itu_h26xbs_read_sn(BENZ_ITU_H26XBS* bs, unsigned n){
     uint64_t v;
     int64_t  ret;
     
@@ -219,7 +219,7 @@ BENZINA_PUBLIC BENZINA_INLINE int64_t     benz_itu_h26xbs_read_sn(BENZ_H26XBS* b
     bs->sregoff += n;
     return ret;
 }
-BENZINA_PUBLIC BENZINA_INLINE uint64_t    benz_itu_h26xbs_read_ue(BENZ_H26XBS* bs){
+BENZINA_PUBLIC BENZINA_INLINE uint64_t    benz_itu_h26xbs_read_ue(BENZ_ITU_H26XBS* bs){
     uint64_t v, K=0x0000000100000000ULL;
     unsigned a, b, c;
     
@@ -233,7 +233,7 @@ BENZINA_PUBLIC BENZINA_INLINE uint64_t    benz_itu_h26xbs_read_ue(BENZ_H26XBS* b
     
     return ((v << a) >> c) - 1;
 }
-BENZINA_PUBLIC BENZINA_INLINE int64_t     benz_itu_h26xbs_read_se(BENZ_H26XBS* bs){
+BENZINA_PUBLIC BENZINA_INLINE int64_t     benz_itu_h26xbs_read_se(BENZ_ITU_H26XBS* bs){
     uint64_t v = benz_itu_h26xbs_read_ue(bs);
     v = v&1 ? v+1 : -v;
     return (int64_t)v>>1;
@@ -247,11 +247,11 @@ BENZINA_PUBLIC BENZINA_INLINE int64_t     benz_itu_h26xbs_read_se(BENZ_H26XBS* b
  * @param [in]  n   Number of bits to be skipped.
  */
 
-BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_skip_xn(BENZ_H26XBS* bs, unsigned n){
+BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_skip_xn(BENZ_ITU_H26XBS* bs, unsigned n){
     bs->sreg   <<= n;
     bs->sregoff += n;
 }
-BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_skip_xe(BENZ_H26XBS* bs){
+BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_skip_xe(BENZ_ITU_H26XBS* bs){
     uint64_t v, K=0x0000000100000000ULL;
     unsigned a, b;
     
@@ -262,7 +262,7 @@ BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_skip_xe(BENZ_H26XBS* b
     bs->sregoff += b;
     bs->errmask |= v>=K ? 0 : BENZ_H26XBS_ERR_CORRUPT;
 }
-BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_realign(BENZ_H26XBS* bs){
+BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_realign(BENZ_ITU_H26XBS* bs){
     benz_itu_h26xbs_skip_xn(bs, -bs->sregoff & 7);
 }
 
@@ -273,7 +273,7 @@ BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_realign(BENZ_H26XBS* b
  * @return !0 if at EOS, 0 otherwise.
  */
 
-BENZINA_PUBLIC BENZINA_INLINE int         benz_itu_h26xbs_eos    (BENZ_H26XBS* bs){
+BENZINA_PUBLIC BENZINA_INLINE int         benz_itu_h26xbs_eos    (BENZ_ITU_H26XBS* bs){
     return bs->nalulen==0 && bs->sregoff >= bs->headoff;
 }
 
@@ -284,7 +284,7 @@ BENZINA_PUBLIC BENZINA_INLINE int         benz_itu_h26xbs_eos    (BENZ_H26XBS* b
  * @return 0 if not in error, !0 otherwise.
  */
 
-BENZINA_PUBLIC BENZINA_INLINE uint32_t    benz_itu_h26xbs_err    (BENZ_H26XBS* bs){
+BENZINA_PUBLIC BENZINA_INLINE uint32_t    benz_itu_h26xbs_err    (BENZ_ITU_H26XBS* bs){
     bs->errmask |= bs->sregoff <= bs->tailoff+64 ? 0 : BENZ_H26XBS_ERR_OVERREAD;
     bs->errmask |= bs->sregoff <= bs->headoff    ? 0 : BENZ_H26XBS_ERR_OVERREAD;
     return bs->errmask;
@@ -297,7 +297,7 @@ BENZINA_PUBLIC BENZINA_INLINE uint32_t    benz_itu_h26xbs_err    (BENZ_H26XBS* b
  * @return Error mask.
  */
 
-BENZINA_PUBLIC BENZINA_INLINE uint32_t    benz_itu_h26xbs_markcor(BENZ_H26XBS* bs){
+BENZINA_PUBLIC BENZINA_INLINE uint32_t    benz_itu_h26xbs_markcor(BENZ_ITU_H26XBS* bs){
     return bs->errmask |= BENZ_H26XBS_ERR_CORRUPT;
 }
 
@@ -314,7 +314,7 @@ BENZINA_PUBLIC BENZINA_INLINE uint32_t    benz_itu_h26xbs_markcor(BENZ_H26XBS* b
  * @return 0
  */
 
-BENZINA_PUBLIC                void        benz_itu_h26xbs_bigfill(BENZ_H26XBS* bs);
+BENZINA_PUBLIC                void        benz_itu_h26xbs_bigfill(BENZ_ITU_H26XBS* bs);
 
 /**
  * @brief Heavyweight Skip of bits in RBSP buffer and shift register.
@@ -328,7 +328,7 @@ BENZINA_PUBLIC                void        benz_itu_h26xbs_bigfill(BENZ_H26XBS* b
  * @return 0
  */
 
-BENZINA_PUBLIC                void        benz_itu_h26xbs_bigskip(BENZ_H26XBS* bs, uint64_t n);
+BENZINA_PUBLIC                void        benz_itu_h26xbs_bigskip(BENZ_ITU_H26XBS* bs, uint64_t n);
 
 
 
