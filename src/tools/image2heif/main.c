@@ -21,6 +21,9 @@
 #include <libavutil/pixfmt.h>
 
 #include "benzina/benzina.h"
+#include "benzina/itu/h264.h"
+#include "benzina/itu/h265.h"
+#include "benzina/itu/h26x.h"
 
 
 
@@ -269,6 +272,7 @@ static int   i2h_item_picture_me_push_thumb_frames(ITEM* item);
 static int   i2h_item_picture_me_push_frame       (ITEM* item, AVFrame* frame);
 static int   i2h_item_picture_me_pull_packets     (ITEM* item);
 static int   i2h_item_picture_me_append_packet    (ITEM* item, AVPacket* packet);
+static int   i2h_item_picture_me_strip_sei        (ITEM* item);
 static int   i2h_item_picture_me_split_packet_list(ITEM* item);
 static int   i2h_item_binary_me_append_packet     (ITEM* item, AVPacket* packet);
 
@@ -1664,6 +1668,79 @@ static int   i2h_item_picture_me_append_packet    (ITEM* item, AVPacket* packet)
 }
 
 /**
+ * @brief Strip SEI NALUs from picture item's packet list.
+ * 
+ * @param [in,out] item    Item from which to strip SEI NALUs.
+ * @return 0 if successful, !0 otherwise.
+ */
+
+static int   i2h_item_picture_me_strip_sei        (ITEM* item){
+    PACKETLIST* l;
+    AVPacket*   p;
+    uint8_t*    srco;/* Pointer into original packet */
+    uint8_t*    dstr;/* Pointer into in-place rewritten packet */
+    uint8_t*    endo;/* Pointer to tail of original packet */
+    uint64_t    sz, minnalusz, trimmed;
+    int       (*is_sei)(const void*);
+    
+    int h264 = i2h_is_codec_x264(item->frontend.pict.codec),
+        h265 = i2h_is_codec_x265(item->frontend.pict.codec);
+    
+    
+    /**
+     * We assume from now on here AVCC/HEVC 4-byte framing. That is, all
+     * NALUs are prefixed with their size in bytes as a 32-bit
+     * big-endian value. This size does *not* include the prefix itself.
+     * 
+     * The shortest framed AVCC-framed H.264 NALU out is 5 bytes: A 4-byte
+     * prefix and a 1-byte header.
+     * 
+     * The shortest framed HEVC-framed H.265 NALU out is 6 bytes: A 4-byte
+     * prefix and a 2-byte header.
+     */
+    
+    if(h265){
+        minnalusz = 6;
+        is_sei    = benz_itu_h265_nalu_is_sei;
+        return 0;
+    }else if(h264){
+        minnalusz = 5;
+        /* is_sei    = benz_itu_h264_nalu_is_sei;*/
+        return 0;/* TODO: H.264 SEI stripping support not yet implemented! */
+    }else{
+        return 0;
+    }
+    
+    
+    /**
+     * For each packet separately, we strip out all SEI NALUs. There may be
+     * multiple packets and multiple (SEI) NALUs per packet.
+     */
+    
+    for(l=item->middleend.pict.packet_list; l; l=l->next){
+        p    = l->packet;
+        dstr = p->data;
+        srco = dstr;
+        endo = srco + p->size;
+        
+        for(; srco <= endo-minnalusz; srco += sz){
+            sz  = benz_iso_as_u32(srco);
+            sz += 4;
+            if(is_sei(srco+4))
+                continue;
+            
+            memmove(dstr, srco, sz);
+            dstr += sz;
+        }
+        
+        trimmed = srco-dstr;
+        av_shrink_packet(p, p->size-trimmed);
+    }
+    
+    return 0;
+}
+
+/**
  * @brief Split packet list between grid and thumbnail packets.
  * 
  * If a picture item is single-item and does want a thumbnail, then nominally
@@ -1904,8 +1981,9 @@ static int  i2h_universe_item_handle_picture      (UNIVERSE* u, ITEM* item){
      *    2. (Optional) Encode thumbnail tile.
      *    3. Encode grid tiles.
      *    4. Flush encoder.
-     *    5. Release encoder.
-     *    6. Split/duplicate single list of packets between thumbnail and grid tiles.
+     *    5. Strip SEI NALUs.
+     *    6. Release encoder.
+     *    7. Split/duplicate single list of packets between thumbnail and grid tiles.
      */
     
     ret = i2h_item_picture_me_encoder_configure(item, u);
@@ -1920,6 +1998,9 @@ static int  i2h_universe_item_handle_picture      (UNIVERSE* u, ITEM* item){
     ret = i2h_item_picture_me_push_frame(item, NULL);
     if(ret < 0)
         i2hmessageexit(ret, stderr, "Failed to flush encoder! (%d)\n", ret);
+    ret = i2h_item_picture_me_strip_sei(item);
+    if(ret < 0)
+        i2hmessageexit(ret, stderr, "Failed to strip SEI NALUs! (%d)\n", ret);
     ret = i2h_item_picture_me_encoder_deconfigure(item);
     if(ret < 0)
         i2hmessageexit(ret, stderr, "Failed to deallocate encoder! (%d)\n", ret);
