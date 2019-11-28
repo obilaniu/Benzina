@@ -25,7 +25,7 @@ extern "C" {
 
 
 /* Data Structures Forward Declarations and Typedefs */
-typedef const void*                    BENZ_BOX;
+typedef void                           BENZ_ITU_H264_NALU;
 
 
 
