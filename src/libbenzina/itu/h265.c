@@ -9,24 +9,24 @@
 
 
 /* Extern Inline Function Definitions */
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h265_nalu_check_header(BENZ_H265_NALU* p);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h265_nalu_get_type(BENZ_H265_NALU* p);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h265_nalu_is_vcl(BENZ_H265_NALU* p);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h265_nalu_is_idr(BENZ_H265_NALU* p);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h265_nalu_is_idr_n_lp(BENZ_H265_NALU* p);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h265_nalu_is_vps(BENZ_H265_NALU* p);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h265_nalu_is_sps(BENZ_H265_NALU* p);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h265_nalu_is_pps(BENZ_H265_NALU* p);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h265_nalu_is_aud(BENZ_H265_NALU* p);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h265_nalu_is_eos(BENZ_H265_NALU* p);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h265_nalu_is_eob(BENZ_H265_NALU* p);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h265_nalu_is_fd(BENZ_H265_NALU* p);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h265_nalu_is_sei(BENZ_H265_NALU* p);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint64_t    benz_itu_h265_nalu_slice_get_pps_id(BENZ_H265_NALU* p);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint64_t    benz_itu_h265_nalu_pps_get_pps_id(BENZ_H265_NALU* p);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint64_t    benz_itu_h265_nalu_pps_get_sps_id(BENZ_H265_NALU* p);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint64_t    benz_itu_h265_nalu_sps_get_vps_id(BENZ_H265_NALU* p);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint64_t    benz_itu_h265_nalu_vps_get_vps_id(BENZ_H265_NALU* p);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h265_nalu_check_header(const BENZ_H265_NALU* p);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h265_nalu_get_type(const BENZ_H265_NALU* p);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h265_nalu_is_vcl(const BENZ_H265_NALU* p);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h265_nalu_is_idr(const BENZ_H265_NALU* p);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h265_nalu_is_idr_n_lp(const BENZ_H265_NALU* p);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h265_nalu_is_vps(const BENZ_H265_NALU* p);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h265_nalu_is_sps(const BENZ_H265_NALU* p);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h265_nalu_is_pps(const BENZ_H265_NALU* p);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h265_nalu_is_aud(const BENZ_H265_NALU* p);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h265_nalu_is_eos(const BENZ_H265_NALU* p);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h265_nalu_is_eob(const BENZ_H265_NALU* p);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h265_nalu_is_fd(const BENZ_H265_NALU* p);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE int         benz_itu_h265_nalu_is_sei(const BENZ_H265_NALU* p);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint64_t    benz_itu_h265_nalu_slice_get_pps_id(const BENZ_H265_NALU* p);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint64_t    benz_itu_h265_nalu_pps_get_pps_id(const BENZ_H265_NALU* p);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint64_t    benz_itu_h265_nalu_pps_get_sps_id(const BENZ_H265_NALU* p);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint64_t    benz_itu_h265_nalu_sps_get_vps_id(const BENZ_H265_NALU* p);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint64_t    benz_itu_h265_nalu_vps_get_vps_id(const BENZ_H265_NALU* p);
 
 
 
@@ -60,7 +60,7 @@ BENZINA_STATIC                       const uint8_t* benz_itu_h265_skipbytes(cons
 
 
 /* Public Function Definitions */
-BENZINA_PUBLIC                       uint64_t    benz_itu_h265_nalu_sps_get_sps_id(BENZ_H265_NALU* p){
+BENZINA_PUBLIC                       uint64_t    benz_itu_h265_nalu_sps_get_sps_id(const BENZ_H265_NALU* p){
     const uint8_t* b = (const uint8_t*)p;
     unsigned       sps_max_sub_layers_minus1;
     uint64_t       present_flags;
