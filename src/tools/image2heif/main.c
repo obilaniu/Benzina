@@ -45,6 +45,7 @@
 typedef struct PACKETLIST PACKETLIST;
 typedef struct ITEM       ITEM;
 typedef struct IREF       IREF;
+typedef struct IPRP       IPRP;
 typedef struct UNIVERSE   UNIVERSE;
 
 
@@ -58,8 +59,8 @@ typedef struct UNIVERSE   UNIVERSE;
  */
 
 struct PACKETLIST{
-    AVPacket*   packet;
     PACKETLIST* next;
+    AVPacket*   packet;
 };
 
 /**
@@ -93,6 +94,7 @@ struct PACKETLIST{
  */
 
 struct ITEM{
+    ITEM*       next;
     uint32_t    id;
     char        type[4];
     const char* name;
@@ -159,7 +161,7 @@ struct ITEM{
      * Contains per-item fields that are semantically part of a HEIF item.
      */
     
-    union{
+    struct{
         struct{
             struct{uint32_t w,h;} grid_clap, ispe;
             AVFrame* frame;
@@ -180,12 +182,7 @@ struct ITEM{
     } backend;
     
     IREF*       refs;
-    struct{
-        IREF*       dimg;
-        IREF*       cdsc;
-    } ref;
     ITEM*       children;
-    ITEM*       next;
 };
 
 /**
@@ -210,10 +207,91 @@ struct ITEM{
  */
 
 struct IREF{
+    IREF*     next;
     char      type[4];
     uint32_t  num_references;
     uint32_t* to_item_id;
-    IREF*     next;
+};
+
+/**
+ * @brief Item property.
+ * 
+ * The valid item properties can be found at mp4ra.org, here:
+ *     https://raw.githubusercontent.com/mp4ra/mp4ra.github.io/master/CSV/item-properties.csv
+ * 
+ * As of 2019-11-29 its contents are reproduced below:
+ * 
+ *     code,description,specification
+ *     auxC,Auxiliary type,HEIF
+ *     avcC,AVC Image item configuration,HEIF
+ *     brnd,Item brand (type),ISO
+ *     clap,Clean aperture,HEIF
+ *     colr,Colour information,HEIF
+ *     hvcC,HEVC Image item configuration,HEIF
+ *     iaux,Item Auxiliary Information,ISO Common Encryption
+ *     ienc,Item Encryption,ISO Common Encryption
+ *     imir,Image mirroring,HEIF
+ *     irot,Image rotation,HEIF
+ *     ispe,Image spatial extents,HEIF
+ *     jpgC,JPEG image item configuration,HEIF
+ *     lhvC,Layered HEVC Image item configuration,HEIF
+ *     lsel,Layer selection,HEIF
+ *     oinf,HEVC operating point,HEIF
+ *     pasp,Pixel aspect ratio,HEIF
+ *     pixi,Pixel information,HEIF
+ *     rloc,Relative location,HEIF
+ *     subs,Subsample information,HEIF
+ *     tols,Layered HEVC Target output layer set property,HEIF
+ * 
+ * Descriptive properties:
+ *     auxC,avcC,colr,hvcC,ispe,jpgC,lvhC,lsel,oinf,pasp,pixi,rloc,subs,tols
+ * 
+ * Transformative properties:
+ *     clap,imir,irot
+ * 
+ * Essential properties:
+ *     auxC,avcC,hvcC,lsel
+ */
+
+struct IPRP{
+    IPRP*     next;
+    uint32_t  size;
+    uint8_t   type[4];
+    union{
+        struct{
+            uint32_t cleanApertureWidthN,  cleanApertureWidthD;
+            uint32_t cleanApertureHeightN, cleanApertureHeightD;
+            uint32_t horizOffN,            horizOffD;
+            uint32_t vertOffN,             vertOffD;
+        } clap;
+        struct{
+            uint8_t  axis;
+        } imir;
+        struct{
+            uint8_t  angle;
+        } irot;
+        struct{
+            uint32_t image_width, image_height;
+        } ispe;
+        struct{
+            uint32_t hSpacing, vSpacing;
+        } pasp;
+        struct{
+            uint8_t  type[4];
+            uint16_t colour_primaries;
+            uint16_t transfer_characteristics;
+            uint16_t matrix_coefficients;
+            uint8_t  full_range_flag;/* Flag is in bit 7: 0x80 or 0x00 */
+        } colr;
+        struct{
+            uint8_t  num_channels;
+        } pixi;
+        struct{
+            uint16_t layer_id;
+        } lsel;
+    } u;
+    
+    uint8_t raw[];
 };
 
 /**
@@ -2210,7 +2288,7 @@ static int  i2h_universe_do_output_meta_hdlr          (UNIVERSE*        u, const
 }
 static int  i2h_universe_do_output_meta_pitm          (UNIVERSE*        u){
     ITEM* i;
-    uint32_t primaryid=0;
+    uint32_t primaryid = u->items ? u->items->id : 0;
     size_t start, end;
     i2h_universe_fdtell(u, &start);
     i2h_universe_do_output_fullbox(u, "pitm", 1, 0);
@@ -3530,6 +3608,97 @@ i2hKernel_gbrp_to_yuv420p(void* __restrict const dstYPtr,
  */
 
 #if 0
+aligned(8) class Box(unsigned int(32) boxtype, optional unsigned int(8)[16] extended_type){
+    unsigned int(32) size;
+    unsigned int(32) type = boxtype;
+    if(size==1){
+        unsigned int(64) largesize;
+    }else if(size==0){
+        // box extends to end of file
+    }
+    if(boxtype=='uuid'){
+        unsigned int(8)[16] usertype = extended_type;
+    }
+}
+
+aligned(8) class FullBox(unsigned int(32) boxtype, unsigned int(8) v, bit(24) f) extends Box(boxtype){
+    unsigned int(8) version = v;
+    bit(24)         flags   = f;
+}
+
+aligned(8) class FileTypeBox extends Box('ftyp'){
+    unsigned int(32) major_brand;
+    unsigned int(32) minor_version;
+    unsigned int(32) compatible_brands[]; // to end of the box
+}
+
+aligned(8) class MetaBox(handler_type) extends FullBox('meta', version=0, 0){
+    HandlerBox(handler_type) theHandler;
+    PrimaryItemBox     primary_resource; // optional
+    DataInformationBox file_locations;   // optional
+    ItemLocationBox    item_locations;   // optional
+    ItemProtectionBox  protections;      // optional
+    ItemInfoBox        item_infos;       // optional
+    IPMPControlBox     IPMP_control;     // optional
+    ItemReferenceBox   item_refs;        // optional
+    ItemDataBox        item_data;        // optional
+    Box                other_boxes[];    // optional
+    //  E.g. ItemPropertiesBox item_properties;
+}
+
+aligned(8) class ItemProperty(property_type) extends Box(property_type){}
+
+aligned(8) class ItemFullProperty(property_type, version, flags) extends FullBox(property_type, version, flags){}
+
+aligned(8) class ItemPropertyContainerBox extends Box('ipco'){
+    properties ItemProperty()[]; // boxes derived from
+                                 // ItemProperty or ItemFullProperty, to fill box
+}
+
+aligned(8) class ItemPropertyAssociation extends FullBox('ipma', version, flags){
+    unsigned int(32) entry_count;
+    for(i=0; i<entry_count; i++){
+        if(version < 1)
+            unsigned int(16) item_ID;
+        else
+            unsigned int(32) item_ID;
+        unsigned int(8) association_count;
+        for(i=0; i<association_count; i++){
+            bit(1) essential;
+            if(flags & 1)
+                unsigned int(15) property_index;
+            else
+                unsigned int(7) property_index;
+        }
+    }
+}
+
+aligned(8) class ItemPropertiesBox extends Box('iprp'){
+    ItemPropertyContainerBox  property_container;
+    ItemPropertyAssociation   association[];
+}
+
+aligned(8) class ImageSpatialExtentsProperty extends ItemFullProperty('ispe', version=0, flags=0){
+    unsigned int(32) image_width;
+    unsigned int(32) image_height;
+}
+
+class PixelAspectRatioBox extends Box('pasp'){
+    unsigned int(32) hSpacing;
+    unsigned int(32) vSpacing;
+}
+
+class CleanApertureBox extends Box('clap'){
+    unsigned int(32) cleanApertureWidthN;
+    unsigned int(32) cleanApertureWidthD;
+    unsigned int(32) cleanApertureHeightN;
+    unsigned int(32) cleanApertureHeightD;
+    unsigned int(32) horizOffN;
+    unsigned int(32) horizOffD;
+    unsigned int(32) vertOffN;
+    unsigned int(32) vertOffD;
+}
+
 aligned(8) class ColourInformationBox extends Box('colr'){
     unsigned int(32) colour_type;
     if (colour_type == 'nclx'){/* on-screen colours */
@@ -3543,6 +3712,27 @@ aligned(8) class ColourInformationBox extends Box('colr'){
     }else if(colour_type == 'prof'){
         ICC_profile; // unrestricted ICC profile
     }
+}
+
+aligned(8) class PixelInformationProperty extends ItemFullProperty('pixi', version=0, flags=0){
+    unsigned int(8) num_channels;
+    for(i=0; i<num_channels; i++){
+        unsigned int(8) bits_per_channel;
+    }
+}
+
+aligned(8) class ImageRotation extends ItemProperty('irot'){
+    unsigned int(6) reserved = 0;
+    unsigned int(2) angle;
+}
+
+aligned(8) class ImageMirror extends ItemProperty('imir'){
+    unsigned int(7) reserved = 0;
+    unsigned int(1) axis;
+}
+
+aligned(8) class LayerSelectorProperty extends ItemProperty('lsel'){
+    unsigned int(16) layer_id;
 }
 
 aligned(8) class MetaBox(handler_type) extends FullBox('meta', version = 0, 0){
@@ -3662,7 +3852,7 @@ aligned(8) class SingleItemTypeReferenceBoxLarge(referenceType) extends Box(refe
     }
 }
 
-aligned(8) class HEVCConfigurationBox extends Box(‘hvcC’){
+aligned(8) class HEVCConfigurationBox extends Box('hvcC'){
     HEVCDecoderConfigurationRecord() HEVCConfig;
 }
 
