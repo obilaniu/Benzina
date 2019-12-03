@@ -22,10 +22,10 @@ install_headers('attribute.h',
                 'endian.h',
                 'inline.h',
                 'intops.h',
-                'iso.h',
                  version_h,
                 'visibility.h',
                 install_dir: includedir/'benzina')
 
+subdir('iso')
 subdir('itu')
 subdir('plugins')
