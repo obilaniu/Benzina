@@ -18,11 +18,11 @@ libbenzina_dict     = {
                   'endian.c',
                   'init.c',
                   'intops.c',
-                  'iso.c',
                   'version.c')
 }
 
 subdir('os')
+subdir('iso')
 subdir('itu')
 
 
