@@ -18,6 +18,7 @@ libbenzina_dict     = {
                   'endian.c',
                   'init.c',
                   'intops.c',
+                  'ptrops.c',
                   'version.c')
 }
 
