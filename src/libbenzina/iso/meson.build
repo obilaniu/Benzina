@@ -3,5 +3,7 @@
 #
 
 libbenzina_dict += {
-    'srcs': libbenzina_dict['srcs'] + files('iso.c')
+    'srcs': libbenzina_dict['srcs'] + files('bmff-box.c',
+                                            'bmff-box-size.c',
+                                            'bmff-intops.c')
 }

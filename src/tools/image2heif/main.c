@@ -1802,7 +1802,7 @@ static int   i2h_item_picture_me_strip_sei        (ITEM* item){
         endo = srco + p->size;
         
         for(; srco <= endo-minnalusz; srco += sz){
-            sz  = benz_iso_as_u32(srco);
+            sz  = benz_iso_bmff_as_u32(srco);
             sz += 4;
             if(is_sei(srco+4))
                 continue;
