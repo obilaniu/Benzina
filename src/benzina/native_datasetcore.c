@@ -44,33 +44,34 @@ static PyObject* DatasetCore_new      (PyTypeObject* type,
 static int       DatasetCore_init     (DatasetCore* self,
                                        PyObject*           args,
                                        PyObject*           kwargs){
-	PyObject* root=NULL;
+	PyObject* file  = NULL;
+	uint64_t length = 0;
 	
-	static char *kwargsList[] = {"root", NULL};
+	static char *kwargsList[] = {"file", "length", NULL};
 	
-	if(!PyArg_ParseTupleAndKeywords(args, kwargs, "U", kwargsList, &root)){
+	if(!PyArg_ParseTupleAndKeywords(args, kwargs, "Uk", kwargsList, &file, &length)){
 		return -1;
 	}
 	
-	root = PyUnicode_EncodeFSDefault(root);
-	if(!root){
+	file = PyUnicode_EncodeFSDefault(file);
+	if(!file){
 		return -1;
 	}
-	if(!PyBytes_Check(root)){
-		Py_DECREF(root);
+	if(!PyBytes_Check(file)){
+		Py_DECREF(file);
 		return -1;
 	}
 	
-	if(benzinaDatasetNew(&self->dataset, PyBytes_AsString(root)) != 0){
+	if(benzinaDatasetNew(&self->dataset, PyBytes_AsString(file), &length) != 0){
 		PyErr_SetString(PyExc_RuntimeError,
 		                "Error during creation of underlying BENZINA_DATASET* "
 		                "object. Check that the path is correct and has all of "
 		                "the required files.");
-		Py_DECREF(root);
+		Py_DECREF(file);
 		return -1;
 	}
 	
-	Py_DECREF(root);
+	Py_DECREF(file);
 	return 0;
 }
 
@@ -92,44 +93,6 @@ static PyObject* DatasetCore_getlength(DatasetCore* self,
 }
 
 /**
- * @brief Getter for shape.
- * @return The shape, as a tuple (h,w).
- */
-
-static PyObject* DatasetCore_getshape (DatasetCore* self,
-                                              void*               closure){
-	size_t    h,w;
-	PyObject* hObj, *wObj, *tObj;
-	
-	if(benzinaDatasetGetShape(self->dataset, &w, &h) != 0){
-		PyErr_SetString(PyExc_RuntimeError,
-		                "Could not obtain shape of dataset for unknown reasons.");
-		return NULL;
-	}
-	
-	hObj = PyLong_FromSize_t(h);
-	wObj = PyLong_FromSize_t(w);
-	if(!hObj || !wObj){
-		Py_XDECREF(hObj);
-		Py_XDECREF(wObj);
-		PyErr_SetString(PyExc_RuntimeError,
-		                "Could not create a Python integer!");
-		return NULL;
-	}
-	
-	tObj = PyTuple_Pack(2, hObj, wObj);
-	if(!tObj){
-		Py_DECREF(hObj);
-		Py_DECREF(wObj);
-		PyErr_SetString(PyExc_RuntimeError,
-		                "Could not create a Python tuple!");
-		return NULL;
-	}
-	
-	return tObj;
-}
-
-/**
  * Table of getter-setters.
  * 
  * We only have getters.
@@ -137,7 +100,6 @@ static PyObject* DatasetCore_getshape (DatasetCore* self,
 
 static PyGetSetDef       DatasetCore_getsetters[] = {
     {"length", (getter)DatasetCore_getlength, 0, "Length of Dataset",             NULL},
-    {"shape",  (getter)DatasetCore_getshape,  0, "Coded shape of dataset images", NULL},
     {NULL}  /* Sentinel */
 };
 
@@ -157,56 +119,10 @@ static Py_ssize_t        DatasetCore___len__(DatasetCore* self){
 	return length;
 }
 
-/**
- * @brief Implementation of __getitem__.
- * 
- * @return A tuple (i, off, len) indicating:
- *           - The index this image was fetched at.
- *           - The offset into data.bin
- *           - The length of the slice into it.
- */
-
-static PyObject*         DatasetCore___getitem__(DatasetCore* self,
-                                                        Py_ssize_t          i){
-	size_t    off, len;
-	PyObject* lenObj, *iObj, *offObj, *tObj;
-	
-	if(benzinaDatasetGetElement(self->dataset, i, &off, &len) != 0){
-		PyErr_SetString(PyExc_RuntimeError,
-		                "Could not read element of dataset for unknown reasons.");
-		return NULL;
-	}
-	
-	iObj   = PyLong_FromSsize_t(i);
-	offObj = PyLong_FromSize_t(off);
-	lenObj = PyLong_FromSize_t(len);
-	if(!iObj || !offObj || !lenObj){
-		Py_XDECREF(iObj);
-		Py_XDECREF(offObj);
-		Py_XDECREF(lenObj);
-		PyErr_SetString(PyExc_RuntimeError,
-		                "Could not create a Python integer!");
-		return NULL;
-	}
-	
-	tObj = PyTuple_Pack(3, iObj, offObj, lenObj);
-	if(!tObj){
-		Py_DECREF(iObj);
-		Py_DECREF(offObj);
-		Py_DECREF(lenObj);
-		PyErr_SetString(PyExc_RuntimeError,
-		                "Could not create a Python tuple!");
-		return NULL;
-	}
-	
-	return tObj;
-}
-
 static PySequenceMethods DatasetCore_as_seq_methods = {
-    (lenfunc)DatasetCore___len__,          /* sq_length */
-    0,                                            /* sq_concat */
-    0,                                            /* sq_repeat */
-    (ssizeargfunc)DatasetCore___getitem__, /* sq_item */
+    (lenfunc)DatasetCore___len__,    /* sq_length */
+    0,                               /* sq_concat */
+    0,                               /* sq_repeat */
 };
 
 static PyTypeObject DatasetCoreType = {

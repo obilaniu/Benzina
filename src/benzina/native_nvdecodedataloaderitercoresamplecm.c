@@ -23,6 +23,8 @@ static PyObject* NvdecodeDataLoaderIterCoreSampleCM_new             (PyTypeObjec
 	self->batch  = NULL;
 	self->index  = 0;
 	self->dstPtr = NULL;
+	self->location[0] = self->location[1] = 0;
+	self->config_location[0] = self->config_location[1] = 0;
 	
 	return (PyObject*)self;
 }
@@ -64,16 +66,34 @@ static int       NvdecodeDataLoaderIterCoreSampleCM_clear           (NvdecodeDat
 static int       NvdecodeDataLoaderIterCoreSampleCM_init            (NvdecodeDataLoaderIterCoreSampleCM* self,
                                                                      PyObject*                           args,
                                                                      PyObject*                           kwargs){
-	NvdecodeDataLoaderIterCoreBatchCM* batch  = NULL;
-	unsigned long long                 index  = 0;
-	unsigned long long                 dstPtr = 0;
+	NvdecodeDataLoaderIterCoreBatchCM* batch               = NULL;
+	unsigned long long                 index               = 0;
+	unsigned long long                 dstPtr              = 0;
+	PyObject*                          location            = NULL;
+	PyObject*                          config_location     = NULL;
 	
-	static char *kwargsList[] = {"batch", "index", "dstPtr", NULL};
+	static char *kwargsList[] = {"batch", "index", "dstPtr", "location", "config_location", NULL};
 	
-	if(!PyArg_ParseTupleAndKeywords(args, kwargs, "OKK", kwargsList,
-	                                &batch, &index, &dstPtr)){
+	if(!PyArg_ParseTupleAndKeywords(args, kwargs, "OKKOO", kwargsList,
+	                                &batch, &index, &dstPtr, &location, &config_location)){
 		return -1;
 	}
+	
+	if(!PyTuple_Check(location) ||
+	   !PyArg_ParseTuple(location, "kk", &self->location[0], &self->location[1])){
+        Py_DECREF(location);
+        location = NULL;
+	}
+
+	if(!PyTuple_Check(config_location) ||
+	   !PyArg_ParseTuple(config_location, "kk", &self->config_location[0], &self->config_location[1])){
+        Py_DECREF(config_location);
+        config_location = NULL;
+	}
+
+	if(location == NULL || config_location == NULL){
+        return -1;
+    }
 	
 	Py_INCREF(batch);
 	self->batch  = batch;
@@ -91,7 +111,9 @@ static int       NvdecodeDataLoaderIterCoreSampleCM_init            (NvdecodeDat
 static PyObject* NvdecodeDataLoaderIterCoreSampleCM___enter__       (NvdecodeDataLoaderIterCoreSampleCM* self){
 	if(self->batch->core->v->defineSample(self->batch->core->ctx,
 	                                      self->index,
-	                                      self->dstPtr) != 0){
+	                                      self->dstPtr,
+	                                      self->location,
+	                                      self->config_location) != 0){
 		PyErr_SetString(PyExc_RuntimeError, "Error attempting to define a sample!");
 		return NULL;
 	}else{

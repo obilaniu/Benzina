@@ -21,6 +21,8 @@ typedef struct {
 	NvdecodeDataLoaderIterCoreBatchCM* batch;
 	uint64_t                           index;
 	void*                              dstPtr;
+	uint64_t                           location[2];
+	uint64_t                           config_location[2];
 } NvdecodeDataLoaderIterCoreSampleCM;
 static PyTypeObject NvdecodeDataLoaderIterCoreSampleCMType;
 

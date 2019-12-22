@@ -457,21 +457,36 @@ static PyObject* NvdecodeDataLoaderIterCore_waitBatch               (NvdecodeDat
 static PyObject* NvdecodeDataLoaderIterCore_defineSample            (NvdecodeDataLoaderIterCore* self,
                                                                      PyObject*                   args,
                                                                      PyObject*                   kwargs){
-	unsigned long long  datasetIndex   = -1;
-	unsigned long long  devicePtr      = 0;
+	unsigned long long  datasetIndex        = -1;
+	unsigned long long  devicePtr           = 0;
+	PyObject*           pyLocation          = NULL;
+	PyObject*           pyConfigLocation    = NULL;
+	uint64_t            location[2]         = {0, 0};
+	uint64_t            configLocation[2]   = {0, 0};
 	
-	static char *kwargsList[] = {"datasetIndex",
-	                             "dstPtr",
-	                             NULL};
+    static char *kwargsList[] = {"datasetIndex", "dstPtr", "location", "config_location", NULL};
 	
 	if(!PyArg_ParseTupleAndKeywords(args, kwargs, "KK", kwargsList,
-	                                &datasetIndex, &devicePtr)){
+	                                &datasetIndex, &devicePtr, &pyLocation, &pyConfigLocation)){
 		PyErr_SetString(PyExc_RuntimeError,
 		                "Could not parse arguments!");
 		return NULL;
 	}
 	
-	if(self->v->defineSample(self->ctx, datasetIndex, (void*)devicePtr) != 0){
+	if(pyLocation != NULL && !PyTuple_Check(pyLocation) &&
+	   !PyArg_ParseTuple(pyLocation, "kk", &location, &location + 1)){
+        Py_DECREF(pyLocation);
+        pyLocation = NULL;
+	}
+
+	if(pyConfigLocation != NULL && !PyTuple_Check(pyConfigLocation) &&
+	   !PyArg_ParseTuple(pyConfigLocation, "kk", &configLocation, &configLocation + 1)){
+        Py_DECREF(pyConfigLocation);
+        pyConfigLocation = NULL;
+	}
+	
+	if(pyLocation == NULL || pyConfigLocation == NULL ||
+	   self->v->defineSample(self->ctx, datasetIndex, (void*)devicePtr, location, configLocation) != 0){
 		PyErr_SetString(PyExc_RuntimeError,
 		                "Error in defineSample()!");
 		return NULL;
