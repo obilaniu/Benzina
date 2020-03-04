@@ -1,7 +1,3 @@
-#
-# A few tests using this executable
-#
-
 pytest = find_program('pytest')
 
 test_devsubset = files('test_devsubset.py')
