@@ -1481,6 +1481,21 @@ void decode_scaling_list_data(CUVIDHEVCPICPARAMS* hevcPP, BENZ_ITU_H26XBS* bitst
 #endif // MIN
 }
 
+uint8_t get_sps_seq_parameter_set_id(const void* nalu, size_t nalubytelen)
+{
+    BENZ_ITU_H26XBS bitstream = {0};
+    benz_itu_h26xbs_init(&bitstream, nalu, nalubytelen);
+
+    benz_itu_h26xbs_skip_xn(&bitstream, 4); // sps_video_parameter_set_id
+    uint8_t sps_max_sub_layers_minus1 = benz_itu_h26xbs_read_un(&bitstream, 3);
+    benz_itu_h26xbs_skip_xn(&bitstream, 1); // sps_temporal_id_nesting_flag
+
+    benz_itu_h26xbs_fill64b(&bitstream);
+    skip_profile_tier_level(&bitstream, sps_max_sub_layers_minus1); // profile_tier_level( 1, sps_max_sub_layers_minus1 )
+
+    return benz_itu_h26xbs_read_ue(&bitstream); // sps_seq_parameter_set_id [0, 15]
+}
+
 void decode_sps(CUVIDPICPARAMS* picParams, BENZ_ITU_H26XBS* bitstream){
     CUVIDHEVCPICPARAMS* hevcPP = (CUVIDHEVCPICPARAMS*)&picParams->CodecSpecific;
 
@@ -1631,9 +1646,11 @@ void decode_sps(CUVIDPICPARAMS* picParams, BENZ_ITU_H26XBS* bitstream){
     uint32_t ctbLog2SizeY = minCbLog2SizeY + hevcPP->log2_diff_max_min_luma_coding_block_size;
     // 7-13
     uint32_t ctbSizeY = 1 << ctbLog2SizeY;
-
-    picParams->PicWidthInMbs = hevcPP->pic_width_in_luma_samples / ctbSizeY;
-    picParams->FrameHeightInMbs = hevcPP->pic_width_in_luma_samples / ctbSizeY;
+    // Check why are picParams->PicWidthInMbs and picParams->FrameHeightInMbs are 4 times smaller than expected
+    // 7-15 (hacked to follow expectation)
+    picParams->PicWidthInMbs = (int)(hevcPP->pic_width_in_luma_samples / ctbSizeY + 0.5) * 4;
+    // 7-17 (hacked to follow expectation)
+    picParams->FrameHeightInMbs = (int)(hevcPP->pic_height_in_luma_samples / ctbSizeY + 0.5) * 4;
 }
 
 void decode_pps(CUVIDPICPARAMS* picParams, BENZ_ITU_H26XBS* bitstream){
@@ -1861,28 +1878,28 @@ BENZINA_PLUGIN_STATIC int         nvdecodeFeederThrdCore          (NVDECODE_CTX*
 
     uint32_t configurationVersion = (uint32_t)record[0];                                           // 0
     uint32_t general_profile_space = (uint32_t)(record[1] >> 6);                                   // 1 : 11000000
-    uint32_t general_tier_flag = (uint32_t)(record[1] >> 5 & 1);                                   // 1 : 00100000
-    uint32_t general_profile_idc = (uint32_t)(record[1] & 31);                                     // 1 : 00011111
+    uint32_t general_tier_flag = (uint32_t)(record[1] >> 5 & 0x01);                                // 1 : 00100000
+    uint32_t general_profile_idc = (uint32_t)(record[1] & 0x1f);                                   // 1 : 00011111
     uint32_t general_profile_compatibility_flags = benz_iso_bmff_as_u32(record + 2);               // 2 (2-5)
     uint64_t general_constraint_indicator_flags = benz_iso_bmff_as_u64(record + 6) >> 16;          // 6 (6-11)
     uint32_t general_level_idc = (uint32_t)record[12];                                             // 12
     // bits(4) reserved = ‘1111’b;
-    uint32_t min_spatial_segmentation_idc = (uint32_t)benz_iso_bmff_as_u16(record + 13) & 0x0FFF;  // 13 (13-14) : 00001111 11111111 ...
+    uint32_t min_spatial_segmentation_idc = (uint32_t)benz_iso_bmff_as_u16(record + 13) & 0x0fff;  // 13 (13-14) : 00001111 11111111 ...
     // bits(6) reserved = ‘111111’b;
-    uint32_t parallelismType = (uint32_t)(record[15] & 3);                                         // 15 : 00000011
+    uint32_t parallelismType = (uint32_t)(record[15] & 0x03);                                      // 15 : 00000011
     // bits(6) reserved = ‘111111’b;
-    uint32_t chromaFormat = (uint32_t)(record[16] & 3);                                            // 16 : 00000011
+    uint32_t chromaFormat = (uint32_t)(record[16] & 0x03);                                         // 16 : 00000011
     // bits(5) reserved = ‘11111’b;
-    uint32_t bitDepthLumaMinus8 = (uint32_t)(record[17] & 7);                                      // 17 : 00000111
+    uint32_t bitDepthLumaMinus8 = (uint32_t)(record[17] & 0x07);                                   // 17 : 00000111
     // bits(5) reserved = ‘11111’b;
-    uint32_t bitDepthChromaMinus8 = (uint32_t)(record[18] & 7);                                    // 18 : 00000011
+    uint32_t bitDepthChromaMinus8 = (uint32_t)(record[18] & 0x07);                                 // 18 : 00000011
     uint32_t avgFrameRate = (uint32_t)benz_iso_bmff_as_u16(record + 19);                           // 19 (19-20)
     uint32_t constantFrameRate = (uint32_t)(record[21] >> 6);                                      // 21 : 11000000
-    uint32_t numTemporalLayers = (uint32_t)(record[21] >> 3 & 7);                                  // 21 : 00111000
-    uint32_t temporalIdNested = (uint32_t)(record[21] >> 2 & 1);                                   // 21 : 00000100
-    uint32_t lengthSizeMinusOne = (uint32_t)(record[21] & 3);                                      // 21 : 00000011
+    uint32_t numTemporalLayers = (uint32_t)(record[21] >> 3 & 0x07);                               // 21 : 00111000
+    uint32_t temporalIdNested = (uint32_t)(record[21] >> 2 & 0x01);                                // 21 : 00000100
+    uint32_t lengthSizeMinusOne = (uint32_t)(record[21] & 0x03);                                   // 21 : 00000011
     uint32_t numOfArrays = (uint32_t)record[22];                                                   // 22
-    record = &rq->hvcCData[0] + 23;
+    record += 23;
 
     // Find PPS, SPSs and get SPS id
     uint8_t pps_sps_id = 0;
@@ -1896,7 +1913,7 @@ BENZINA_PLUGIN_STATIC int         nvdecodeFeederThrdCore          (NVDECODE_CTX*
         // In our case, array_completeness will always == 1
 //        uint32_t array_completeness = (uint32_t)(record[0] >> 7);                                  // 0 : 10000000
         // bits(1) reserved = 0;
-        uint32_t NAL_unit_type = (uint32_t)(record[0] & 63);                                       // 0 : 00111111
+        uint32_t NAL_unit_type = (uint32_t)(record[0] & 0x3f);                                     // 0 : 00111111
         uint32_t numNalus = (uint32_t)benz_iso_bmff_as_u16(record + 1);                            // 1 (1-2)
         record += 3;
 
@@ -1911,13 +1928,13 @@ BENZINA_PLUGIN_STATIC int         nvdecodeFeederThrdCore          (NVDECODE_CTX*
             case 32: break; //VPS_NUT
             case 33: //SPS_NUT
                 //Skip the 2 header bytes
-                sps_id = benz_itu_h265_nalu_sps_get_sps_id(record + 2);
+                sps_id = get_sps_seq_parameter_set_id(record + 2, nalUnitLength - 2);
                 sps_locations[sps_id] = record + 2;
                 sps_lengths[sps_id] = nalUnitLength - 2;
                 break;
             case 34: //PPS_NUT
+                pps_sps_id = benz_itu_h265_nalu_pps_get_sps_id(record);
                 //Skip the 2 header bytes
-                pps_sps_id = benz_itu_h265_nalu_pps_get_sps_id(record + 2);
                 pps_location = record + 2;
                 pps_length = nalUnitLength - 2;
             }
@@ -1961,7 +1978,7 @@ BENZINA_PLUGIN_STATIC int         nvdecodeFeederThrdCore          (NVDECODE_CTX*
     pP->nNumSlices        = 1;
 	pP->pSliceDataOffsets = &ONE;   // offset to annexb begin flag
 	
-    pP->ref_pic_flag      = 0;
+    pP->ref_pic_flag      = 1;
     pP->intra_pic_flag    = 1;
 	
 	/**
@@ -2545,21 +2562,27 @@ BENZINA_PLUGIN_STATIC int         nvdecodeAllocDataOpen           (NVDECODE_CTX*
 //    ctx->decoderInfo.CodecType = cudaVideoCodec_H264;
     ctx->decoderInfo.CodecType = cudaVideoCodec_HEVC;
     ctx->decoderInfo.ChromaFormat = cudaVideoChromaFormat_420;
+//    ctx->decoderInfo.ulCreationFlags = cudaVideoCreate_PreferCUVID;
     ctx->decoderInfo.bitDepthMinus8 = 0;
     ctx->decoderInfo.ulIntraDecodeOnly = 1;
+    ctx->decoderInfo.ulMaxWidth = ctx->decoderInfo.ulWidth;
+    ctx->decoderInfo.ulMaxHeight = ctx->decoderInfo.ulHeight;
     ctx->decoderInfo.display_area.left = 0;
     ctx->decoderInfo.display_area.top = 0;
-    ctx->decoderInfo.display_area.right = 512;
-    ctx->decoderInfo.display_area.bottom = 512;
-    ctx->decoderInfo.OutputFormat = cudaVideoSurfaceFormat_NV12;
+    ctx->decoderInfo.display_area.right = ctx->decoderInfo.ulWidth;
+    ctx->decoderInfo.display_area.bottom = ctx->decoderInfo.ulHeight;
+    ctx->decoderInfo.OutputFormat = ctx->decoderInfo.bitDepthMinus8 > 0 ?
+                                    cudaVideoSurfaceFormat_P016 :
+                                    cudaVideoSurfaceFormat_NV12;
     ctx->decoderInfo.DeinterlaceMode = cudaVideoDeinterlaceMode_Weave;
-    ctx->decoderInfo.ulTargetWidth = 512;
-    ctx->decoderInfo.ulTargetHeight = 512;
+    ctx->decoderInfo.ulTargetWidth = ctx->decoderInfo.ulWidth;
+    ctx->decoderInfo.ulTargetHeight = ctx->decoderInfo.ulHeight;
     ctx->decoderInfo.ulNumOutputSurfaces = 4;
+//    u->decoderInfo.vidLock = NULL;
     ctx->decoderInfo.target_rect.left = 0;
     ctx->decoderInfo.target_rect.top = 0;
-    ctx->decoderInfo.target_rect.right = 0;
-    ctx->decoderInfo.target_rect.bottom = 0;
+    ctx->decoderInfo.target_rect.right = ctx->decoderInfo.ulTargetWidth;
+    ctx->decoderInfo.target_rect.bottom = ctx->decoderInfo.ulTargetWidth;
 
 	return nvdecodeAllocThreading(ctx);
 }
