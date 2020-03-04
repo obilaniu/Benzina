@@ -1,9 +1,9 @@
 
 from bitstring import ConstBitStream
 
-from pybzparse import Parser
-from pybzparse.utils import find_boxes, find_traks, get_shape, \
-                            get_sample_table, get_sample_location
+from pybenzinaparse import Parser
+from pybenzinaparse.utils import find_boxes, find_traks, get_shape, \
+    get_sample_table, get_sample_location
 
 
 class File:

@@ -1640,17 +1640,12 @@ void decode_sps(CUVIDPICPARAMS* picParams, BENZ_ITU_H26XBS* bitstream){
     hevcPP->bit_depth_luma_minus8 = bit_depth_luma_minus8;
     hevcPP->bit_depth_chroma_minus8 = bit_depth_chroma_minus8;
 
-    // 7-10
-    uint32_t minCbLog2SizeY = hevcPP->log2_min_luma_coding_block_size_minus3 + 3;
-    // 7-11
-    uint32_t ctbLog2SizeY = minCbLog2SizeY + hevcPP->log2_diff_max_min_luma_coding_block_size;
-    // 7-13
-    uint32_t ctbSizeY = 1 << ctbLog2SizeY;
-    // Check why are picParams->PicWidthInMbs and picParams->FrameHeightInMbs are 4 times smaller than expected
+	// Instead of following the computation given by 7-13, we assume nvdecode is expecting a ctbSizeY of 16
+    uint32_t ctbSizeY = 16;
     // 7-15 (hacked to follow expectation)
-    picParams->PicWidthInMbs = (int)(hevcPP->pic_width_in_luma_samples / ctbSizeY + 0.5) * 4;
+    picParams->PicWidthInMbs = hevcPP->pic_width_in_luma_samples / ctbSizeY + 0.5;
     // 7-17 (hacked to follow expectation)
-    picParams->FrameHeightInMbs = (int)(hevcPP->pic_height_in_luma_samples / ctbSizeY + 0.5) * 4;
+    picParams->FrameHeightInMbs = hevcPP->pic_height_in_luma_samples / ctbSizeY + 0.5;
 }
 
 void decode_pps(CUVIDPICPARAMS* picParams, BENZ_ITU_H26XBS* bitstream){

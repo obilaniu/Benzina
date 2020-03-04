@@ -34,14 +34,14 @@ class ImageNet(Dataset):
 
     def __init__(self, input_track, target_track):
         Dataset.__init__(self, input_track)
-        self._targets = [None for _ in range(len(input_track))]
+        self._targets = [-1 for _ in range(len(input_track))]
         for i in range(len(target_track)):
             self._targets[i] = int.from_bytes(target_track.sample_bytes(i),
                                               byteorder="little")
 
     def __getitem__(self, index):
         return ImageNet._Item(*Dataset.__getitem__(self, index),
-                              self._targets[index])
+                              (self.targets[index],))
 
     def __add__(self, other):
         raise NotImplementedError()
