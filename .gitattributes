@@ -3,3 +3,5 @@
 #
 
 *.so binary
+
+* annex.backend=MD5E
