@@ -266,7 +266,9 @@ cuda_incs   += nvcuvid_incs
 if nvcc.found()
   gpuarchs = []
   if CUDA_ARCH == 'Auto'
-    detectGPU = run_command(nvcc, ['-w', '-cudart', 'static', detectgpus_c, '--run'])
+    detectGPUargs   = ['-w', '-cudart', 'static', detectgpus_c, '--run']
+    detectGPU       = run_command(nvcc, detectGPUargs)
+    detectGPUclean  = run_command(nvcc, detectGPUargs+['--clean-targets'])
     detectGPUstdout = detectGPU.stdout().strip()
     detectGPUstderr = detectGPU.stderr().strip()
     if detectGPU.returncode() == 0
