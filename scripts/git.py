@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 #
 # Imports
 #
@@ -37,7 +35,7 @@ def invoke(command,
         **kwargs
     )
 
-def getSrcRoot():
+def get_src_root():
     #
     # Return the cached value if we know it.
     #
@@ -63,7 +61,7 @@ def getSrcRoot():
     
     return root
 
-def getGitVer():
+def get_git_ver():
     #
     # Return the cached value if we know it.
     #
@@ -88,7 +86,7 @@ def getGitVer():
     
     return GIT_VER
 
-def isGitClean():
+def is_git_clean():
     #
     # Return the cached value if we know it.
     #

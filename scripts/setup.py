@@ -1,15 +1,13 @@
-# -*- coding: utf-8 -*-
-
 #
 # Imports and early Python version check.
 #
-packageName = "benzina"
-githubURL   = "https://github.com/obilaniu/Benzina"
-author      = "Olexa Bilaniuk"
+package_name = "benzina"
+github_url   = "https://github.com/obilaniu/Benzina"
+author       = "Olexa Bilaniuk"
 
-import os, sys
+import glob, os, sys
 if sys.version_info[:2] < (3, 5):
-    sys.stdout.write(packageName+" is Python 3.5+ only!\n")
+    sys.stdout.write(package_name+" is Python 3.5+ only!\n")
     sys.exit(1)
 from setuptools import setup, find_packages, Extension
 from .          import git, versioning, utils
@@ -18,7 +16,7 @@ from .          import git, versioning, utils
 #
 # Read long description
 #
-with open(os.path.join(git.getSrcRoot(),
+with open(os.path.join(git.get_src_root(),
                        "scripts",
                        "LONG_DESCRIPTION.txt"), "r", encoding="utf-8") as f:
     long_description = f.read()
@@ -27,11 +25,11 @@ with open(os.path.join(git.getSrcRoot(),
 #
 # Synthesize version.py file
 #
-with open(os.path.join(git.getSrcRoot(),
+with open(os.path.join(git.get_src_root(),
                        "src",
-                       packageName,
+                       package_name,
                        "version.py"), "w") as f:
-    f.write(versioning.synthesizeVersionPy())
+    f.write(versioning.synthesize_version_py())
 
 
 
@@ -39,13 +37,13 @@ with open(os.path.join(git.getSrcRoot(),
 # Perform setup.
 #
 setup(
-    name                 = packageName,
-    version              = versioning.verPublic,
+    name                 = package_name,
+    version              = versioning.ver_public,
     author               = author,
     author_email         = "anonymous@anonymous.com",
     license              = "MIT",
-    url                  = githubURL,
-    download_url         = githubURL+"/archive/v{}.tar.gz".format(versioning.verRelease),
+    url                  = github_url,
+    download_url         = github_url+"/archive/v{}.tar.gz".format(versioning.ver_release),
     description          = "A fast image-loading package to load images compressed with "
                            "video codecs onto GPU asynchronously.",
     long_description     = long_description,
@@ -83,13 +81,25 @@ setup(
     ext_modules          = [
         Extension("benzina.native",
                   [os.path.join("src", "benzina", "native.c")],
-                  include_dirs=[os.path.join(git.getSrcRoot(), "include")],
-                  library_dirs=[os.path.join(git.getSrcRoot(),
+                  include_dirs=[os.path.join(git.get_src_root(), "include")],
+                  library_dirs=[os.path.join(git.get_src_root(),
                                              utils.get_build_platlib(),
                                              "benzina",
                                              "lib")],
                   runtime_library_dirs=[os.path.join("$ORIGIN", "lib")],
-                  libraries=["benzina"],)
+                  libraries=["benzina"],
+        ),
+        Extension("benzina._native",
+                  glob.glob(os.path.join("src", "benzina", "_native", "**", "*.c"),
+                            recursive=True),
+                  include_dirs=[os.path.join(git.get_src_root(), "include")],
+                  library_dirs=[os.path.join(git.get_src_root(),
+                                             utils.get_build_platlib(),
+                                             "benzina",
+                                             "lib")],
+                  runtime_library_dirs=[os.path.join("$ORIGIN", "lib")],
+                  libraries=["benzina"],
+        ),
     ],
     cmdclass={
         "build_configure": utils.build_configure,
@@ -98,10 +108,10 @@ setup(
     },
     command_options={
         'build_sphinx': {
-            'project': ("setup.py", packageName),
+            'project': ("setup.py", package_name),
             'copyright': ("setup.py", "2019, {}".format(author)),
-            'version': ("setup.py", versioning.verRelease),
-            'release': ("setup.py", versioning.verPublic)
+            'version': ("setup.py", versioning.ver_release),
+            'release': ("setup.py", versioning.ver_public)
         }
     },
     zip_safe             = False,

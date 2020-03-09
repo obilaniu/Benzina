@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 import os, re, time
 from   . import git
 
@@ -16,12 +14,12 @@ from   . import git
 # which has a well-defined normalization.
 #
 
-verPublic  = "0.0.4.dev0"
+ver_public  = "0.0.4.dev0"
 
 #
 # Information computed from the public version.
 #
-regexMatch = re.match(r"""(?:
+regex_match = re.match(r"""(?:
     (?:(?P<epoch>[0-9]+)!)?               # epoch
     (?P<release>[0-9]+(?:\.[0-9]+)*)      # release segment
     (?P<pre>                              # pre-release
@@ -34,15 +32,15 @@ regexMatch = re.match(r"""(?:
     (?P<dev>                              # dev release
         (?:\.dev(?P<devN>[0-9]+))
     )?
-)""", verPublic, re.X)
-assert regexMatch
-verEpoch   = regexMatch.group("epoch")   or ""
-verRelease = regexMatch.group("release")
-verPreRel  = regexMatch.group("pre")     or ""
-verPostRel = regexMatch.group("post")    or ""
-verDevRel  = regexMatch.group("dev")     or ""
-verNormal  = verRelease+verPreRel+verPostRel+verDevRel
-verIsRel   = bool(not verPreRel and not verDevRel)
+)""", ver_public, re.X)
+assert regex_match
+ver_epoch   = regex_match.group("epoch")   or ""
+ver_release = regex_match.group("release")
+ver_prerel  = regex_match.group("pre")     or ""
+ver_postrel = regex_match.group("post")    or ""
+ver_devrel  = regex_match.group("dev")     or ""
+ver_normal  = ver_release+ver_prerel+ver_postrel+ver_devrel
+ver_is_rel  = bool(not ver_prerel and not ver_devrel)
 
 #
 # Local Version.
@@ -51,15 +49,15 @@ verIsRel   = bool(not verPreRel and not verDevRel)
 # either from the environment variable SOURCE_DATE_EPOCH or the wallclock time.
 # Also converts POSIX timestamp to ISO 8601.
 #
-verVCS     = git.getGitVer()
-verClean   = bool((not verVCS) or (git.isGitClean()))
-posixTime  = int(os.environ.get("SOURCE_DATE_EPOCH", time.time()))
-iso8601Time= time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(posixTime))
-verLocal   = verPublic+"+"+iso8601Time
-if verVCS:
-    verLocal += "."+verVCS
-    if not verClean:
-        verLocal += ".dirty"
+ver_vcs       = git.get_git_ver()
+ver_clean     = bool((not ver_vcs) or (git.is_git_clean()))
+posix_time    = int(os.environ.get("SOURCE_DATE_EPOCH", time.time()))
+iso_8601_time = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(posix_time))
+ver_local     = ver_public+"+"+iso_8601_time
+if ver_vcs:
+    ver_local += "."+ver_vcs
+    if not ver_clean:
+        ver_local += ".dirty"
 
 #
 # SemVer Version.
@@ -67,32 +65,32 @@ if verVCS:
 # Obeys Semantic Versioning 2.0.0, found at
 #     https://semver.org/spec/v2.0.0.html
 #
-verSemVer  = ".".join((verRelease+".0.0").split(".")[:3])
+ver_semver  = ".".join((ver_release+".0.0").split(".")[:3])
 identifiers= []
-if verPreRel: identifiers.append(verPreRel)
-if verDevRel: identifiers.append(verDevRel[1:])
+if ver_prerel: identifiers.append(ver_prerel)
+if ver_devrel: identifiers.append(ver_devrel[1:])
 if identifiers:
-    verSemVer += "-" + ".".join(identifiers)
+    ver_semver += "-" + ".".join(identifiers)
 metadata   = []
-if regexMatch.group("postN"):
+if regex_match.group("postN"):
     metadata.append("post")
-    metadata.append(regexMatch.group("postN"))
+    metadata.append(regex_match.group("postN"))
 metadata.append("buildtime")
-metadata.append(iso8601Time)
-if verVCS:
+metadata.append(iso_8601_time)
+if ver_vcs:
     metadata.append("git")
-    metadata.append(verVCS)
-    if not verClean:
+    metadata.append(ver_vcs)
+    if not ver_clean:
         metadata.append("dirty")
 if metadata:
-    verSemVer += "+" + ".".join(metadata)
+    ver_semver += "+" + ".".join(metadata)
 
 
 #
 # Version utilities
 #
-def synthesizeVersionPy():
-    templatePath = os.path.join(git.getSrcRoot(),
+def synthesize_version_py():
+    templatePath = os.path.join(git.get_src_root(),
                                 "scripts",
                                 "version.py.in")
     

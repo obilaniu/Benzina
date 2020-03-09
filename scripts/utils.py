@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from . import git
 import setuptools.command.build_ext
 import distutils.command.clean
@@ -44,7 +43,7 @@ class build_configure(setuptools.command.build_ext.build_ext, build_mixin):
         self.reconfigure = 0
     
     def run(self):
-        absSrcRoot       = git.getSrcRoot()
+        absSrcRoot       = git.get_src_root()
         srcRoot          = os.path.relpath(absSrcRoot, self.build_meson)
         libRoot          = os.path.abspath(self.build_lib)
         
