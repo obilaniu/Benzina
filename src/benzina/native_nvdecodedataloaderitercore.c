@@ -464,7 +464,7 @@ static PyObject* NvdecodeDataLoaderIterCore_defineSample            (NvdecodeDat
 	uint64_t            location[2]         = {0, 0};
 	uint64_t            configLocation[2]   = {0, 0};
 	
-    static char *kwargsList[] = {"datasetIndex", "dstPtr", "location", "config_location", NULL};
+	static char *kwargsList[] = {"datasetIndex", "dstPtr", "location", "config_location", NULL};
 	
 	if(!PyArg_ParseTupleAndKeywords(args, kwargs, "KK", kwargsList,
 	                                &datasetIndex, &devicePtr, &pyLocation, &pyConfigLocation)){

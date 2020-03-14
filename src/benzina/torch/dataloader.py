@@ -247,7 +247,7 @@ class _DataLoaderIter:
         items, auxd = zip(*[self.dataset[i]       for i in indices])
         # Use "bzna_thumb" until having a dataloader that is able to load
         # the size variant images in "bzna_input"
-        inputs      = [Track(item, "bzna_thumb") for item in items]
+        inputs      = [Track(item.as_file(), "bzna_thumb") for item in items]
         token       = (buffer, *self.collate_fn(auxd))
         t_args      = (self.shape, self.RNG)
 
