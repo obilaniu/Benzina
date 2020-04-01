@@ -1,6 +1,6 @@
 project('Benzina', 'c', 'cpp',
         version:                 '0.0.4',
-        meson_version:           '>=0.51.1',
+        meson_version:           '>=0.54.0',
         license:                 'MIT',
         default_options:         [
             'c_std=gnu99',
@@ -141,6 +141,12 @@ configdata.set10('BENZINA_ENDIAN_LITTLE',    IS_HOST_LE,
 
 
 #
+# Initial Meson module imports
+#
+FS   = import('fs')
+
+
+#
 # FFmpeg
 #
 libavcodec    = dependency('libavcodec',  version: '>=57', required: false, disabler: true)
@@ -157,7 +163,9 @@ foreach L : [libavcodec, libavformat, libavfilter, libavutil, libswscale]
     if L.type_name() == 'pkgconfig'
       foreach D : L.get_pkgconfig_variable('includedir',
                                            default: '/usr/include/ffmpeg').split(':')
-        ffmpeg_incdir += D in ffmpeg_incdir ? [] : [D]
+        if FS.is_dir(D) and D not in ffmpeg_incdir
+          ffmpeg_incdir += [D]
+        endif
       endforeach
     endif
   endif

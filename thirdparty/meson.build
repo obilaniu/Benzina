@@ -32,23 +32,56 @@
 #     do that we try to use the stubs, then the system libraries. If programs
 #     link and run with specific APIs, they are assumed usable.
 #
-CUDA_MODULE         = import('unstable-cuda')
+CUDA_FOUND          = false
 CUDA_VERSION        = 'unknown'
 CUDA_ARCH           = get_option('nvidia_arch')
-CUDA_HOME           = get_option('nvidia_home').split(':')[0]
 CUDA_RUNTIME        = get_option('nvidia_runtime') == 'static' ? 'cudart_static' : 'cudart'
-NVIDIA_DRIVER       = get_option('nvidia_driver').to_lower()
-NVDEC_VERSION       = get_option('nvdec_version').to_lower()
-nvcc_path           = CUDA_HOME  / 'bin' / 'nvcc'
-toolkit_incdir      = CUDA_HOME  / 'include'
-toolkit_libdir      = CUDA_HOME  / 'lib64'
-toolkit_stub_libdir = CUDA_HOME  / 'lib64' / 'stubs'
+NVIDIA_DRIVER       = get_option('nvidia_driver').to_lower().strip()
+NVDEC_VERSION       = get_option('nvdec_version').to_lower().strip()
+CUDA_PATH_ARRAY     = get_option('nvidia_home').split(':') + [
+  '/usr/local/cuda',
+  '/usr/local/cuda-10.2',
+  '/usr/local/cuda-10.1',
+  '/usr/local/cuda-10.0',
+  '/usr/local/cuda-9.2',
+  '/usr/local/cuda-9.1',
+  '/usr/local/cuda-9.0',
+]
+foreach D : CUDA_PATH_ARRAY
+  if D == ''
+    continue
+  elif not FS.is_absolute(D)
+    warning('Skipping CUDA path '+D+' because it is not absolute')
+    continue
+  elif FS.is_dir(D)
+    nvcc_path           = D/'bin'/'nvcc'
+    toolkit_incdir      = D/'include'
+    toolkit_libdir      = D/'lib64'
+    toolkit_stub_libdir = D/'lib64'/'stubs'
+    if FS.is_dir (D/'lib64'/'stubs') and \
+       FS.is_dir (D/'include')       and \
+       FS.is_file(D/'bin'/'nvcc')
+      CUDA_HOME  = D
+      CUDA_FOUND = true
+      break
+    endif
+  endif
+endforeach
+if not CUDA_FOUND
+  subdir_done()
+endif
+CUDA = import('unstable-cuda')
+
+
 cuda_incs           = []
 nvcc_gencode_flags  = []
 nvcc_cudart_flags   = []
 nvcc_opt_flags      = []
 nvcc_ccbin_flag     = []
-nvcc                = find_program(nvcc_path, 'nvcc', required: false, disabler: true)
+nvcc                = find_program('nvcc',
+                                   dirs:     [D/'bin'],
+                                   required: false,
+                                   disabler: true)
 if nvcc.found()
   NVCC_RUN = run_command(nvcc, ['-V'])
   if NVCC_RUN.returncode() == 0
@@ -82,7 +115,7 @@ NVIDIA_DRIVER_8_0 = IS_HOST_WINDOWS ? '378.66' : '378.13'
 NVIDIA_DRIVER_MAX = IS_HOST_WINDOWS ? '436.15' : '435.21'
 NVIDIA_DRIVER_MIN = IS_HOST_WINDOWS ? '378.66' : '378.13'
 if CUDA_VERSION != 'unknown'
-  NVIDIA_DRIVER_MIN = CUDA_MODULE.min_driver_version(CUDA_VERSION)
+  NVIDIA_DRIVER_MIN = CUDA.min_driver_version(CUDA_VERSION)
 endif
 
 
@@ -161,8 +194,10 @@ else
     # builds (build and host machines of identical architecture)
     #
     if NVIDIA_DRIVER == 'auto' and IS_HOST_LINUX
-      modinfo = find_program('modinfo', '/sbin/modinfo', '/usr/sbin/modinfo',
-                             required: false, disabler: true)
+      modinfo = find_program('modinfo',
+                             dirs:     ['/sbin', '/usr/sbin'],
+                             required: false,
+                             disabler: true)
       if modinfo.found()
         MODINFO_RUN = run_command(modinfo, ['-F', 'version', 'nvidia'])
         if MODINFO_RUN.returncode() == 0
@@ -240,7 +275,7 @@ endif
 # Emit warning if CUDA Toolkit version is incompatible with NVIDIA driver version.
 #
 if CUDA_VERSION != 'unknown'
-  NVIDIA_DRIVER_CUDA_MIN = CUDA_MODULE.min_driver_version(CUDA_VERSION)
+  NVIDIA_DRIVER_CUDA_MIN = CUDA.min_driver_version(CUDA_VERSION)
   message('Found    CUDA Toolkit:  '+CUDA_VERSION+', supported NVIDIA Driver >= '+NVIDIA_DRIVER_CUDA_MIN)
   if NVIDIA_DRIVER.version_compare('<'+NVIDIA_DRIVER_CUDA_MIN)
     warning('CUDA Toolkit '+CUDA_VERSION+' requires driver >= '+NVIDIA_DRIVER_CUDA_MIN+
@@ -286,16 +321,20 @@ if nvcc.found()
       endif
     endif
   endif
-  nvcc_gencode_readable = CUDA_MODULE.nvcc_arch_readable(CUDA_VERSION, CUDA_ARCH, detected: gpuarchs)
-  nvcc_gencode_flags   += CUDA_MODULE.nvcc_arch_flags   (CUDA_VERSION, CUDA_ARCH, detected: gpuarchs)
+  nvcc_gencode_readable = CUDA.nvcc_arch_readable(CUDA_VERSION, CUDA_ARCH, detected: gpuarchs)
+  nvcc_gencode_flags   += CUDA.nvcc_arch_flags   (CUDA_VERSION, CUDA_ARCH, detected: gpuarchs)
   nvcc_cudart_flags    += ['-cudart', get_option('nvidia_runtime')]
-  if(get_option('buildtype') == 'debugoptimized' or
-     get_option('buildtype') == 'debug')
+  if get_option('debug') == true
     nvcc_opt_flags += ['-g', '-lineinfo']
-  else
-    nvcc_opt_flags += ['-O3']
   endif
-  if((get_option('b_ndebug') == 'if-release' and get_option('buildtype') == 'release') or
+  if   '0123'.contains(get_option('optimization'))
+    nvcc_opt_flags += ['-O'+get_option('optimization')]
+  elif 'g'.contains(get_option('optimization'))
+    nvcc_opt_flags += ['-O0']
+  elif 's'.contains(get_option('optimization'))
+    nvcc_opt_flags += ['-O2']
+  endif
+  if((get_option('b_ndebug') == 'if-release' and '23s'.contains(get_option('optimization'))) or
      (get_option('b_ndebug') == 'true'))
     nvcc_opt_flags += ['-DNDEBUG']
   endif
@@ -321,12 +360,12 @@ endif
 #
 # Compile generator and linker args.
 #
-nvccCompGen   = generator(nvcc,
+nvcc_compiler_generator = generator(nvcc,
     arguments: nvcc_ccbin_flag + nvcc_gencode_flags + nvcc_cudart_flags + nvcc_opt_flags + nvcuvid_iflags +
                ['-x', 'cu', '@EXTRA_ARGS@', '@INPUT@', '-c', '-o', '@OUTPUT@'],
     output:    ['@BASENAME@.o'],
 )
-nvccLinkArgs  = ['-dlink'] + nvcc_ccbin_flag + nvcc_cudart_flags + nvcc_gencode_flags
+nvcc_link_args = ['-dlink'] + nvcc_ccbin_flag + nvcc_cudart_flags + nvcc_gencode_flags
 
 
 #

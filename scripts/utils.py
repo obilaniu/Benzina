@@ -43,29 +43,68 @@ class build_configure(setuptools.command.build_ext.build_ext, build_mixin):
         self.reconfigure = 0
     
     def run(self):
-        absSrcRoot       = git.get_src_root()
-        srcRoot          = os.path.relpath(absSrcRoot, self.build_meson)
-        libRoot          = os.path.abspath(self.build_lib)
+        """
+        Perform Meson (re)configuration step, if it hasn't been done already.
+        
+        Meson does not allow manual access to the environment variables from
+        inside meson.build files, preferring Meson options. It is also
+        needlessly noisy when PKG_CONFIG_PATH is set as an environment
+        variable and/or contains duplicates, so we do what it prefers: We pop
+        out PKG_CONFIG_PATH from the environment, strip duplicates ourselves,
+        then use Meson's -Dpkg_config_path=string option.
+        """
         
         os.makedirs(self.build_meson, exist_ok=True)
+        if os.path.isfile(os.path.join(self.build_meson,
+                                       "meson-private",
+                                       "coredata.dat")) and not self.reconfigure:
+            return None
         
-        if not os.path.isfile(os.path.join(self.build_meson,
-                                           "meson-private",
-                                           "coredata.dat")) or self.reconfigure:
-            cmd  = ["meson",            srcRoot,
-                    "--prefix",         libRoot,
-                    "-Dbuildtype="      +os.environ.get("BUILD_TYPE", "release"),
-                    "-Dbuilding_py_pkg="+"true",
-                    "-Denable_gpl="     +os.environ.get("ENABLE_GPL", "false"),
-                    "-Dpy_interpreter=" +sys.executable,
-                    "-Dnvidia_runtime=" +os.environ.get("CUDA_RUNTIME", "static"),
-                    "-Dnvidia_arch="    +os.environ.get("CUDA_ARCH", "Auto"),
-                    "-Dnvidia_home="    +os.environ.get("CUDA_HOME", "/usr/local/cuda"),
-                    "-Dnvidia_driver="  +os.environ.get("NVIDIA_DRIVER", "Auto")]
-            if self.reconfigure: cmd.append("--reconfigure")
-            subprocess.check_call(cmd,
-                                  stdin = subprocess.DEVNULL,
-                                  cwd   = self.build_meson)
+        # Environment Copy
+        env = os.environ.copy()
+        
+        # PKG_CONFIG_PATH removal/-Dpkg_config_path computation
+        pkg_config_path_dup = env.pop("PKG_CONFIG_PATH", "").split(":")
+        pkg_config_path = []
+        for p in pkg_config_path_dup:
+            if p not in pkg_config_path:
+                pkg_config_path.append(p)
+        pkg_config_path = ":".join(pkg_config_path)
+        
+        # Locate CUDA Toolkit via a number of envvars.
+        cuda_loc  = {env.get("CUDA_PATH"),
+                     env.get("CUDA_HOME"),
+                     env.get("CUDA_ROOT")}
+        cuda_loc.discard(None)
+        cuda_loc  = sorted(list(cuda_loc))
+        if   len(cuda_loc) >= 2:
+            raise EnvironmentError("Multiple CUDA environment variables set to "
+                                   "different values: \""+"\", \"".join(cuda_loc)+"\"")
+        elif len(cuda_loc) == 1:
+            cuda_loc = cuda_loc[0]
+        else:
+            cuda_loc = ""
+        
+        # Construct Meson invocation accordingly.
+        cmd  = [
+            "meson",            git.get_src_root(),
+            "--prefix",         os.path.abspath(self.build_lib),
+            "-Dbuilding_py_pkg="+"true",
+            "-Dpy_interpreter=" +sys.executable,
+            "-Dpkg_config_path="+pkg_config_path,
+            "-Dbuildtype="      +env.get("BUILD_TYPE",    "release"),
+            "-Denable_gpl="     +env.get("ENABLE_GPL",    "false"),
+            "-Dnvidia_driver="  +env.get("NVIDIA_DRIVER", "Auto"),
+            "-Dnvidia_runtime=" +env.get("CUDA_RUNTIME",  "static"),
+            "-Dnvidia_arch="    +env.get("CUDA_ARCH",     "Auto"),
+            "-Dnvidia_home="    +cuda_loc,
+        ]
+        if self.reconfigure: cmd.append("--reconfigure")
+        
+        subprocess.check_call(cmd,
+                              stdin = subprocess.DEVNULL,
+                              cwd   = self.build_meson,
+                              env   = env)
 
 
 class build_ext(setuptools.command.build_ext.build_ext, build_mixin):
@@ -130,38 +169,6 @@ class build_ext(setuptools.command.build_ext.build_ext, build_mixin):
         meson_targets = outs.values()
         meson_targets = [os.path.abspath(t)            for t in meson_targets]
         meson_targets = [os.path.relpath(t, abs_dir)   for t in meson_targets]
-        
-        
-        ###
-        # Required because Meson forgets to include .so and .so.x symlinks in
-        # the output of `meson introspect --installed`. Hugely inefficient.
-        ###
-        meson_targets_real = [os.path.join(abs_dir, t) for t in meson_targets]
-        meson_targets_real = [os.path.realpath(t)      for t in meson_targets_real]
-        meson_targets_real_set = set(meson_targets_real)
-        meson_extra_set        = set()
-        meson_parent_dict      = {}
-        for t,r in zip(meson_targets, meson_targets_real):
-            dt = os.path.dirname(t)
-            dr = os.path.dirname(r)
-            if dt not in meson_parent_dict:
-                meson_parent_dict[dt] = {
-                    e for e in os.listdir(dr) if os.path.islink(os.path.join(dr,e))
-                }
-        meson_parent_dict = {k:v for k,v in meson_parent_dict.items() if v}
-        for dt,s in meson_parent_dict.items():
-            dr = os.path.realpath(os.path.join(abs_dir, dt))
-            for e in s:
-                f = os.path.join(dr,e)
-                if f                   not in meson_targets_real_set and \
-                   os.path.realpath(f)     in meson_targets_real_set:
-                    meson_extra_set.add(os.path.join(dt,e))
-        meson_targets.extend(sorted(list(meson_extra_set)))
-        ###
-        # Done attempting to determine missing symlinks.
-        ###
-        
-        
         return meson_targets
 
 

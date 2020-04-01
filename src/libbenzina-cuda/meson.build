@@ -13,18 +13,20 @@ endif
 
 
 ### CUDA code compilation
-libbenzinacuda_cdefs     = ['-DBENZINA_CUDA_IS_SHARED=1']
+libbenzinacuda_cdefs    = ['-DBENZINA_CUDA_IS_SHARED=1']
 libbenzinacudaCuda_srcs = files('kernels.cu')
-libbenzinacudaCuda_objs = nvccCompGen.process(libbenzinacudaCuda_srcs, extra_args: [
-    '-Xcompiler', '-fPIC',
-    '-Xptxas', '--warn-on-double-precision-use,-O3',
-    '-DBENZINA_CUDA_IS_BUILDING=1',
-    '-DBENZINA_IS_SHARED=1',
-] + libbenzinacuda_cdefs + benzina_iflags)
+libbenzinacudaCuda_objs = nvcc_compiler_generator.process(libbenzinacudaCuda_srcs,
+    extra_args: [
+        '-Xcompiler', '-fPIC',
+        '-Xptxas', '--warn-on-double-precision-use,-O3',
+        '-DBENZINA_CUDA_IS_BUILDING=1',
+        '-DBENZINA_IS_SHARED=1',
+    ] + libbenzinacuda_cdefs + benzina_iflags
+)
 libbenzinacudaCuda_sta  = static_library('pre-dlink', libbenzinacudaCuda_objs)
 libbenzinacudaCuda_dep  = declare_dependency(link_whole: libbenzinacudaCuda_sta)
 libbenzinacudaCuda_objs = custom_target ('libbenzinacudaCuda-dlink',
-    command         : [nvcc, '-shared'] + nvccLinkArgs + ['@INPUT@', '-o', '@OUTPUT@'],
+    command         : [nvcc, '-shared'] + nvcc_link_args + ['@INPUT@', '-o', '@OUTPUT@'],
     input           : libbenzinacudaCuda_sta,
     output          : ['@BASENAME@-dlink.o'],
     build_by_default: true,

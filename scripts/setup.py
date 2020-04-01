@@ -9,7 +9,7 @@ import glob, os, sys
 if sys.version_info[:2] < (3, 5):
     sys.stdout.write(package_name+" is Python 3.5+ only!\n")
     sys.exit(1)
-from setuptools import setup, find_packages, Extension
+from setuptools import setup, Extension, find_packages, find_namespace_packages
 from .          import git, versioning, utils
 
 
@@ -68,15 +68,17 @@ setup(
         "Topic :: Software Development :: Libraries :: Python Modules",
         "Topic :: Utilities",
     ],
+    zip_safe             = False,
     python_requires      = '>=3.5',
     setup_requires       = [
-        "meson>=0.51.1",
+        "meson>=0.54.0",
     ],
     install_requires     = [
-        "meson>=0.51.1",
+        "meson>=0.54.0",
         "numpy>=1.10",
     ],
-    packages             = find_packages("src"),
+    packages             = find_packages("src") +
+                           find_namespace_packages("src", include=["benzina.plugin.*"]),
     package_dir          = {'': 'src'},
     ext_modules          = [
         Extension("benzina.native",
@@ -89,8 +91,8 @@ setup(
                   runtime_library_dirs=[os.path.join("$ORIGIN", "lib")],
                   libraries=["benzina"],
         ),
-        Extension("benzina._native",
-                  glob.glob(os.path.join("src", "benzina", "_native", "**", "*.c"),
+        Extension("benzina._native._C",
+                  glob.glob(os.path.join("src", "benzina", "_native", "_C", "**", "*.c"),
                             recursive=True),
                   include_dirs=[os.path.join(git.get_src_root(), "include")],
                   library_dirs=[os.path.join(git.get_src_root(),
@@ -98,6 +100,7 @@ setup(
                                              "benzina",
                                              "lib")],
                   runtime_library_dirs=[os.path.join("$ORIGIN", "lib")],
+                  define_macros=[("PY_SSIZE_T_CLEAN", None)],
                   libraries=["benzina"],
         ),
     ],
@@ -107,12 +110,11 @@ setup(
         "clean":           utils.clean,
     },
     command_options={
-        'build_sphinx': {
-            'project': ("setup.py", package_name),
+        'build_sphinx':{
+            'project':   ("setup.py", package_name),
             'copyright': ("setup.py", "2019, {}".format(author)),
-            'version': ("setup.py", versioning.ver_release),
-            'release': ("setup.py", versioning.ver_public)
-        }
+            'version':   ("setup.py", versioning.ver_release),
+            'release':   ("setup.py", versioning.ver_public)
+        },
     },
-    zip_safe             = False,
 )

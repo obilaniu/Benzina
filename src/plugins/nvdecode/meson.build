@@ -27,15 +27,17 @@ endif
 
 ### CUDA code compilation
 libbenzina_plugin_nvdecodeCuda_srcs = files('kernels.cu')
-libbenzina_plugin_nvdecodeCuda_objs = nvccCompGen.process(libbenzina_plugin_nvdecodeCuda_srcs, extra_args: [
-    '-Xcompiler', '-fPIC',
-    '-Xptxas', '--warn-on-double-precision-use,-O3',
-    '--use_fast_math',
-] + libbenzinacuda_cdefs + benzina_iflags + plugin_cdefs)
+libbenzina_plugin_nvdecodeCuda_objs = nvcc_compiler_generator.process(libbenzina_plugin_nvdecodeCuda_srcs,
+    extra_args: [
+        '-Xcompiler', '-fPIC',
+        '-Xptxas', '--warn-on-double-precision-use,-O3',
+        '--use_fast_math',
+    ] + libbenzinacuda_cdefs + benzina_iflags + plugin_cdefs
+)
 libbenzina_plugin_nvdecodeCuda_sta  = static_library('pre-dlink', libbenzina_plugin_nvdecodeCuda_objs)
 libbenzina_plugin_nvdecodeCuda_dep  = declare_dependency(link_whole: libbenzina_plugin_nvdecodeCuda_sta)
 libbenzina_plugin_nvdecodeCuda_objs = custom_target ('libbenzina_plugin_nvdecodeCuda-dlink',
-    command         : [nvcc, '-shared'] + nvccLinkArgs + ['@INPUT@', '-o', '@OUTPUT@'],
+    command         : [nvcc, '-shared'] + nvcc_link_args + ['@INPUT@', '-o', '@OUTPUT@'],
     input           : libbenzina_plugin_nvdecodeCuda_sta,
     output          : ['@BASENAME@-dlink.o'],
     build_by_default: true,
