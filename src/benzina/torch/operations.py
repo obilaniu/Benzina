@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import benzina.native
 import numpy as np
 
 
@@ -294,13 +293,14 @@ class SimilarityTransform   (WarpTransform):
             False).
     """
     def __init__(self,
-                 scale         = (+1.0,+1.0),
-                 rotation      = (-0.0,+0.0),
-                 translation_x = (-0,+0),
-                 translation_y = (-0,+0),
-                 flip_h        = 0.0,
-                 flip_v        = 0.0,
-                 autoscale     = False):
+                 scale=(+1.0, +1.0),
+                 rotation=(-0.0, +0.0),
+                 translation_x=(-0, +0),
+                 translation_y=(-0, +0),
+                 flip_h=0.0,
+                 flip_v=0.0,
+                 autoscale=False,
+                 random_crop=False):
         if isinstance(scale, (int, float)):
             scale = float(scale)
             scale = min(scale, 1/scale)
@@ -323,22 +323,55 @@ class SimilarityTransform   (WarpTransform):
         
         assert(scale[0] > 0 and scale[1] > 0)
         
-        self.s         = scale
-        self.r         = rotation
-        self.tx        = translation_x
-        self.ty        = translation_y
-        self.fh        = float(flip_h)
-        self.fv        = float(flip_v)
+        self.s = scale
+        self.r = rotation
+        self.tx = translation_x
+        self.ty = translation_y
+        self.fh = float(flip_h)
+        self.fv = float(flip_v)
         self.autoscale = autoscale
-    
+        self.random_crop = random_crop
+
     def __call__(self, index, in_shape, out_shape, rng):
         """Return a random similarity transformation."""
-        return benzina.native.similarity(out_shape[0], out_shape[1],
-                                         in_shape[0],  in_shape[1],
-                                         self.s[0],    self.s[1],
-                                         self.r[0],    self.r[1],
-                                         self.tx[0],   self.tx[1],
-                                         self.ty[0],   self.ty[1],
-                                         self.fh,      self.fv,
-                                         int(rng.randint(2**64, dtype=np.uint64)),
-                                         self.autoscale)
+        s = np.exp(rng.uniform(low=np.log(self.s[0]), high=np.log(self.s[1])))
+        r = np.deg2rad(rng.uniform(low=self.r[0], high=self.r[1]))
+        tx = rng.uniform(low=self.tx[0], high=self.tx[1])
+        ty = rng.uniform(low=self.ty[0], high=self.ty[1])
+        fh = 1 - 2 * (rng.uniform() < self.fh)
+        fv = 1 - 2 * (rng.uniform() < self.fv)
+
+        #
+        # H = T_inshape*T*R*S*T_outshape
+        #
+        T_o_x = (out_shape[0] - 1) / 2
+        T_o_y = (out_shape[1] - 1) / 2
+        T_outshape = np.asarray([[1, 0, -T_o_x],
+                                 [0, 1, -T_o_y],
+                                 [0, 0, 1]])
+        S_x = fh / s
+        S_y = fv / s
+        if self.autoscale:
+            ar_scale = min(in_shape[0] / out_shape[0], in_shape[1] / out_shape[1])
+            S_x *= ar_scale
+            S_y *= ar_scale
+        S = np.asarray([[S_x, 0, 0],
+                        [0, S_y, 0],
+                        [0, 0, 1]])
+        R = np.asarray([[+np.cos(r), +np.sin(r), 0],
+                        [-np.sin(r), +np.cos(r), 0],
+                        [0, 0, 1]])
+        if self.random_crop:
+            random_crop_tx = abs(out_shape[0] - in_shape[0]) / 2
+            random_crop_ty = abs(out_shape[1] - in_shape[1]) / 2
+            tx += rng.uniform(low=-random_crop_tx, high=+random_crop_tx)
+            ty += rng.uniform(low=-random_crop_ty, high=+random_crop_ty)
+        T_i_x = (in_shape[0] - 1) / 2
+        T_i_y = (in_shape[1] - 1) / 2
+        T_inshapeT = np.asarray([[1, 0, tx + T_i_x],
+                                 [0, 1, ty + T_i_y],
+                                 [0, 0, 1]])
+
+        H = T_inshapeT.dot(R).dot(S).dot(T_outshape)
+
+        return tuple(H.flatten().tolist())
