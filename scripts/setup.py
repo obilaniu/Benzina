@@ -76,7 +76,7 @@ setup(
     install_requires     = [
         "meson>=0.54.0",
         "numpy>=1.10",
-        "pybenzinaparse @ git+https://github.com/satyaog/pybenzinaparse.git@0.2.1#egg=pybenzinaparse-0.2.1",
+        "pybenzinaparse @ git+https://github.com/satyaog/pybenzinaparse.git@be4c7784f488100269ae991a340fcb15b65c20f9#egg=pybenzinaparse-0.2.1",
     ],
     packages             = find_packages("src"),
     package_dir          = {'': 'src'},
