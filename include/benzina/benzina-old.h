@@ -53,17 +53,12 @@ BENZINA_PUBLIC int          benzinaInit                 (void);
  */
 
 BENZINA_PUBLIC int          benzinaDatasetAlloc         (BENZINA_DATASET**         ctx);
-BENZINA_PUBLIC int          benzinaDatasetInit          (BENZINA_DATASET*          ctx, const char*  path);
-BENZINA_PUBLIC int          benzinaDatasetNew           (BENZINA_DATASET**         ctx, const char*  path);
+BENZINA_PUBLIC int          benzinaDatasetInit          (BENZINA_DATASET*          ctx, const char*  file, uint64_t* length);
+BENZINA_PUBLIC int          benzinaDatasetNew           (BENZINA_DATASET**         ctx, const char*  file, uint64_t* length);
 BENZINA_PUBLIC int          benzinaDatasetFini          (BENZINA_DATASET*          ctx);
 BENZINA_PUBLIC int          benzinaDatasetFree          (BENZINA_DATASET*          ctx);
-BENZINA_PUBLIC int          benzinaDatasetGetRoot       (const BENZINA_DATASET*    ctx, const char** path);
+BENZINA_PUBLIC int          benzinaDatasetGetFile       (const BENZINA_DATASET*    ctx, const char** path);
 BENZINA_PUBLIC int          benzinaDatasetGetLength     (const BENZINA_DATASET*    ctx, size_t* length);
-BENZINA_PUBLIC int          benzinaDatasetGetShape      (const BENZINA_DATASET*    ctx, size_t* w, size_t* h);
-BENZINA_PUBLIC int          benzinaDatasetGetElement    (const BENZINA_DATASET*    ctx,
-                                                         size_t                    i,
-                                                         size_t*                   off,
-                                                         size_t*                   len);
 
 /**
  * @brief BENZINA_BUF (ProtoBuf) operations.

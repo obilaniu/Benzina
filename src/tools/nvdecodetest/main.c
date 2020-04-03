@@ -34,9 +34,9 @@ struct UNIVERSE{
     } args;
     
     /* Argument Parsing */
-    int                   fileH264Fd;
-    struct stat           fileH264Stat;
-    const uint8_t*        fileH264Data;
+    int                   fileH265Fd;
+    struct stat           fileH265Stat;
+    const uint8_t*        fileH265Data;
     
     /* FFmpeg */
     enum AVCodecID        codecID;
@@ -235,7 +235,8 @@ static int   nvdtDisplayCb (UNIVERSE* u, CUVIDPARSERDISPINFO* dispInfo){
 static int   nvdtInitFFmpeg(UNIVERSE* u){
     int ret;
     
-    u->codecID  = AV_CODEC_ID_H264;
+    avcodec_register_all();
+    u->codecID  = AV_CODEC_ID_HEVC;
     u->codec    = avcodec_find_decoder  (u->codecID);
     u->codecCtx = avcodec_alloc_context3(u->codec);
     if(!u->codecCtx){
@@ -313,8 +314,8 @@ static int   nvdtInitCUDA(UNIVERSE* u){
     }
     
     memset(&u->parserParams, 0, sizeof(u->parserParams));
-    u->parserParams.CodecType              = cudaVideoCodec_H264;
-    u->parserParams.ulMaxNumDecodeSurfaces = 4;
+    u->parserParams.CodecType              = cudaVideoCodec_HEVC;
+    u->parserParams.ulMaxNumDecodeSurfaces = 20;
     u->parserParams.ulClockRate            = 0;
     u->parserParams.ulErrorThreshold       = 0;
     u->parserParams.ulMaxDisplayDelay      = 4;
@@ -336,26 +337,26 @@ static int   nvdtInitCUDA(UNIVERSE* u){
  */
 
 static int   nvdtInitMmap(UNIVERSE* u){
-    if      ((u->fileH264Fd = open(u->args.path, O_RDONLY|O_CLOEXEC)) < 0){
+    if      ((u->fileH265Fd = open(u->args.path, O_RDONLY|O_CLOEXEC)) < 0){
         printf("Cannot open() file %s ...\n", u->args.path);
         exit(-1);
-    }else if(fstat(u->fileH264Fd, &u->fileH264Stat) < 0){
+    }else if(fstat(u->fileH265Fd, &u->fileH265Stat) < 0){
         printf("Cannot stat() file %s ...\n", u->args.path);
         exit(-1);
     }
     
-    u->fileH264Data = (const uint8_t *)mmap(NULL,
-                                            u->fileH264Stat.st_size,
+    u->fileH265Data = (const uint8_t *)mmap(NULL,
+                                            u->fileH265Stat.st_size,
                                             PROT_READ,
                                             MAP_SHARED,
-                                            u->fileH264Fd,
+                                            u->fileH265Fd,
                                             0);
-    if(u->fileH264Data == MAP_FAILED){
+    if(u->fileH265Data == MAP_FAILED){
         printf("Cannot mmap dataset file %s!\n", u->args.path);
         goto exit_mmap;
     }
     
-    if(madvise((void*)u->fileH264Data, u->fileH264Stat.st_size, MADV_DONTDUMP) < 0){
+    if(madvise((void*)u->fileH265Data, u->fileH265Stat.st_size, MADV_DONTDUMP) < 0){
         printf("Cannot madvise memory range of dataset!\n");
         goto exit_madvise;
     }
@@ -394,13 +395,13 @@ static int   nvdtRun(UNIVERSE* u){
         return -1;
     }
     
-    fprintf(stdout, "Dataset File size:         %15lu\n", u->fileH264Stat.st_size);
+    fprintf(stdout, "Dataset File size:         %15lu\n", u->fileH265Stat.st_size);
     fflush (stdout);
     
     /* Feed entire dataset in one go to NVDECODE. */
     packet.flags        = 0;
-    packet.payload_size = u->fileH264Stat.st_size;
-    packet.payload      = u->fileH264Data;
+    packet.payload_size = u->fileH265Stat.st_size;
+    packet.payload      = u->fileH265Data;
     packet.timestamp    = 0;
     result = cuvidParseVideoData(u->parser, &packet);
     if(result != CUDA_SUCCESS){
@@ -420,8 +421,8 @@ static int   nvdtRun(UNIVERSE* u){
     cudaDeviceSynchronize();
     
     /* Feed entire dataset in one go to FFmpeg. */
-    u->packet->data = (void*)u->fileH264Data;
-    u->packet->size = (int)  u->fileH264Stat.st_size;
+    u->packet->data = (void*)u->fileH265Data;
+    u->packet->size = (int)  u->fileH265Stat.st_size;
     ret = avcodec_send_packet  (u->codecCtx, u->packet);
     if(ret != 0){
         fprintf(stdout, "Error pushing packet! (%d)\n", ret);
@@ -490,7 +491,7 @@ int   main(int argc, char* argv[]){
     
     u->args.device =    0;
     u->args.path   = NULL;
-    u->fileH264Fd  =   -1;
+    u->fileH265Fd  =   -1;
     for(i=0;i<argc; i++){
         if(strcmp(argv[i], "--device") == 0){
             u->args.device = strtol(argv[++i]?argv[i]:"0", NULL, 0);

@@ -1,24 +1,18 @@
 # -*- coding: utf-8 -*-
-import benzina.native
-import numpy            as np
-import os
+from collections import namedtuple
+
+import numpy as np
 import torch.utils.data
 
 
 class Dataset(torch.utils.data.Dataset):
-    def __init__(self, root):
-        self._root = os.path.abspath(root)
-        self._check_have_dir()
-        self._check_have_file("data.bin")
-        self._check_have_file("data.lengths")
-        self._check_have_file("data.nvdecode")
-        self._check_have_file("data.protobuf")
-        self._check_have_file("README.md")
-        self._check_have_file("SHA256SUMS")
-        self._core = benzina.native.DatasetCore(self.root)
-    
+    _Item = namedtuple("Item", ["input"])
+
+    def __init__(self, track):
+        self._track = track
+
     def __len__(self):
-        return len(self._core)
+        return len(self._track)
     
     def __getitem__(self, index):
         #
@@ -30,36 +24,33 @@ class Dataset(torch.utils.data.Dataset):
         # This should be overriden in a subclass to return e.g. labels or
         # target information.
         #
-        return self._core[index]
-    
-    @property
-    def root(self):
-        """Absolute path to dataset directory."""
-        return self._root
-    
-    @property
-    def shape(self):
-        """Shape of images in dataset, as (h,w) tuple."""
-        return self._core.shape
-    
-    def _check_have_dir(self, *paths):
-        filePath = os.path.join(self.root, *paths)
-        if not os.path.isdir(filePath):
-            raise FileNotFoundError(filePath)
-    
-    def _check_have_file(self, *paths):
-        filePath = os.path.join(self.root, *paths)
-        if not os.path.isfile(filePath):
-            raise FileNotFoundError(filePath)
+        return Dataset._Item(self._track[index])
+
+    def __add__(self, other):
+        raise NotImplementedError()
 
 
 class ImageNet(Dataset):
-    def __init__(self, root):
-        super().__init__(root)
-        self._check_have_file("data.filenames")
-        self._check_have_file("data.targets")
-        with open(os.path.join(self.root, "data.targets"), "r") as f:
-            self.targets = np.fromfile(f, np.dtype("<i8"))
-    
+    _Item = namedtuple("Item", ["input", "target"])
+
+    def __init__(self, input_track, target_track):
+        Dataset.__init__(self, input_track)
+
+        location_first, _ = target_track[0].location
+        location_last, size_last = target_track[-1].location
+        target_track.file.seek(location_first)
+        buffer = target_track.file.read(location_last + size_last - location_first)
+
+        self._targets = np.full(len(input_track), -1, np.int64)
+        self._targets[:len(target_track)] = np.frombuffer(buffer, np.dtype("<i8"))
+
     def __getitem__(self, index):
-        return (int(self.targets[index]),)
+        return ImageNet._Item(*Dataset.__getitem__(self, index),
+                              (self.targets[index],))
+
+    def __add__(self, other):
+        raise NotImplementedError()
+
+    @property
+    def targets(self):
+        return self._targets
