@@ -32,7 +32,7 @@
 #     do that we try to use the stubs, then the system libraries. If programs
 #     link and run with specific APIs, they are assumed usable.
 #
-CUDA_MODULE         = import('unstable-cuda')
+CUDA                = import('unstable-cuda')
 CUDA_VERSION        = 'unknown'
 CUDA_ARCH           = get_option('nvidia_arch')
 CUDA_HOME           = get_option('nvidia_home').split(':')[0]
@@ -82,7 +82,7 @@ NVIDIA_DRIVER_8_0 = IS_HOST_WINDOWS ? '378.66' : '378.13'
 NVIDIA_DRIVER_MAX = IS_HOST_WINDOWS ? '436.15' : '435.21'
 NVIDIA_DRIVER_MIN = IS_HOST_WINDOWS ? '378.66' : '378.13'
 if CUDA_VERSION != 'unknown'
-  NVIDIA_DRIVER_MIN = CUDA_MODULE.min_driver_version(CUDA_VERSION)
+  NVIDIA_DRIVER_MIN = CUDA.min_driver_version(CUDA_VERSION)
 endif
 
 
@@ -161,7 +161,7 @@ else
     # builds (build and host machines of identical architecture)
     #
     if NVIDIA_DRIVER == 'auto' and IS_HOST_LINUX
-      modinfo = find_program('modinfo', '/sbin/modinfo', '/usr/sbin/modinfo',
+      modinfo = find_program('modinfo', dirs: ['/sbin', '/usr/sbin'],
                              required: false, disabler: true)
       if modinfo.found()
         MODINFO_RUN = run_command(modinfo, ['-F', 'version', 'nvidia'])
@@ -240,7 +240,7 @@ endif
 # Emit warning if CUDA Toolkit version is incompatible with NVIDIA driver version.
 #
 if CUDA_VERSION != 'unknown'
-  NVIDIA_DRIVER_CUDA_MIN = CUDA_MODULE.min_driver_version(CUDA_VERSION)
+  NVIDIA_DRIVER_CUDA_MIN = CUDA.min_driver_version(CUDA_VERSION)
   message('Found    CUDA Toolkit:  '+CUDA_VERSION+', supported NVIDIA Driver >= '+NVIDIA_DRIVER_CUDA_MIN)
   if NVIDIA_DRIVER.version_compare('<'+NVIDIA_DRIVER_CUDA_MIN)
     warning('CUDA Toolkit '+CUDA_VERSION+' requires driver >= '+NVIDIA_DRIVER_CUDA_MIN+
@@ -286,16 +286,20 @@ if nvcc.found()
       endif
     endif
   endif
-  nvcc_gencode_readable = CUDA_MODULE.nvcc_arch_readable(CUDA_VERSION, CUDA_ARCH, detected: gpuarchs)
-  nvcc_gencode_flags   += CUDA_MODULE.nvcc_arch_flags   (CUDA_VERSION, CUDA_ARCH, detected: gpuarchs)
+  nvcc_gencode_readable = CUDA.nvcc_arch_readable(CUDA_VERSION, CUDA_ARCH, detected: gpuarchs)
+  nvcc_gencode_flags   += CUDA.nvcc_arch_flags   (CUDA_VERSION, CUDA_ARCH, detected: gpuarchs)
   nvcc_cudart_flags    += ['-cudart', get_option('nvidia_runtime')]
-  if(get_option('buildtype') == 'debugoptimized' or
-     get_option('buildtype') == 'debug')
+  if get_option('debug') == true
     nvcc_opt_flags += ['-g', '-lineinfo']
-  else
-    nvcc_opt_flags += ['-O3']
   endif
-  if((get_option('b_ndebug') == 'if-release' and get_option('buildtype') == 'release') or
+  if   '0123'.contains(get_option('optimization'))
+    nvcc_opt_flags += ['-O'+get_option('optimization')]
+  elif 'g'.contains(get_option('optimization'))
+    nvcc_opt_flags += ['-O0']
+  elif 's'.contains(get_option('optimization'))
+    nvcc_opt_flags += ['-O2']
+  endif
+  if((get_option('b_ndebug') == 'if-release' and '23s'.contains(get_option('optimization'))) or
      (get_option('b_ndebug') == 'true'))
     nvcc_opt_flags += ['-DNDEBUG']
   endif
@@ -321,12 +325,12 @@ endif
 #
 # Compile generator and linker args.
 #
-nvccCompGen   = generator(nvcc,
+nvcc_compiler_generator = generator(nvcc,
     arguments: nvcc_ccbin_flag + nvcc_gencode_flags + nvcc_cudart_flags + nvcc_opt_flags + nvcuvid_iflags +
                ['-x', 'cu', '@EXTRA_ARGS@', '@INPUT@', '-c', '-o', '@OUTPUT@'],
     output:    ['@BASENAME@.o'],
 )
-nvccLinkArgs  = ['-dlink'] + nvcc_ccbin_flag + nvcc_cudart_flags + nvcc_gencode_flags
+nvcc_link_args = ['-dlink'] + nvcc_ccbin_flag + nvcc_cudart_flags + nvcc_gencode_flags
 
 
 #
