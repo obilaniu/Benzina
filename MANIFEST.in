@@ -7,6 +7,7 @@ graft doc
 graft include
 graft src
 graft scripts
+graft tests
 graft thirdparty
 global-include meson.build meson_options.txt
 
@@ -14,4 +15,4 @@ global-include meson.build meson_options.txt
 exclude src/benzina/version.py
 prune src/benzina/include
 prune src/benzina/lib
-global-exclude __pycache__ *.py[cod] *.exe .DS_Store
+global-exclude __pycache__ *.py[cod] *.exe *.so .DS_Store

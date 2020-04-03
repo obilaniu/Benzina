@@ -6,8 +6,8 @@ github_url   = "https://github.com/obilaniu/Benzina"
 author       = "Olexa Bilaniuk"
 
 import glob, os, sys
-if sys.version_info[:2] < (3, 5):
-    sys.stdout.write(package_name+" is Python 3.5+ only!\n")
+if sys.version_info[:2] < (3, 6):
+    sys.stdout.write(package_name+" is Python 3.6+ only!\n")
     sys.exit(1)
 from setuptools import setup, find_packages, Extension
 from .          import git, versioning, utils
@@ -57,9 +57,9 @@ setup(
         "Operating System :: Unix",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.5",
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3 :: Only",
         "Topic :: Scientific/Engineering",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
@@ -68,12 +68,13 @@ setup(
         "Topic :: Software Development :: Libraries :: Python Modules",
         "Topic :: Utilities",
     ],
-    python_requires      = '>=3.5',
+    zip_safe             = False,
+    python_requires      = '>=3.6',
     setup_requires       = [
-        "meson>=0.51.1",
+        "meson>=0.54.0",
     ],
     install_requires     = [
-        "meson>=0.51.1",
+        "meson>=0.54.0",
         "numpy>=1.10",
         "pybenzinaparse @ git+https://github.com/satyaog/pybenzinaparse.git@0.2.1#egg=pybenzinaparse-0.2.1",
     ],
@@ -99,6 +100,7 @@ setup(
                                              "benzina",
                                              "lib")],
                   runtime_library_dirs=[os.path.join("$ORIGIN", "lib")],
+                  define_macros=[("PY_SSIZE_T_CLEAN", None)],
                   libraries=["benzina"],
         ),
     ],
@@ -106,14 +108,14 @@ setup(
         "build_configure": utils.build_configure,
         "build_ext":       utils.build_ext,
         "clean":           utils.clean,
+        "meson_test":      utils.meson_test,
     },
     command_options={
-        'build_sphinx': {
-            'project': ("setup.py", package_name),
-            'copyright': ("setup.py", "2019, {}".format(author)),
-            'version': ("setup.py", versioning.ver_release),
-            'release': ("setup.py", versioning.ver_public)
+        'build_sphinx':{
+            'project':   ("setup.py", package_name),
+            'copyright': ("setup.py", "2020, {}".format(author)),
+            'version':   ("setup.py", versioning.ver_release),
+            'release':   ("setup.py", versioning.ver_public)
         }
     },
-    zip_safe             = False,
 )
