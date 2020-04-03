@@ -4,7 +4,7 @@ import numpy as np
 
 from pybenzinaparse import Parser
 from pybenzinaparse.utils import find_boxes, find_traks, get_shape, \
-    get_sample_table, get_sample_location
+    get_sample_table
 
 
 class File:
@@ -47,7 +47,7 @@ class File:
     def open(self):
         if not self._disk_file or self._disk_file.closed:
             self._disk_file = open(self._path, "rb")
-        if not self._moov:
+        if self._moov is None:
             self._parse()
 
     def close(self):
@@ -144,7 +144,7 @@ class Track:
         if not self._file:
             self._file = File(self._file_path)
         self._file.open()
-        if not self._trak:
+        if self._trak is None:
             self._parse()
 
     def close(self):
@@ -160,6 +160,7 @@ class Track:
     def label(self):
         return self._label
 
+    @property
     def shape(self):
         return get_shape(self._trak)
 

@@ -255,11 +255,11 @@ class _DataLoaderIter:
             for i,ptr,input in zip(indices, ptrs, inputs):
                 with batch.sample(i, ptr, input.sample_location(0),
                                   input.video_configuration_location()):
-                    self.core.setHomography    (*self.warp_transform (i, input.shape(), *t_args))
-                    self.core.selectColorMatrix(*self.color_transform(i, input.shape(), *t_args))
-                    self.core.setBias          (*self.bias_transform (i, input.shape(), *t_args))
-                    self.core.setScale         (*self.norm_transform (i, input.shape(), *t_args))
-                    self.core.setOOBColor      (*self.oob_transform  (i, input.shape(), *t_args))
+                    self.core.setHomography    (*self.warp_transform (i, input.shape, *t_args))
+                    self.core.selectColorMatrix(*self.color_transform(i, input.shape, *t_args))
+                    self.core.setBias          (*self.bias_transform (i, input.shape, *t_args))
+                    self.core.setScale         (*self.norm_transform (i, input.shape, *t_args))
+                    self.core.setOOBColor      (*self.oob_transform  (i, input.shape, *t_args))
     
     def pull(self):
         if self.core.pulls >= self.core.pushes:
