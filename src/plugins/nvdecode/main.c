@@ -17,7 +17,9 @@
 
 #include "benzina/benzina-old.h"
 #include "benzina/plugins/nvdecode.h"
+#include "benzina/iso/bmff-box.h"
 #include "benzina/iso/bmff-intops.h"
+#include "benzina/iso/bmff-types.h"
 #include "benzina/itu/h26x.h"
 #include "benzina/itu/h265.h"
 #include "kernels.h"
@@ -76,14 +78,15 @@ struct NVDECODE_RQ{
 	uint64_t        datasetIndex;      /* Dataset index. */
 	float*          devPtr;            /* Target destination on device. */
 	uint64_t        location[2];       /* Image payload location. */
-	uint64_t        config_location[2];/* Video configuration offset and length. */
+	char            trak_label[20];    /* Track label; */
+//	uint64_t        config_location[2];/* Video configuration offset and length. */
 	float           H[3][3];           /* Homography */
 	float           B   [3];           /* Bias */
 	float           S   [3];           /* Scale */
 	float           OOB [3];           /* Out-of-bond color */
 	uint32_t        colorMatrix;       /* Color matrix selection */
 	uint8_t*        data;              /* Image payload; */
-	uint8_t*        hvcCData;          /* hvcC payload; */
+//	uint8_t*        hvcCData;          /* hvcC payload; */
 	CUVIDPICPARAMS* picParams;         /* Picture parameters. */
 	TIMESPEC        T_s_submit;        /* Time this request was submitted. */
 	TIMESPEC        T_s_start;         /* Time this request began processing. */
@@ -629,9 +632,10 @@ BENZINA_PLUGIN_STATIC int         nvdecodeHelpersStart            (NVDECODE_CTX*
 	memset(ctx->batch,   0, sizeof(*ctx->batch)   * ctx->multibuffering);
 	memset(ctx->request, 0, sizeof(*ctx->request) * ctx->totalSlots);
 	for(i=0;i<ctx->totalSlots;i++){
-		ctx->request[i].picParams = &ctx->picParams[i];
-		ctx->request[i].data      = NULL;
-		ctx->request[i].hvcCData  = NULL;
+		ctx->request[i].picParams  = &ctx->picParams[i];
+		ctx->request[i].data       = NULL;
+//        ctx->request[i].hvcCData   = NULL;
+//        ctx->request[i].trak_label = NULL;
 	}
 	
 	if(pthread_attr_init          (&attr)                          != 0){
@@ -787,10 +791,10 @@ BENZINA_PLUGIN_STATIC int         nvdecodeMaybeReapMallocs        (NVDECODE_CTX*
 				free(ctx->request[i].data);
 				ctx->request[i].data = NULL;
 			}
-			if(ctx->request[i].hvcCData){
-				free(ctx->request[i].hvcCData);
-				ctx->request[i].hvcCData = NULL;
-			}
+//            if(ctx->request[i].hvcCData){
+//                free(ctx->request[i].hvcCData);
+//                ctx->request[i].hvcCData = NULL;
+//            }
 		}
 	}
 	
@@ -960,7 +964,7 @@ BENZINA_PLUGIN_STATIC int         nvdecodeReaderThrdWait          (NVDECODE_CTX*
  */
 
 BENZINA_PLUGIN_STATIC int         nvdecodeReaderThrdCore          (NVDECODE_CTX* ctx){
-	NVDECODE_READ_PARAMS rd0 = {0}, rd1 = {0};
+	NVDECODE_READ_PARAMS rd0 = {0};
 	NVDECODE_RQ*         rq;
 	int                  readsDone;
 	
@@ -968,8 +972,7 @@ BENZINA_PLUGIN_STATIC int         nvdecodeReaderThrdCore          (NVDECODE_CTX*
 	/* Get read parameters */
 	nvdecodeReaderThrdGetCurrRq (ctx, &rq);
 
-	if(nvdecodeReaderThrdFillDataRd  (ctx, rq, &rd0) != 0 ||
-	   nvdecodeReaderThrdFillConfigRd(ctx, rq, &rd1) != 0){
+	if(nvdecodeReaderThrdFillDataRd(ctx, rq, &rd0) != 0){
 		return 0;
 	}
 	
@@ -977,16 +980,13 @@ BENZINA_PLUGIN_STATIC int         nvdecodeReaderThrdCore          (NVDECODE_CTX*
 	/* Perform reads */
 	pthread_mutex_unlock(&ctx->lock);
 	rd0.lenRead = pread(rd0.fd, rd0.ptr, rd0.len, rd0.off);
-	rd1.lenRead = pread(rd1.fd, rd1.ptr, rd1.len, rd1.off);
 	pthread_mutex_lock(&ctx->lock);
 	
 	
 	/* Handle any I/O problems */
-	readsDone = (rd0.lenRead==(ssize_t)rd0.len) &&
-	            (rd1.lenRead==(ssize_t)rd1.len);
+	readsDone = (rd0.lenRead==(ssize_t)rd0.len);
 	if(!readsDone){
 		free(rd0.ptr);
-		free(rd1.ptr);
 		ctx->reader.err = 1;
 		nvdecodeReaderThrdSetStatus(ctx, THRD_EXITING);
 		return 0;
@@ -994,11 +994,7 @@ BENZINA_PLUGIN_STATIC int         nvdecodeReaderThrdCore          (NVDECODE_CTX*
 	
 	/* Otherwise, report success. */
 	rq->data                         = rd0.ptr;
-	rq->hvcCData                     = rd1.ptr;
 	ctx->reader.cnt++;
-    // Bitstream data
-    rq->picParams->pBitstreamData    = rd0.ptr;
-	rq->picParams->nBitstreamDataLen = rd0.len;
 	pthread_cond_broadcast(&ctx->feeder.cond);
 	return 0;
 }
@@ -1041,8 +1037,8 @@ BENZINA_PLUGIN_STATIC int         nvdecodeReaderThrdFillConfigRd  (NVDECODE_CTX*
                                                                    const NVDECODE_RQ*    rq,
                                                                    NVDECODE_READ_PARAMS* rd){
 	rd->ptr = NULL;
-	rd->off = rq->config_location[0];
-	rd->len = rq->config_location[1];
+	// rd->off = rq->config_location[0];
+	// rd->len = rq->config_location[1];
 	rd->ptr = malloc(rd->len);
 	if(!rd->ptr){
 		ctx->reader.err = 1;
@@ -1869,32 +1865,195 @@ BENZINA_PLUGIN_STATIC int         nvdecodeFeederThrdCore          (NVDECODE_CTX*
 	pP = rq->picParams;
     CUVIDHEVCPICPARAMS* hevcPP = (CUVIDHEVCPICPARAMS*)&pP->CodecSpecific;
 	
-	const uint8_t* record = &rq->hvcCData[0];
+    const BENZ_ISO_BOX* box = rq->data;
+    const void* tail = NULL;
+    const void* box_payload = NULL;
+    const BENZ_ISO_BOX* trak_box = NULL;
+    const BENZ_ISO_BOX* stbl_box = NULL;
+    uint64_t frame_location[2] = {0};
+    const uint8_t* hvcc_record = NULL;
 
-    uint32_t configurationVersion = (uint32_t)record[0];                                           // 0
-    uint32_t general_profile_space = (uint32_t)(record[1] >> 6);                                   // 1 : 11000000
-    uint32_t general_tier_flag = (uint32_t)(record[1] >> 5 & 0x01);                                // 1 : 00100000
-    uint32_t general_profile_idc = (uint32_t)(record[1] & 0x1f);                                   // 1 : 00011111
-    uint32_t general_profile_compatibility_flags = benz_iso_bmff_as_u32(record + 2);               // 2 (2-5)
-    uint64_t general_constraint_indicator_flags = benz_iso_bmff_as_u64(record + 6) >> 16;          // 6 (6-11)
-    uint32_t general_level_idc = (uint32_t)record[12];                                             // 12
+    while (!benz_iso_bmff_box_is_type(box, (uint32_t*)"moov"))
+    {
+        box = benz_ptr_addcv(box, benz_iso_bmff_box_get_size_unsafe(box));
+    }
+    tail = benz_ptr_addcv(box, benz_iso_bmff_box_get_size_unsafe(box));
+
+    // Enter MOOV boxes
+    box = benz_iso_bmff_box_get_payload(box, 8);
+
+    while (trak_box == NULL && box != tail)
+    {
+        if (!benz_iso_bmff_box_is_type(box, (uint32_t*)"trak"))
+        {
+            box = benz_iso_bmff_box_get_tail(box, tail);
+            continue;
+        }
+
+        trak_box = box;
+
+        // Enter TRAK boxes
+        box = benz_iso_bmff_box_get_payload(box, 8);
+
+        while (!benz_iso_bmff_box_is_type(box, (uint32_t*)"mdia"))
+        {
+            box = benz_iso_bmff_box_skip(box, tail, 1);
+        }
+
+        // Enter MDIA boxes
+        box = benz_iso_bmff_box_get_payload(box, 8);
+
+        while (!benz_iso_bmff_box_is_type(box, (uint32_t*)"hdlr"))
+        {
+            box = benz_iso_bmff_box_skip(box, tail, 1);
+        }
+
+        // Enter HDLR boxes
+        box_payload = benz_ptr_addcv(benz_iso_bmff_box_get_payload(box, 12),
+                                     4 +        // pre_defined
+                                     4 +        // handler_type
+                                     4 * 3);    // reserved
+
+        if (strcmp((const char*)box_payload, rq->trak_label))
+        {
+            box = benz_iso_bmff_box_skip(trak_box, tail, 1);
+            trak_box = NULL;
+        }
+    }
+
+    // Enter TRAK boxes
+    box = benz_iso_bmff_box_get_payload(trak_box, 8);
+
+    while (!benz_iso_bmff_box_is_type(box, (uint32_t*)"mdia"))
+    {
+        box = benz_iso_bmff_box_skip(box, tail, 1);
+    }
+
+    // Enter MDIA boxes
+    box = benz_iso_bmff_box_get_payload(box, 8);
+
+    while (!benz_iso_bmff_box_is_type(box, (uint32_t*)"minf"))
+    {
+        box = benz_iso_bmff_box_skip(box, tail, 1);
+    }
+
+    // Enter MINF boxes
+    box = benz_iso_bmff_box_get_payload(box, 8);
+
+    while (!benz_iso_bmff_box_is_type(box, (uint32_t*)"stbl"))
+    {
+        box = benz_iso_bmff_box_skip(box, tail, 1);
+    }
+
+    stbl_box = box;
+
+    // Enter STBL boxes
+    box = benz_iso_bmff_box_get_payload(stbl_box, 8);
+
+    while (!benz_iso_bmff_box_is_type(box, (uint32_t*)"stco") &&
+           !benz_iso_bmff_box_is_type(box, (uint32_t*)"co64"))
+    {
+        box = benz_iso_bmff_box_skip(box, tail, 1);
+    }
+
+    // Enter STCO or CO64 boxes
+    box_payload = benz_ptr_addcv(benz_iso_bmff_box_get_payload(box, 12),
+                                 4);        // entry_count
+
+    // The first chunck offset is the frame
+    frame_location[0] = benz_iso_bmff_box_is_type(box, (uint32_t*)"co64") ? benz_iso_bmff_as_u64(box_payload) :
+                        benz_iso_bmff_as_u32(box_payload);
+
+    // Enter STBL boxes
+    box = benz_iso_bmff_box_get_payload(stbl_box, 8);
+
+    while (!benz_iso_bmff_box_is_type(box, (uint32_t*)"stsz"))
+    {
+        box = benz_iso_bmff_box_skip(box, tail, 1);
+    }
+
+    // Enter STSZ boxes
+    box_payload = benz_iso_bmff_box_get_payload(box, 12);
+    frame_location[1] = benz_iso_bmff_as_u32(box_payload);
+    if (frame_location[1] == 0)
+    {
+        box_payload = benz_ptr_addcv(benz_iso_bmff_box_get_payload(box, 8),
+                                     4 +        // sample_size
+                                     4);        // sample_count
+        // The first chunck size is the frame size
+        frame_location[1] = benz_iso_bmff_as_u32(box_payload);
+    }
+
+    // Enter STBL boxes
+    box = benz_iso_bmff_box_get_payload(stbl_box, 8);
+
+    while (!benz_iso_bmff_box_is_type(box, (uint32_t*)"stsd"))
+    {
+        box = benz_iso_bmff_box_skip(box, tail, 1);
+    }
+
+    // Enter STSD boxes
+    box = benz_ptr_addcv(benz_iso_bmff_box_get_payload(box, 12),
+                         4);        // entry_count
+
+    while (!benz_iso_bmff_box_is_type(box, (uint32_t*)"avc1") &&
+           !benz_iso_bmff_box_is_type(box, (uint32_t*)"hec1") &&
+           !benz_iso_bmff_box_is_type(box, (uint32_t*)"hvc1"))
+    {
+        box = benz_iso_bmff_box_skip(box, tail, 1);
+    }
+
+
+    // Enter C1 boxes
+    box = benz_ptr_addcv(benz_iso_bmff_box_get_payload(box, 8),
+                         1 * 6 +    // SampleEntry - reserved
+                         2 +        // SampleEntry - data_reference_index
+                         2 +        // VisualSampleEntry - pre_defined
+                         2 +        // VisualSampleEntry - reserved
+                         4 * 3 +    // VisualSampleEntry - pre_defined
+                         2 +        // VisualSampleEntry - width
+                         2 +        // VisualSampleEntry - height
+                         4 +        // VisualSampleEntry - horizresolution
+                         4 +        // VisualSampleEntry - vertresolution
+                         4 +        // VisualSampleEntry - reserved
+                         2 +        // VisualSampleEntry - frame_count
+                         1 * 32 +   // VisualSampleEntry - compressorname
+                         2 +        // VisualSampleEntry - depth
+                         2);        // VisualSampleEntry - pre_defined
+
+    while (!benz_iso_bmff_box_is_type(box, (uint32_t*)"avcC") &&
+           !benz_iso_bmff_box_is_type(box, (uint32_t*)"hvcC"))
+    {
+        box = benz_iso_bmff_box_skip(box, tail, 1);
+    }
+
+    // Enter CC boxes
+	hvcc_record = benz_iso_bmff_box_get_payload(box, 8);
+
+    uint32_t configurationVersion = (uint32_t)hvcc_record[0];                                           // 0
+    uint32_t general_profile_space = (uint32_t)(hvcc_record[1] >> 6);                                   // 1 : 11000000
+    uint32_t general_tier_flag = (uint32_t)(hvcc_record[1] >> 5 & 0x01);                                // 1 : 00100000
+    uint32_t general_profile_idc = (uint32_t)(hvcc_record[1] & 0x1f);                                   // 1 : 00011111
+    uint32_t general_profile_compatibility_flags = benz_iso_bmff_as_u32(hvcc_record + 2);               // 2 (2-5)
+    uint64_t general_constraint_indicator_flags = benz_iso_bmff_as_u64(hvcc_record + 6) >> 16;          // 6 (6-11)
+    uint32_t general_level_idc = (uint32_t)hvcc_record[12];                                             // 12
     // bits(4) reserved = ‘1111’b;
-    uint32_t min_spatial_segmentation_idc = (uint32_t)benz_iso_bmff_as_u16(record + 13) & 0x0fff;  // 13 (13-14) : 00001111 11111111 ...
+    uint32_t min_spatial_segmentation_idc = (uint32_t)benz_iso_bmff_as_u16(hvcc_record + 13) & 0x0fff;  // 13 (13-14) : 00001111 11111111 ...
     // bits(6) reserved = ‘111111’b;
-    uint32_t parallelismType = (uint32_t)(record[15] & 0x03);                                      // 15 : 00000011
+    uint32_t parallelismType = (uint32_t)(hvcc_record[15] & 0x03);                                      // 15 : 00000011
     // bits(6) reserved = ‘111111’b;
-    uint32_t chromaFormat = (uint32_t)(record[16] & 0x03);                                         // 16 : 00000011
+    uint32_t chromaFormat = (uint32_t)(hvcc_record[16] & 0x03);                                         // 16 : 00000011
     // bits(5) reserved = ‘11111’b;
-    uint32_t bitDepthLumaMinus8 = (uint32_t)(record[17] & 0x07);                                   // 17 : 00000111
+    uint32_t bitDepthLumaMinus8 = (uint32_t)(hvcc_record[17] & 0x07);                                   // 17 : 00000111
     // bits(5) reserved = ‘11111’b;
-    uint32_t bitDepthChromaMinus8 = (uint32_t)(record[18] & 0x07);                                 // 18 : 00000011
-    uint32_t avgFrameRate = (uint32_t)benz_iso_bmff_as_u16(record + 19);                           // 19 (19-20)
-    uint32_t constantFrameRate = (uint32_t)(record[21] >> 6);                                      // 21 : 11000000
-    uint32_t numTemporalLayers = (uint32_t)(record[21] >> 3 & 0x07);                               // 21 : 00111000
-    uint32_t temporalIdNested = (uint32_t)(record[21] >> 2 & 0x01);                                // 21 : 00000100
-    uint32_t lengthSizeMinusOne = (uint32_t)(record[21] & 0x03);                                   // 21 : 00000011
-    uint32_t numOfArrays = (uint32_t)record[22];                                                   // 22
-    record += 23;
+    uint32_t bitDepthChromaMinus8 = (uint32_t)(hvcc_record[18] & 0x07);                                 // 18 : 00000011
+    uint32_t avgFrameRate = (uint32_t)benz_iso_bmff_as_u16(hvcc_record + 19);                           // 19 (19-20)
+    uint32_t constantFrameRate = (uint32_t)(hvcc_record[21] >> 6);                                      // 21 : 11000000
+    uint32_t numTemporalLayers = (uint32_t)(hvcc_record[21] >> 3 & 0x07);                               // 21 : 00111000
+    uint32_t temporalIdNested = (uint32_t)(hvcc_record[21] >> 2 & 0x01);                                // 21 : 00000100
+    uint32_t lengthSizeMinusOne = (uint32_t)(hvcc_record[21] & 0x03);                                   // 21 : 00000011
+    uint32_t numOfArrays = (uint32_t)hvcc_record[22];                                                   // 22
+    hvcc_record += 23;
 
     // Find PPS, SPSs and get SPS id
     uint8_t pps_sps_id = 0;
@@ -1906,34 +2065,34 @@ BENZINA_PLUGIN_STATIC int         nvdecodeFeederThrdCore          (NVDECODE_CTX*
     for (int i=0; i < numOfArrays; i++)
     {
         // In our case, array_completeness will always == 1
-//        uint32_t array_completeness = (uint32_t)(record[0] >> 7);                                  // 0 : 10000000
+//        uint32_t array_completeness = (uint32_t)(hvcc_record[0] >> 7);                                  // 0 : 10000000
         // bits(1) reserved = 0;
-        uint32_t NAL_unit_type = (uint32_t)(record[0] & 0x3f);                                     // 0 : 00111111
-        uint32_t numNalus = (uint32_t)benz_iso_bmff_as_u16(record + 1);                            // 1 (1-2)
-        record += 3;
+        uint32_t NAL_unit_type = (uint32_t)(hvcc_record[0] & 0x3f);                                     // 0 : 00111111
+        uint32_t numNalus = (uint32_t)benz_iso_bmff_as_u16(hvcc_record + 1);                            // 1 (1-2)
+        hvcc_record += 3;
 
         uint8_t sps_id = 0;
         for (int j=0; j < numNalus; j++)
         {
-            uint32_t nalUnitLength = (uint32_t)benz_iso_bmff_as_u16(record);                       // 0 (0-1)
-            record += 2;
+            uint32_t nalUnitLength = (uint32_t)benz_iso_bmff_as_u16(hvcc_record);                       // 0 (0-1)
+            hvcc_record += 2;
 
             // bits(8*nalUnitLength) nalUnit;
             switch(NAL_unit_type){
             case 32: break; //VPS_NUT
             case 33: //SPS_NUT
                 //Skip the 2 header bytes
-                sps_id = get_sps_seq_parameter_set_id(record + 2, nalUnitLength - 2);
-                sps_locations[sps_id] = record + 2;
+                sps_id = get_sps_seq_parameter_set_id(hvcc_record + 2, nalUnitLength - 2);
+                sps_locations[sps_id] = hvcc_record + 2;
                 sps_lengths[sps_id] = nalUnitLength - 2;
                 break;
             case 34: //PPS_NUT
-                pps_sps_id = benz_itu_h265_nalu_pps_get_sps_id(record);
+                pps_sps_id = benz_itu_h265_nalu_pps_get_sps_id(hvcc_record);
                 //Skip the 2 header bytes
-                pps_location = record + 2;
+                pps_location = hvcc_record + 2;
                 pps_length = nalUnitLength - 2;
             }
-            record += nalUnitLength;
+            hvcc_record += nalUnitLength;
         }
     }
 
@@ -1960,7 +2119,8 @@ BENZINA_PLUGIN_STATIC int         nvdecodeFeederThrdCore          (NVDECODE_CTX*
 	 * range [0, MAX_DECODE_SURFACES).
 	 */
 	
-    benz_putbe32(rq->data, 0x00000001); // 0x00 + annexb begin flag
+    uint32_t lengthSize = lengthSizeMinusOne + 1;
+    benz_putbe32(rq->data + frame_location[0], 0x00000001); // 0x00 + annexb begin flag
 
     hevcPP->IrapPicFlag   = 1;
     hevcPP->IdrPicFlag    = 1;
@@ -1970,6 +2130,8 @@ BENZINA_PLUGIN_STATIC int         nvdecodeFeederThrdCore          (NVDECODE_CTX*
     pP->bottom_field_flag = 0;
     pP->second_field      = 0;
     // Bitstream data
+    pP->pBitstreamData    = rq->data + frame_location[0];
+    pP->nBitstreamDataLen = frame_location[1];
     pP->nNumSlices        = 1;
 	pP->pSliceDataOffsets = &ONE;   // offset to annexb begin flag
 	
@@ -1987,9 +2149,9 @@ BENZINA_PLUGIN_STATIC int         nvdecodeFeederThrdCore          (NVDECODE_CTX*
 	
 	/* Release data. */
 	free(rq->data);
-	free(rq->hvcCData);
+//    free(rq->hvcCData);
 	rq->data     = NULL;
-	rq->hvcCData = NULL;
+//    rq->hvcCData = NULL;
 	if(ret != CUDA_SUCCESS){
 		ctx->feeder.err = ret;
 		nvdecodeFeederThrdSetStatus(ctx, THRD_EXITING);
@@ -2880,7 +3042,7 @@ BENZINA_PLUGIN_HIDDEN int         nvdecodePeekToken               (NVDECODE_CTX*
  */
 
 BENZINA_PLUGIN_HIDDEN int         nvdecodeDefineSample            (NVDECODE_CTX* ctx, uint64_t i, void* dstPtr,
-                                                                   uint64_t* location, uint64_t* config_location){
+                                                                   uint64_t* location, const char* trak_label){
 	NVDECODE_RQ*    rq;
 	NVDECODE_BATCH* batch;
 	int ret = 0;
@@ -2897,8 +3059,7 @@ BENZINA_PLUGIN_HIDDEN int         nvdecodeDefineSample            (NVDECODE_CTX*
 		rq->devPtr             = dstPtr;
 		rq->location[0]        = location[0];
 		rq->location[1]        = location[1];
-		rq->config_location[0] = config_location[0];
-		rq->config_location[1] = config_location[1];
+		strcpy(rq->trak_label, trak_label);
 		ret = 0;
 	}
 	pthread_mutex_unlock(&ctx->lock);

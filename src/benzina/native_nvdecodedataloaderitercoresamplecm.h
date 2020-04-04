@@ -22,7 +22,7 @@ typedef struct {
 	uint64_t                           index;
 	void*                              dstPtr;
 	uint64_t                           location[2];
-	uint64_t                           config_location[2];
+	char                               trak_label[20];
 } NvdecodeDataLoaderIterCoreSampleCM;
 static PyTypeObject NvdecodeDataLoaderIterCoreSampleCMType;
 

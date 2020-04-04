@@ -459,15 +459,14 @@ static PyObject* NvdecodeDataLoaderIterCore_defineSample            (NvdecodeDat
                                                                      PyObject*                   kwargs){
 	unsigned long long  datasetIndex        = -1;
 	unsigned long long  devicePtr           = 0;
-	PyObject*           pyLocation          = NULL;
-	PyObject*           pyConfigLocation    = NULL;
+	PyTupleObject*      pyLocation          = NULL;
+    PyBytesObject*      trak_label          = NULL;
 	uint64_t            location[2]         = {0, 0};
-	uint64_t            configLocation[2]   = {0, 0};
 	
-	static char *kwargsList[] = {"datasetIndex", "dstPtr", "location", "config_location", NULL};
+	static char *kwargsList[] = {"datasetIndex", "dstPtr", "location", "trak_label", NULL};
 	
-	if(!PyArg_ParseTupleAndKeywords(args, kwargs, "KK", kwargsList,
-	                                &datasetIndex, &devicePtr, &pyLocation, &pyConfigLocation)){
+	if(!PyArg_ParseTupleAndKeywords(args, kwargs, "KKOO", kwargsList,
+	                                &datasetIndex, &devicePtr, &pyLocation, &trak_label)){
 		PyErr_SetString(PyExc_RuntimeError,
 		                "Could not parse arguments!");
 		return NULL;
@@ -475,18 +474,16 @@ static PyObject* NvdecodeDataLoaderIterCore_defineSample            (NvdecodeDat
 	
 	if(pyLocation != NULL && !PyTuple_Check(pyLocation) &&
 	   !PyArg_ParseTuple(pyLocation, "kk", &location, &location + 1)){
-        Py_DECREF(pyLocation);
-        pyLocation = NULL;
+		pyLocation = NULL;
 	}
 
-	if(pyConfigLocation != NULL && !PyTuple_Check(pyConfigLocation) &&
-	   !PyArg_ParseTuple(pyConfigLocation, "kk", &configLocation, &configLocation + 1)){
-        Py_DECREF(pyConfigLocation);
-        pyConfigLocation = NULL;
+	if(trak_label != NULL && !PyBytes_Check(trak_label))
+	{
+	    trak_label = NULL;
 	}
-	
-	if(pyLocation == NULL || pyConfigLocation == NULL ||
-	   self->v->defineSample(self->ctx, datasetIndex, (void*)devicePtr, location, configLocation) != 0){
+
+	if(pyLocation == NULL || trak_label == NULL ||
+	   self->v->defineSample(self->ctx, datasetIndex, (void*)devicePtr, location, PyBytes_AS_STRING(trak_label)) != 0){
 		PyErr_SetString(PyExc_RuntimeError,
 		                "Error in defineSample()!");
 		return NULL;

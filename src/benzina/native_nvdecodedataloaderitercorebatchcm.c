@@ -171,34 +171,30 @@ static PyObject* NvdecodeDataLoaderIterCoreBatchCM_sample           (NvdecodeDat
 	unsigned long long index           = 0;
 	unsigned long long dstPtr          = 0;
 	PyTupleObject*     location        = NULL;
-	PyTupleObject*     config_location = NULL;
+	PyBytesObject*     trak_label      = NULL;
 
-	static char *kwargsList[] = {"index", "dstPtr", "location", "config_location", NULL};
+	static char *kwargsList[] = {"index", "dstPtr", "location", "trak_label", NULL};
 	
 	if(!PyArg_ParseTupleAndKeywords(args, kwargs, "KKOO", kwargsList,
-	                                &index, &dstPtr, &location, &config_location)){
+	                                &index, &dstPtr, &location, &trak_label)){
 		return NULL;
 	}
 
 	if(location != NULL && !PyTuple_Check(location)){
-        Py_DECREF(location);
-        location = NULL;
+		location = NULL;
 	}
 	
-	if(config_location != NULL && !PyTuple_Check(config_location)){
-        Py_DECREF(config_location);
-        config_location = NULL;
+	if(trak_label != NULL && !PyBytes_Check(trak_label)){
+		trak_label = NULL;
 	}
 	
-	if(location == NULL || config_location == NULL){
-        return NULL;
-    }
+	if(location == NULL || trak_label == NULL){
+		return NULL;
+	}
 	
-    ret = PyObject_CallFunction((PyObject*)&NvdecodeDataLoaderIterCoreSampleCMType,
-	                            "OKKOO", self, index, dstPtr, location, config_location);
-    Py_DECREF(location);
-    Py_DECREF(config_location);
-    return ret;
+	ret = PyObject_CallFunction((PyObject*)&NvdecodeDataLoaderIterCoreSampleCMType,
+	                            "OKKOO", self, index, dstPtr, location, trak_label);
+	return ret;
 }
 
 
