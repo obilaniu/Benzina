@@ -6,4 +6,4 @@
 # Other packages follow.
 #
 from .version import __version__
-from .        import native, version
+from .        import version, native, _native

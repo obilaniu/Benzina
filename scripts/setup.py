@@ -9,7 +9,7 @@ import glob, os, sys
 if sys.version_info[:2] < (3, 6):
     sys.stdout.write(package_name+" is Python 3.6+ only!\n")
     sys.exit(1)
-from setuptools import setup, find_packages, Extension
+from setuptools import Extension, setup, find_packages, find_namespace_packages
 from .          import git, versioning, utils
 
 
@@ -78,7 +78,8 @@ setup(
         "numpy>=1.10",
         "pybenzinaparse @ git+https://github.com/satyaog/pybenzinaparse.git@0.2.1#egg=pybenzinaparse-0.2.1",
     ],
-    packages             = find_packages("src"),
+    packages             = find_packages("src") +
+                           find_namespace_packages("src", include=["benzina.plugin.*"]),
     package_dir          = {'': 'src'},
     ext_modules          = [
         Extension("benzina.native",
@@ -91,8 +92,8 @@ setup(
                   runtime_library_dirs=[os.path.join("$ORIGIN", "lib")],
                   libraries=["benzina"],
         ),
-        Extension("benzina._native",
-                  glob.glob(os.path.join("src", "benzina", "_native", "**", "*.c"),
+        Extension("benzina._native._C",
+                  glob.glob(os.path.join("src", "benzina", "_native", "_C", "**", "*.c"),
                             recursive=True),
                   include_dirs=[os.path.join(git.get_src_root(), "include")],
                   library_dirs=[os.path.join(git.get_src_root(),
