@@ -1,10 +1,12 @@
 from collections import namedtuple
+import io
 
 from bitstring import ConstBitStream
 import numpy as np
 
 from pybenzinaparse import Parser
-from pybenzinaparse.utils import find_headers_at, find_boxes
+from pybenzinaparse.utils import get_name_at, get_shape_at, \
+    get_sample_table_at, find_headers_at, find_boxes
 
 Trak = namedtuple("Trak", ["label", "shape", "stbl", "stbl_pos"])
 
@@ -81,34 +83,22 @@ class File:
     def _parse(self):
         self._traks = {}
 
-        for moov_pos, moov in find_headers_at(self._disk_file, {b"moov"}, self._offset):
-            for trak_pos, trak in find_headers_at(self._disk_file, {b"trak"},
-                                                  moov_pos + moov.header_size, moov.box_size - moov.header_size):
-                tkhd_pos, tkhd = next(find_headers_at(self._disk_file, {b"tkhd"}, trak_pos + trak.header_size))
-                self._disk_file.seek(tkhd_pos)
-                tkhd_bstr = ConstBitStream(self._disk_file.read(tkhd.box_size))
-                tkhd = next(Parser.parse(tkhd_bstr))
-                trak_shape = tkhd.width, tkhd.height
+        moov_pos, box_size, _, header_size = \
+            next(find_headers_at(self._disk_file, {b"moov"}, self._offset))
+        self._disk_file.seek(moov_pos)
+        moov_buffer = io.BytesIO(self._disk_file.read(box_size))
+        for trak_pos, _, _, _ in \
+            find_headers_at(moov_buffer, {b"trak"},
+                            header_size, box_size - header_size):
+            trak_label = get_name_at(moov_buffer, trak_pos)
 
-                mdia_pos, mdia = next(find_headers_at(self._disk_file, {b"mdia"}, trak_pos + trak.header_size))
+            if trak_label[-1] == 0:
+                trak_label = trak_label[:-1]
 
-                hdlr_pos, hdlr = next(find_headers_at(self._disk_file, {b"hdlr"}, mdia_pos + mdia.header_size))
-                self._disk_file.seek(hdlr_pos)
-                hdlr_bstr = ConstBitStream(self._disk_file.read(hdlr.box_size))
-                trak_label = next(Parser.parse(hdlr_bstr)).name
+            trak_shape = get_shape_at(moov_buffer, trak_pos)
+            trak_stbl_pos, trak_stbl = get_sample_table_at(moov_buffer, trak_pos)
 
-                if trak_label[-1] == 0:
-                    trak_label = trak_label[:-1]
-
-                minf_pos, minf = next(find_headers_at(self._disk_file, {b"minf"}, mdia_pos + mdia.header_size))
-                stbl_pos, stbl = next(find_headers_at(self._disk_file, {b"stbl"}, minf_pos + minf.header_size))
-                self._disk_file.seek(stbl_pos)
-                stbl_bstr = ConstBitStream(self._disk_file.read(stbl.box_size))
-                trak_stbl = next(Parser.parse(stbl_bstr))
-                trak_stbl_pos = stbl_pos
-
-                self._traks[trak_label] = Trak(trak_label, trak_shape, trak_stbl, trak_stbl_pos)
-            break
+            self._traks[trak_label] = Trak(trak_label, trak_shape, trak_stbl, moov_pos + trak_stbl_pos)
 
 
 class Track:
