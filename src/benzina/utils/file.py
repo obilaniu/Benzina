@@ -85,21 +85,20 @@ class File:
         moov_pos, box_size, _, header_size = \
             next(find_headers_at(self._disk_file, {b"moov"}, self._offset))
         self._disk_file.seek(moov_pos)
-        moov_buffer = io.BytesIO(self._disk_file.read(box_size))
         for trak_pos, _, _, _ in \
-            find_headers_at(moov_buffer, {b"trak"},
-                            header_size, box_size - header_size):
-            trak_label = get_name_at(moov_buffer, trak_pos)
+            find_headers_at(self._disk_file, {b"trak"},
+                            moov_pos + header_size, box_size - header_size):
+            trak_label = get_name_at(self._disk_file, trak_pos)
 
             if trak_label[-1] == 0:
                 trak_label = trak_label[:-1]
 
-            trak_shape = get_shape_at(moov_buffer, trak_pos)
-            trak_stbl_pos, _, _, _ = find_sample_table_at(moov_buffer, trak_pos)
+            trak_shape = get_shape_at(self._disk_file, trak_pos)
+            trak_stbl_pos, _, _, _ = find_sample_table_at(self._disk_file, trak_pos)
 
             self._traks[trak_label] = Trak(trak_label,
                                            trak_shape,
-                                           moov_pos + trak_stbl_pos)
+                                           trak_stbl_pos)
 
 
 class Track:
