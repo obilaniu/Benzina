@@ -1,14 +1,13 @@
 from collections import namedtuple
 import io
 
-from bitstring import ConstBitStream
 import numpy as np
 
-from pybenzinaparse import Parser
-from pybenzinaparse.utils import get_name_at, get_shape_at, \
-    get_sample_table_at, find_headers_at, find_boxes
+from benzina.utils.mp4 import get_chunk_offset_at, get_name_at, \
+    get_sample_size_at, get_shape_at, find_headers_at, \
+    find_sample_table_at, find_video_configuration_at
 
-Trak = namedtuple("Trak", ["label", "shape", "stbl", "stbl_pos"])
+Trak = namedtuple("Trak", ["label", "shape", "stbl_pos"])
 
 
 class File:
@@ -96,9 +95,11 @@ class File:
                 trak_label = trak_label[:-1]
 
             trak_shape = get_shape_at(moov_buffer, trak_pos)
-            trak_stbl_pos, trak_stbl = get_sample_table_at(moov_buffer, trak_pos)
+            trak_stbl_pos, _, _, _ = find_sample_table_at(moov_buffer, trak_pos)
 
-            self._traks[trak_label] = Trak(trak_label, trak_shape, trak_stbl, moov_pos + trak_stbl_pos)
+            self._traks[trak_label] = Trak(trak_label,
+                                           trak_shape,
+                                           moov_pos + trak_stbl_pos)
 
 
 class Track:
@@ -182,48 +183,28 @@ class Track:
         return self._file.subfile(offset)
 
     def video_configuration_location(self):
-        stsd = next(find_boxes(self._trak.stbl.boxes, {b"stsd"}))
-        c1 = next(find_boxes(stsd.boxes, {b"avc1", b"hec1", b"hvc1"}), None)
+        _vcC = find_video_configuration_at(self._file, self._trak.stbl_pos)
 
-        if not c1:
+        if _vcC is None:
             return None
 
-        cC = next(find_boxes(c1.boxes, {b"avcC", b"hvcC"}))
-        return (self._trak.stbl_pos + cC.header.start_pos + cC.header.header_size,
-                cC.header.box_size - cC.header.header_size)
+        pos, box_size, _, header_size = _vcC
+
+        return pos + header_size, box_size - header_size
 
     def _parse(self):
         self._trak = self._file.trak(self._label)
 
-        stbl, stbl_pos = self._trak.stbl, self._trak.stbl_pos
+        self._co, self._co_buffer = \
+            get_chunk_offset_at(self._file, self._trak.stbl_pos)
 
-        co_box = next(find_boxes(stbl.boxes, {b"stco", b"co64"}))
-        self._file.seek(stbl_pos +
-                        co_box.header.start_pos + co_box.header.header_size +
-                        4)  # entry_count
-        self._co_buffer = self._file.read(co_box.header.box_size -
-                                          co_box.header.header_size -
-                                          4)    # entry_count
+        self._sz, self._sz_buffer = \
+            get_sample_size_at(self._file, self._trak.stbl_pos)
 
-        self._co = np.frombuffer(self._co_buffer,
-                                 np.dtype(">u4") if co_box.header.type == b"stco"
-                                 else np.dtype(">u8"))
+        if self._sz_buffer is None:
+            self._sz = np.full(len(self._co), self._sz, np.uint32)
 
-        sz_box = next(find_boxes(stbl.boxes, {b"stsz"}))
-        if sz_box.sample_size > 0:
-            self._sz = np.full(co_box.entry_count, sz_box.sample_size, np.uint32)
-        else:
-            self._file.seek(stbl_pos +
-                            sz_box.header.start_pos + sz_box.header.header_size +
-                            4 +  # sample_size
-                            4)   # sample_count
-            self._sz_buffer = self._file.read(sz_box.header.box_size -
-                                              sz_box.header.header_size -
-                                              4 -  # sample_size
-                                              4)   # sample_count
-            self._sz = np.frombuffer(self._sz_buffer, np.dtype(">u4"))
-
-        self._len = co_box.entry_count
+        self._len = len(self._co)
 
 
 class Sample:
