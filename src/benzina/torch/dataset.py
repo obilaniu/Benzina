@@ -31,10 +31,12 @@ class Dataset(torch.utils.data.Dataset):
 
 
 class ImageNet(Dataset):
-    _Item = namedtuple("Item", ["input", "target"])
+    _Item = namedtuple("Item", ["input", "input_label", "target"])
 
-    def __init__(self, input_track, target_track):
+    def __init__(self, input_track, target_track, input_label=b"bzna_input"):
         Dataset.__init__(self, input_track)
+
+        self._input_label = input_label
 
         location_first, _ = target_track[0].location
         location_last, size_last = target_track[-1].location
@@ -45,8 +47,10 @@ class ImageNet(Dataset):
         self._targets[:len(target_track)] = np.frombuffer(buffer, np.dtype("<i8"))
 
     def __getitem__(self, index):
-        return ImageNet._Item(*Dataset.__getitem__(self, index),
-                              (self.targets[index],))
+        item = Dataset.__getitem__(self, index)
+        return ImageNet._Item(input=item.input,
+                              input_label=self._input_label,
+                              target=(self.targets[index],))
 
     def __add__(self, other):
         raise NotImplementedError()
