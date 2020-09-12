@@ -1,5 +1,4 @@
 from collections import namedtuple
-import io
 
 import numpy as np
 
@@ -125,6 +124,8 @@ class Track:
         return self._len
 
     def __getitem__(self, index):
+        if index >= len(self):
+            raise IndexError
         return Sample(self, index)
 
     def __iter__(self):
@@ -168,8 +169,6 @@ class Track:
         return self._trak.shape
 
     def sample_location(self, index):
-        if index < 0:
-            index = len(self) + index
         return int(self._file.offset + self._co[index]), int(self._sz[index])
 
     def sample_bytes(self, index):
@@ -201,6 +200,7 @@ class Track:
             get_sample_size_at(self._file, self._trak.stbl_pos)
 
         if self._sz_buffer is None:
+            self._sz: int
             self._sz = np.full(len(self._co), self._sz, np.uint32)
 
         self._len = len(self._co)

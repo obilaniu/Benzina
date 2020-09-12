@@ -1,10 +1,11 @@
 ImageNet loading in PyTorch
 ===========================
 
-As long as your dataset is converted into Benzina's data format, you can load it
-to train a PyTorch model in a few lines of code. Here is an example demonstrating
-how this can be done with an ImageNet dataset. It is based on the
-`ImageNet example from PyTorch <https://github.com/pytorch/examples/tree/master/imagenet>`_
+As long as your dataset is converted into Benzina's data format, you can load
+it to train a PyTorch model in a few lines of code. Here is an example
+demonstrating how this can be done with an ImageNet dataset. It is based on the
+`ImageNet example from PyTorch
+<https://github.com/pytorch/examples/tree/master/imagenet>`_
 
 .. code-block:: python
 
@@ -16,37 +17,34 @@ how this can be done with an ImageNet dataset. It is based on the
     torch.manual_seed(seed)
 
     # Dataset
-    dataset = bz.ImageNet("path/to/data")
-
-    indices = list(range(len(dataset)))
-    n_valid = 50000
-    n_test = 100000
-    n_train = len(dataset) - n_valid - n_test
-    train_sampler = torch.utils.data.SubsetRandomSampler(indices[:n_train])
-    valid_sampler = torch.utils.data.SubsetRandomSampler(indices[n_train:-n_test])
+    train_dataset = bz.dataset.ImageNet("path/to/dataset", split="train")
+    val_dataset = bz.dataset.ImageNet("path/to/dataset", split="val")
 
     # Dataloaders
-    bias = ops.ConstantBiasTransform(bias=(123.675, 116.28 , 103.53))
-    std = ops.ConstantNormTransform(norm=(58.395, 57.12 , 57.375))
+    bias = ops.ConstantBiasTransform(bias=(0.485 * 255, 0.456 * 255, 0.406 * 255))
+    std = ops.ConstantNormTransform(norm=(0.229 * 255, 0.224 * 255, 0.225 * 255))
 
-    train_dataloader = bz.DataLoader(
-        dataset,
+    train_loader = bz.DataLoader(
+        train_dataset,
+        shape=(224, 224),
         batch_size=256,
-        sampler=train_sampler,
+        shuffle=True,
         seed=seed,
-        shape=(224,224),
         bias_transform=bias,
         norm_transform=std,
-        warp_transform=ops.SimilarityTransform(flip_h=0.5))
-    valid_dataloader = bz.DataLoader(
-        dataset,
-        batch_size=512,
-        sampler=valid_sampler,
+        warp_transform=ops.SimilarityTransform(scale=(0.08, 1.0),
+                                               ratio=(3./4., 4./3.),
+                                               flip_h=0.5,
+                                               random_crop=True))
+    val_loader = bz.DataLoader(
+        val_dataset,
+        shape=(224, 224),
+        batch_size=256,
+        shuffle=False,
         seed=seed,
-        shape=(224,224),
         bias_transform=bias,
         norm_transform=std,
-        warp_transform=ops.SimilarityTransform())
+        warp_transform=ops.SimilarityTransform(scale=(224/256, 224/256)))
 
     for epoch in range(1, 10):
         # train for one epoch
@@ -55,84 +53,84 @@ how this can be done with an ImageNet dataset. It is based on the
         # evaluate on validation set
         accuracy = validate(valid_dataloader, ...)
 
-In the example above, we first create a ``benzina.torch.ImageNet`` and specify
-the location of the dataset.
+In the example above, two ``benzina.torch.dataset.ImageNet`` are first created
+with the location of the dataset and the desired split specified.
 
 .. note::
    To be able to quickly load your dataset with the hardware decoder of a GPU,
-   Benzina needs it to be converted in its own format embedding h.264 containers.
+   Benzina needs the data to be converted in its own format embedding h.265
+   images.
 
 .. code-block:: python
 
-    dataset = bz.ImageNet("path/to/data")
+    train_dataset = bz.dataset.ImageNet("path/to/dataset", split="train")
+    val_dataset = bz.dataset.ImageNet("path/to/dataset", split="val")
 
-Then we define the training and validation samplers for the dataset. In this case,
-the training, validation and test data are in the same dataset with the training
-data being at the beginning followed by the validation then the test data.
-
-.. code-block:: python
-
-    indices = list(range(len(dataset)))
-    n_valid = 50000
-    n_test = 100000
-    n_train = len(dataset) - n_valid - n_test
-    train_sampler = torch.utils.data.SubsetRandomSampler(indices[:n_train])
-    valid_sampler = torch.utils.data.SubsetRandomSampler(indices[n_train:-n_test])
-
-The last steps are to define the dataloaders and the transformations to apply to
-the dataset during the loading of the images. It is usually a good idea to normalize
-the data based on its statistical bias and standard deviation which can be done with
-Benzina by respectively using its ``benzina.torch.operations.ConstantBiasTransform``
-and ``benzina.torch.operations.ConstantNormTransform``.
+Then the transformations to apply to the dataset are defined. It is usually a
+good idea to normalize the data based on its statistical bias and standard
+deviation which can be done with Benzina by using its
+``benzina.torch.operations.ConstantBiasTransform`` and
+``benzina.torch.operations.ConstantNormTransform`` respectively.
 
 .. note::
-   - ``benzina.torch.operations.ConstantBiasTransform`` will substract its bias
-     from the images RGB channels
-   - ``benzina.torch.operations.ConstantNormTransform`` will multiply its norm
-     with the images RGB channels
+   - ``benzina.torch.operations.ConstantBiasTransform`` will substract the bias
+     from the images' RGB channels
+   - ``benzina.torch.operations.ConstantNormTransform`` will multiply the norm
+     with the images' RGB channels
 
 .. code-block:: python
 
     bias = ops.ConstantBiasTransform(bias=(123.675, 116.28 , 103.53))
     std = ops.ConstantNormTransform(norm=(58.395, 57.12 , 57.375))
 
-The loaders are now ready to be instantiated. In this example, the dataset's images
-are all of size 256 x 256. The resulting images we want to feed in our model are
-the center crop of size 224 x 224 with an horizontal flip being randomly applied.
-In Benzina, you would do this by first defining the size of the output image,
-with the ``shape`` argument, then using Benzina's similarity transform which can
-randomly apply the horizontal flip among other transformations.
+The dataloaders are now ready to be instantiated. In this example, the
+dataset's images are all of size 512 x 512 by the dataset specifications. A
+random crop resized to 224 x 224 and a random horizontal flip will be applied
+to the images prior feeding them to the model. In Benzina, this is done by
+defining the size of the output tensor with the dataloader's ``shape`` argument
+then use Benzina's similarity transform. In the case of the validation
+dataloader, a scale of 224 / 256 is specified to the similarity transform which
+is equivalent to apply a center crop of scale 224 / 256 then resize the cropped
+section to 224 x 224. An other maybe more intuitive way to describe this
+transformation is to see it as a resize to 256 x 256 then a center crop of
+224 x 224.
 
 .. note::
-   It's useful to know that ``benzina.torch.operations.SimilarityTransform`` will
-   automatically center the output frame on the input image. This means that even
-   if there is no wish to apply a random transformation to the input image, like
-   a scale, rotation or a translation, ``benzina.torch.operations.SimilarityTransform``
-   can be still used to apply a center crop in the case the output size is not the
-   same as the input size.
+   It's useful to know that ``benzina.torch.operations.SimilarityTransform``
+   will automatically center the output frame on the center of the input image.
+   This means that even if there is no wish to apply a random transformation to
+   the input image, like a scale, rotation or a translation,
+   ``benzina.torch.operations.SimilarityTransform`` can be still used to apply
+   a center crop.
 
 .. code-block:: python
 
-    train_dataloader = bz.DataLoader(
-        dataset,
+    train_loader = bz.DataLoader(
+        train_dataset,
+        shape=(224, 224),
         batch_size=256,
-        sampler=train_sampler,
+        shuffle=True,
         seed=seed,
-        shape=(224,224),
         bias_transform=bias,
         norm_transform=std,
-        warp_transform=ops.SimilarityTransform(flip_h=0.5))
-    valid_dataloader = bz.DataLoader(
-        dataset,
-        batch_size=512,
-        sampler=valid_sampler,
+        warp_transform=ops.SimilarityTransform(scale=(0.08, 1.0),
+                                               ratio=(3./4., 4./3.),
+                                               flip_h=0.5,
+                                               random_crop=True))
+    val_loader = bz.DataLoader(
+        val_dataset,
+        shape=(224, 224),
+        batch_size=256,
+        shuffle=False,
         seed=seed,
-        shape=(224,224),
         bias_transform=bias,
         norm_transform=std,
-        warp_transform=ops.SimilarityTransform())
+        warp_transform=ops.SimilarityTransform(scale=(224/256, 224/256)))
 
-As demonstrated in the `full example loading ImageNet to feed a PyTorch module <https://github.com/obilaniu/Benzina/blob/master/Users/satya/travail/examples/python/imagenet>`_, code change between a pure PyTorch implementation and an implementation using Benzina holds in only a few lines
+As demonstrated in the `full example loading ImageNet to feed a PyTorch module
+<https://github.com/obilaniu/Benzina/blob/master/Users/satya/travail/examples/python/imagenet>`_,
+code change between a pure PyTorch implementation and an implementation using
+Benzina holds in only a few lines.
 
 .. code-block:: bash
 
@@ -142,7 +140,7 @@ As demonstrated in the `full example loading ImageNet to feed a PyTorch module <
 
                                                                     >  import torchvision.transforms as transforms
                                                                     >  import torchvision.datasets as datasets
-    ## Benzina        ###                                           <
+    ### Benzina       ###                                           <
     # Dependancies                                                  <
     import benzina.torch as bz                                      <
     import benzina.torch.operations as ops                          <
@@ -150,29 +148,29 @@ As demonstrated in the `full example loading ImageNet to feed a PyTorch module <
                                                                     <
                                                                     >  parser.add_argument('-j', '--workers', default=4, type=int, met
                                                                     >                      help='number of data loading workers (defau
-                                                                    |      traindir = os.path.join(args.data, 'train')
-        ### Benzina       ###                                       |      valdir = os.path.join(args.data, 'val')
-        # Dataset                                                   |      normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406]
-        dataset = bz.ImageNet(args.data)                            |                                       std=[0.229, 0.224, 0.225])
-                                                                    |
-        indices = list(range(len(dataset)))                         |      train_dataset = datasets.ImageFolder(
-        n_valid = 50000                                             |          traindir,
-        n_test = 100000                                             |          transforms.Compose([
-        n_train = len(dataset) - n_valid - n_test                   |              transforms.RandomResizedCrop(224),
-        train_sampler = torch.utils.data.SubsetRandomSampler(indice |              transforms.RandomHorizontalFlip(),
-        valid_sampler = torch.utils.data.SubsetRandomSampler(indice |              transforms.ToTensor(),
-                                                                    |              normalize,
-        # Dataloaders                                               |          ]))
-        bias = ops.ConstantBiasTransform(bias=(123.675, 116.28 , 10 |
-        std = ops.ConstantNormTransform(norm=(58.395, 57.12 , 57.37 |      train_loader = torch.utils.data.DataLoader(
-                                                                    |          train_dataset, batch_size=args.batch_size, shuffle=True
-        train_loader = bz.DataLoader(dataset, batch_size=args.batch |          num_workers=args.workers, pin_memory=True)
-            sampler=train_sampler, seed=args.seed, shape=(224,224), |
-            norm_transform=std, warp_transform=ops.SimilarityTransf |      val_loader = torch.utils.data.DataLoader(
-        val_loader = bz.DataLoader(dataset, batch_size=args.batch_s |          datasets.ImageFolder(valdir, transforms.Compose([
-            sampler=valid_sampler, seed=args.seed, shape=(224,224), |              transforms.Resize(256),
-            norm_transform=std, warp_transform=ops.SimilarityTransf |              transforms.CenterCrop(224),
-        ### Benzina - end ###                                       |              transforms.ToTensor(),
+        ### Benzina       ###                                       |      traindir = os.path.join(args.data, 'train')
+        train_dataset = bz.dataset.ImageNet(args.data, split="train |      valdir = os.path.join(args.data, 'val')
+                                                                    |      normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406]
+        bias = ops.ConstantBiasTransform(bias=(0.485 * 255, 0.456 * |                                       std=[0.229, 0.224, 0.225])
+        std = ops.ConstantNormTransform(norm=(0.229 * 255, 0.224 *  |
+                                                                    |      train_dataset = datasets.ImageFolder(
+        train_loader = bz.DataLoader(                               |          traindir,
+            train_dataset, shape=(224, 224), batch_size=args.batch_ |          transforms.Compose([
+            shuffle=True, seed=args.seed, bias_transform=bias, norm |              transforms.RandomResizedCrop(224),
+            warp_transform=ops.SimilarityTransform(                 |              transforms.RandomHorizontalFlip(),
+                scale=(0.08, 1.0),                                  |              transforms.ToTensor(),
+                ratio=(3./4., 4./3.),                               |              normalize,
+                flip_h=0.5,                                         |          ]))
+                random_crop=True))                                  |
+                                                                    |      train_loader = torch.utils.data.DataLoader(
+        val_loader = bz.DataLoader(                                 |          train_dataset, batch_size=args.batch_size, shuffle=True
+            bz.dataset.ImageNet(args.data, split="val"), shape=(224 |          num_workers=args.workers, pin_memory=True)
+            batch_size=args.batch_size, shuffle=args.batch_size, se |
+            bias_transform=bias, norm_transform=std,                |      val_loader = torch.utils.data.DataLoader(
+            warp_transform=ops.SimilarityTransform(scale=(224/256,  |          datasets.ImageFolder(valdir, transforms.Compose([
+        ### Benzina - end ###                                       |              transforms.Resize(256),
+                                                                    >              transforms.CenterCrop(224),
+                                                                    >              transforms.ToTensor(),
                                                                     >              normalize,
                                                                     >          ])),
                                                                     >          batch_size=args.batch_size, shuffle=False,
