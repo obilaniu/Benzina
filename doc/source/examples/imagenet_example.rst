@@ -44,7 +44,7 @@ demonstrating how this can be done with an ImageNet dataset. It is based on the
         seed=seed,
         bias_transform=bias,
         norm_transform=std,
-        warp_transform=ops.SimilarityTransform(scale=(224/256, 224/256)))
+        warp_transform=ops.CenterResizedCrop(224/256)))
 
     for epoch in range(1, 10):
         # train for one epoch
@@ -88,20 +88,20 @@ dataset's images are all of size 512 x 512 by the dataset specifications. A
 random crop resized to 224 x 224 and a random horizontal flip will be applied
 to the images prior feeding them to the model. In Benzina, this is done by
 defining the size of the output tensor with the dataloader's ``shape`` argument
-then use Benzina's similarity transform. In the case of the validation
-dataloader, a scale of 224 / 256 is specified to the similarity transform which
-is equivalent to apply a center crop of scale 224 / 256 then resize the cropped
-section to 224 x 224. An other maybe more intuitive way to describe this
-transformation is to see it as a resize to 256 x 256 then a center crop of
-224 x 224.
+and using Benzina's similarity transform.
+
+In the case of the validation transform, an alias to a specific similarity
+transform, which applies a center crop of edges scale 224 / 256, resize the
+cropped section to have its smaller edge matched to 224 then center a crop of
+224 x 224. Another maybe more intuitive way to describe this transformation is
+to see it as a resize to have the smaller edge matched to 256 then center a
+crop of 224 x 224.
 
 .. note::
    It's useful to know that ``benzina.torch.operations.SimilarityTransform``
    will automatically center the output frame on the center of the input image.
-   This means that even if there is no wish to apply a random transformation to
-   the input image, like a scale, rotation or a translation,
-   ``benzina.torch.operations.SimilarityTransform`` can be still used to apply
-   a center crop.
+   This makes a vanilla ``benzina.torch.operations.SimilarityTransform``
+   equivalent a center crop of size of the output.
 
 .. code-block:: python
 
@@ -125,9 +125,9 @@ transformation is to see it as a resize to 256 x 256 then a center crop of
         seed=seed,
         bias_transform=bias,
         norm_transform=std,
-        warp_transform=ops.SimilarityTransform(scale=(224/256, 224/256)))
+        warp_transform=ops.CenterResizedCrop(224/256))
 
-As demonstrated in the `full example loading ImageNet to feed a PyTorch module
+As demonstrated in the `full example loading ImageNet to feed a PyTorch model
 <https://github.com/obilaniu/Benzina/blob/master/Users/satya/travail/examples/python/imagenet>`_,
 code change between a pure PyTorch implementation and an implementation using
 Benzina holds in only a few lines.
@@ -167,7 +167,7 @@ Benzina holds in only a few lines.
             bz.dataset.ImageNet(args.data, split="val"), shape=(224 |          num_workers=args.workers, pin_memory=True)
             batch_size=args.batch_size, shuffle=args.batch_size, se |
             bias_transform=bias, norm_transform=std,                |      val_loader = torch.utils.data.DataLoader(
-            warp_transform=ops.SimilarityTransform(scale=(224/256,  |          datasets.ImageFolder(valdir, transforms.Compose([
+            warp_transform=ops.CenterResizedCrop(224/256))          |          datasets.ImageFolder(valdir, transforms.Compose([
         ### Benzina - end ###                                       |              transforms.Resize(256),
                                                                     >              transforms.CenterCrop(224),
                                                                     >              transforms.ToTensor(),

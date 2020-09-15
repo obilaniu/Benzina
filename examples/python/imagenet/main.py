@@ -149,7 +149,7 @@ def main_worker(gpu, args):
         bz.dataset.ImageNet(args.data, split="val"), shape=(224, 224),
         batch_size=args.batch_size, shuffle=args.batch_size, seed=args.seed,
         bias_transform=bias, norm_transform=std,
-        warp_transform=ops.SimilarityTransform(scale=(224/256, 224/256)))
+        warp_transform=ops.CenterResizedCrop(224/256))
     ### Benzina - end ###
 
     if args.evaluate:

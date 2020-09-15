@@ -277,7 +277,7 @@ class SimilarityTransform   (WarpTransform):
     Similarity warp transformation of the image keeping center invariant.
 
     A crop of random size, aspect ratio and location is made. This crop can
-    then be flipped and/or rotated to finally be resized to the output size.
+    then be flipped and/or rotated to finally be resized to output size.
 
     Args:
         scale (Sequence or float or int, optional): crop area scaling factor
@@ -306,10 +306,14 @@ class SimilarityTransform   (WarpTransform):
             horizontally. (default: ``+0.0``)
         flip_v (bool, optional): probability of the image being flipped
             vertically. (default: ``+0.0``)
-        resize (bool, optional): Resize the cropped image to fit the output's
+        resize (bool, optional): resize the cropped image to fit the output
             size. It is forced to ``True`` if :attr:`scale` or :attr:`ratio`
             are specified. (default: ``False``)
-        random_crop (bool, optional): Randomly crop the image instead of
+        keep_ratio (bool, optional): match the smaller edge to the
+            corresponding output edge size, keeping the aspect ratio after
+            resize. Has no effect if :attr:`resize` is ``False``.
+            (default: ``False``)
+        random_crop (bool, optional): randomly crop the image instead of
             a center crop. (default: ``False``)
     """
     def __init__(self,
@@ -320,6 +324,7 @@ class SimilarityTransform   (WarpTransform):
                  flip_h=+0.0,
                  flip_v=+0.0,
                  resize=False,
+                 keep_ratio=False,
                  random_crop=False):
         if isinstance(scale, Number):
             scale: float
@@ -365,6 +370,7 @@ class SimilarityTransform   (WarpTransform):
         self.fh = float(flip_h)
         self.fv = float(flip_v)
         self.resize = resize or scale != (1.0, 1.0) or ratio is not None
+        self.keep_ratio = keep_ratio and self.resize
         self.random_crop = random_crop
 
     def __call__(self, index, in_shape, out_shape, rng):
@@ -400,7 +406,8 @@ class SimilarityTransform   (WarpTransform):
 
         H = get_similarity_transform_matrix(in_shape, out_shape,
                                             (crop_x, crop_y, crop_w, crop_h),
-                                            r, (tx, ty), fh, fv, self.resize)
+                                            r, (tx, ty), fh, fv, self.resize,
+                                            self.keep_ratio)
 
         return tuple(H.flatten().tolist())
 
@@ -410,7 +417,7 @@ class RandomResizedCrop     (SimilarityTransform):
     Crop to random size, aspect ratio and location.
 
     A crop of random size, aspect ratio and location is made. This crop is
-    finally resized to the output size.
+    finally resized to output size.
 
     This is popularly used to train the Inception networks.
 
@@ -432,6 +439,28 @@ class RandomResizedCrop     (SimilarityTransform):
                                      resize=True, random_crop=True)
 
 
+class CenterResizedCrop     (SimilarityTransform):
+    """
+    Crops at the center and resize.
+
+    A crop at the center is made then resized to the output size.
+
+    Args:
+        scale (float or int, optional): edges scaling factor.
+            (default: ``+1.0``)
+        keep_ratio (bool, optional): match the smaller edge to the
+            corresponding output edge size, keeping the aspect ratio after
+            resize. Has no effect if :attr:`resize` is ``False``.
+            (default: ``False``)
+    """
+    def __init__(self,
+                 scale=+1.0,
+                 keep_ratio=True):
+        SimilarityTransform.__init__(self,
+                                     scale=(pow(scale, 2), pow(scale, 2)),
+                                     resize=True, keep_ratio=keep_ratio)
+
+
 def get_similarity_transform_matrix(in_shape,
                                     out_shape,
                                     crop=None,
@@ -439,7 +468,8 @@ def get_similarity_transform_matrix(in_shape,
                                     translate=(0.0, 0.0),
                                     flip_h=False,
                                     flip_v=False,
-                                    resize=False):
+                                    resize=False,
+                                    keep_ratio=False):
     """
     Similarity warp transformation of the image keeping center invariant.
 
@@ -458,8 +488,12 @@ def get_similarity_transform_matrix(in_shape,
             (default: ``False``)
         flip_v (bool, optional): flip the image vertically.
             (default: ``False``)
-        resize (bool, optional): Resize the cropped image to fit the output's
+        resize (bool, optional): resize the cropped image to fit the output's
             size. (default: ``False``)
+        keep_ratio (bool, optional): match the smaller edge to the
+            corresponding output edge size, keeping the aspect ratio after
+            resize. Has no effect if :attr:`resize` is ``False``.
+            (default: ``False``)
     """
     if crop is not None:
         T_crop_x, T_crop_y, crop_w, crop_h = crop
@@ -472,7 +506,7 @@ def get_similarity_transform_matrix(in_shape,
     fv = 1 - 2 * float(flip_v)
 
     #
-    # H = T_inshape*T_crop*R*S_resize + t_out + t
+    # H = T_inshape*T_crop*R*S_resize*T_outshapeT
     #
     T_i_x = (in_shape[0] - 1) / 2
     T_i_y = (in_shape[1] - 1) / 2
@@ -488,17 +522,19 @@ def get_similarity_transform_matrix(in_shape,
     S_r_x = 1
     S_r_y = 1
     if resize:
-        top_left, bot_right = R.dot([[-(crop_w - 1) / 2, (crop_w - 1) / 2],
-                                     [-(crop_h - 1) / 2, (crop_h - 1) / 2],
+        top_left, bot_right = R.dot([[-crop_w / 2, crop_w / 2],
+                                     [-crop_h / 2, crop_h / 2],
                                      [1, 1]]).transpose()[:, 0:2]
-        crop_w, crop_h = np.absolute(bot_right - top_left) + 1
-        S_r_x = (crop_w - 1) / (out_shape[0] - 1)
-        S_r_y = (crop_h - 1) / (out_shape[1] - 1)
+        crop_w, crop_h = np.absolute(bot_right - top_left)
+        S_r_x = crop_w / out_shape[0]
+        S_r_y = crop_h / out_shape[1]
+        if keep_ratio:
+            scale_ratio = min(S_r_x, S_r_y)
+            S_r_x = scale_ratio
+            S_r_y = scale_ratio
     S_resize = np.asarray([[S_r_x, 0, 0],
                            [0, S_r_y, 0],
                            [0, 0, 1]])
-    # Translation and center are relative to output coordinates and are applied
-    # directly
     T_o_x = tx - (out_shape[0] - 1) / 2
     T_o_y = ty - (out_shape[1] - 1) / 2
     T_outshapeT = np.asarray([[1, 0, T_o_x],

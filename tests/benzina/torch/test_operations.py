@@ -22,7 +22,30 @@ def test_random_resized_crop():
     assert random_resized_crop.fh == similarity.fh
     assert random_resized_crop.fv == similarity.fv
     assert random_resized_crop.resize == similarity.resize
+    assert random_resized_crop.keep_ratio == similarity.keep_ratio
     assert random_resized_crop.random_crop == similarity.random_crop
+
+
+def test_center_resized_crop():
+    rng = np.random.RandomState(0)
+
+    center_resized_crop = ops.CenterResizedCrop(0.5)
+    similarity = ops.SimilarityTransform(scale=(0.25, 0.25), resize=True,
+                                         keep_ratio=True)
+
+    assert center_resized_crop.s != None
+    assert center_resized_crop.s != (1.0, 1.0)
+    assert center_resized_crop.keep_ratio
+
+    assert center_resized_crop.s == similarity.s
+    assert center_resized_crop.ar == similarity.ar
+    assert center_resized_crop.r == similarity.r
+    assert center_resized_crop.t == similarity.t
+    assert center_resized_crop.fh == similarity.fh
+    assert center_resized_crop.fv == similarity.fv
+    assert center_resized_crop.resize == similarity.resize
+    assert center_resized_crop.keep_ratio == similarity.keep_ratio
+    assert center_resized_crop.random_crop == similarity.random_crop
 
 
 def test_similarity_transform_vanilla():
@@ -74,15 +97,17 @@ def test_similarity_transform_scale():
 
     sim_t = similarity(0, (256, 144), (256, 144), rng)
     assert (np.absolute(np.asarray(sim_t).reshape((3, 3)).dot((0, 0, 1)) -
-                        (64, 36, 1)) < 0.0001).all()
+                        (63.75, 35.75, 1)) < 0.0001).all()
     assert (np.absolute(np.asarray(sim_t).reshape((3, 3)).dot((255, 143, 1)) -
-                        (191, 107, 1)) < 0.0001).all()
+                        (191.25, 107.25, 1)) < 0.0001).all()
 
     sim_t = similarity(0, (256, 144), (224, 126), rng)
-    assert (np.absolute(np.asarray(sim_t).reshape((3, 3)).dot((0, 0, 1)) -
-                        (64, 36, 1)) < 0.0001).all()
-    assert (np.absolute(np.asarray(sim_t).reshape((3, 3)).dot((223, 125, 1)) -
-                        (191, 107, 1)) < 0.0001).all()
+    o_top_left = np.asarray(sim_t).reshape((3, 3)).dot((0, 0, 1))
+    o_bot_right = np.asarray(sim_t).reshape((3, 3)).dot((223, 125, 1))
+    o_width, o_height = (o_bot_right - o_top_left)[0:2]
+    # Crop scale is 0.5 and resize factors are 256/224 and 144/126 respectively
+    assert abs(o_width * 224/256) * 2 + 1 - 224 < 0.0001
+    assert abs(o_height * 126/144) * 2 + 1 - 126 < 0.0001
 
 
 def test_similarity_transform_ratio():
@@ -112,9 +137,9 @@ def test_similarity_transform_ratio():
 
     sim_t = similarity(0, (512, 144), (192, 384), rng)
     assert (np.absolute(np.asarray(sim_t).reshape((3, 3)).dot((0, 0, 1)) -
-                        (64, -24, 1)) < 0.0001).all()
+                        (64.5, -24.25, 1)) < 0.0001).all()
     assert (np.absolute(np.asarray(sim_t).reshape((3, 3)).dot((191, 383, 1)) -
-                        (447, 167, 1)) < 0.0001).all()
+                        (446.5, 167.25, 1)) < 0.0001).all()
 
     similarity = ops.SimilarityTransform(ratio=(0.5, 0.5))
 
@@ -324,10 +349,41 @@ def test_similarity_transform_resize():
             (255, 143, 1)).all()
 
     sim_t = similarity(0, (256, 144), (144, 256), rng)
+    o_top_left = np.asarray(sim_t).reshape((3, 3)).dot((0, 0, 1))
+    o_bot_right = np.asarray(sim_t).reshape((3, 3)).dot((143, 255, 1))
+    o_width, o_height = (o_bot_right - o_top_left)[0:2]
+    # Resize factors are 256/144 and 144/256 respectively
+    assert abs(o_width * 144/256) + 1 - 144 < 0.0001
+    assert abs(o_height * 256/144) + 1 - 256 < 0.0001
+
+
+def test_similarity_transform_keep_ratio():
+    rng = np.random.RandomState(0)
+
+    similarity = ops.SimilarityTransform(keep_ratio=True)
+    similarity_other = ops.SimilarityTransform()
+
+    sim_t = similarity(0, (512, 288), (256, 256), rng)
+    sim_t_other = similarity_other(0, (512, 288), (256, 256), rng)
+
     assert (np.absolute(np.asarray(sim_t).reshape((3, 3)).dot((0, 0, 1)) -
-                        (0, 0, 1)) < 0.0001).all()
-    assert (np.absolute(np.asarray(sim_t).reshape((3, 3)).dot((143, 255, 1)) -
-                        (255, 143, 1)) < 0.0001).all()
+                        np.asarray(sim_t_other).reshape((3, 3)).dot((0, 0, 1)))
+            < 0.0001).all()
+    assert (np.absolute(np.asarray(sim_t).reshape((3, 3)).dot((255, 255, 1)) -
+                        np.asarray(sim_t_other).reshape((3, 3))
+                        .dot((255, 255, 1)))
+            < 0.0001).all()
+
+    similarity = ops.SimilarityTransform(keep_ratio=True,
+                                         resize=True)
+
+    sim_t = similarity(0, (512, 288), (256, 256), rng)
+    o_top_left = np.asarray(sim_t).reshape((3, 3)).dot((0, 0, 1))
+    o_bot_right = np.asarray(sim_t).reshape((3, 3)).dot((255, 255, 1))
+    o_width, o_height = (o_bot_right - o_top_left)[0:2]
+    # Resize factors are 288/256
+    assert (o_width * 256/288) + 1 - 256 < 0.0001
+    assert (o_height * 256/288) + 1 - 256 < 0.0001
 
 
 def test_similarity_transform_crop():
@@ -395,15 +451,23 @@ def test_similarity_transform_crop():
                                                 (256, 144),
                                                 crop=(10, -10, 40, 20),
                                                 resize=True)
-    assert (sim_t.dot((0, 0, 1)) == (118, 52, 1)).all()
-    assert (sim_t.dot((255, 143, 1)) == (157, 71, 1)).all()
+    o_top_left = sim_t.dot((0, 0, 1))
+    o_bot_right = sim_t.dot((255, 143, 1))
+    o_width, o_height = (o_bot_right - o_top_left)[0:2]
+    # Resize factors are 40/256 and 20/144 respectively
+    assert abs(o_width * 256/40) + 1 - 256 < 0.0001
+    assert abs(o_height * 144/20) + 1 - 144 < 0.0001
 
     sim_t = ops.get_similarity_transform_matrix((256, 144),
                                                 (128, 72),
                                                 crop=(10, -10, 40, 20),
                                                 resize=True)
-    assert (sim_t.dot((0, 0, 1)) == (118, 52, 1)).all()
-    assert (sim_t.dot((127, 71, 1)) == (157, 71, 1)).all()
+    o_top_left = sim_t.dot((0, 0, 1))
+    o_bot_right = sim_t.dot((255, 143, 1))
+    o_width, o_height = (o_bot_right - o_top_left)[0:2]
+    # Resize factors are 40/128 and 20/72 respectively
+    assert abs(o_width * 128/40) + 1 - 256 < 0.0001
+    assert abs(o_height * 72/20) + 1 - 144 < 0.0001
 
 
 def test_similarity_transform_mix():
@@ -416,10 +480,34 @@ def test_similarity_transform_mix():
                                          flip_v=1.0)
 
     sim_t = similarity(0, (512, 144), (192, 384), rng)
-    assert (np.absolute(np.asarray(sim_t).reshape((3, 3)).dot((0, 0, 1)) -
-                        (160, 119, 1)) < 0.0001).all()
-    assert (np.absolute(np.asarray(sim_t).reshape((3, 3)).dot((191, 383, 1)) -
-                        (351, 24, 1)) < 0.0001).all()
+    o_top_left = np.asarray(sim_t).reshape((3, 3)).dot((0, 0, 1))
+    o_bot_right = np.asarray(sim_t).reshape((3, 3)).dot((191, 383, 1))
+    o_width, o_height = (o_bot_right - o_top_left)[0:2]
+    # Crop scale is 0.5 and resize factors are 384/384 and 192/192
+    assert abs(o_width) * 2 + 1 - 384 < 0.0001
+    assert abs(o_height) * 2 + 1 - 192 < 0.0001
+
+    similarity = ops.SimilarityTransform(scale=(0.0625, 0.0625),
+                                         keep_ratio=True)
+
+    sim_t = similarity(0, (768, 288), (256, 144), rng)
+    o_top_left = np.asarray(sim_t).reshape((3, 3)).dot((0, 0, 1))
+    o_bot_right = np.asarray(sim_t).reshape((3, 3)).dot((255, 143, 1))
+    o_width, o_height = (o_bot_right - o_top_left)[0:2]
+    # Crop scale is 0.25 and resize factors are 72/144
+    assert abs(o_width * 144/72) + 1 - 256 < 0.0001
+    assert abs(o_height * 144/72) + 1 - 144 < 0.0001
+
+    similarity = ops.SimilarityTransform(scale=(0.0625, 0.0625),
+                                         keep_ratio=True)
+
+    sim_t = similarity(0, (768, 288), (144, 256), rng)
+    o_top_left = np.asarray(sim_t).reshape((3, 3)).dot((0, 0, 1))
+    o_bot_right = np.asarray(sim_t).reshape((3, 3)).dot((143, 255, 1))
+    o_width, o_height = (o_bot_right - o_top_left)[0:2]
+    # Crop scale is 0.25 and resize factors are 72/256
+    assert abs(o_width * 256/72) + 1 - 144 < 0.0001
+    assert abs(o_height * 256/72) + 1 - 256 < 0.0001
 
     sim_t = ops.get_similarity_transform_matrix((256, 144),
                                                 (144, 256),
@@ -434,9 +522,12 @@ def test_similarity_transform_mix():
                                                 crop=(10, -10, 40, 20),
                                                 degrees=90,
                                                 resize=True)
-    assert (np.absolute(sim_t.dot((0, 0, 1)) - (157, 52, 1)) < 0.0001).all()
-    assert (np.absolute(sim_t.dot((143, 255, 1)) - (118, 71, 1))
-            < 0.0001).all()
+    o_top_left = sim_t.dot((0, 0, 1))
+    o_bot_right = sim_t.dot((255, 143, 1))
+    o_width, o_height = (o_bot_right - o_top_left)[0:2]
+    # Resize factors are 40/256 and 20/144 respectively
+    assert abs(o_width * 256/40) + 1 - 144 < 0.0001
+    assert abs(o_height * 144/20) + 1 - 256 < 0.0001
 
     sim_t = ops.get_similarity_transform_matrix((256, 144),
                                                 (256, 144),
@@ -463,7 +554,6 @@ def test_similarity_transform_mix():
                                                 crop=(10, -10, 40, 20),
                                                 translate=(-15, 15),
                                                 resize=True)
-
     sim_t_other = ops.get_similarity_transform_matrix((256, 144),
                                                       (256, 144),
                                                       crop=(10, -10, 40, 20),
@@ -479,7 +569,6 @@ def test_similarity_transform_mix():
                                                 crop=(10, -10, 40, 20),
                                                 translate=(-15, 15),
                                                 resize=True)
-
     sim_t_other = ops.get_similarity_transform_matrix((256, 144),
                                                       (128, 72),
                                                       crop=(10, -10, 40, 20),
@@ -496,7 +585,6 @@ def test_similarity_transform_mix():
                                                 degrees=90,
                                                 translate=(-15, 15),
                                                 resize=True)
-
     sim_t_other = ops.get_similarity_transform_matrix((256, 144),
                                                       (144, 256),
                                                       crop=(10, -10, 40, 20),
