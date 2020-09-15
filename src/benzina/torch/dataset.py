@@ -87,10 +87,12 @@ class ClassificationDataset(Dataset):
         """
         try:
             archive, tracks, input_label = \
-                self._validate_args(None, archive, input_label)
+                ClassificationDataset._validate_args(
+                    None, archive, input_label)
         except (TypeError, ValueError):
             archive, tracks, input_label = \
-                self._validate_args(archive, tracks, input_label)
+                ClassificationDataset._validate_args(
+                    archive, tracks, input_label)
 
         if archive is not None:
             input_track = Track(archive, tracks[0])
@@ -109,7 +111,7 @@ class ClassificationDataset(Dataset):
         target_track.file.seek(location_first)
         buffer = target_track.file.read(location_last + size_last - location_first)
 
-        self._targets = np.full(len(self), -1, np.int64)
+        self._targets = np.full(len(self._track), -1, np.int64)
         self._targets[:len(target_track)] = np.frombuffer(buffer, np.dtype("<i8"))
 
     def __getitem__(self, index: int):
@@ -150,8 +152,8 @@ class ClassificationDataset(Dataset):
 
 
 class ImageNet(ClassificationDataset):
-    LEN_VALID = 50000
-    LEN_TEST = 100000
+    LEN_VALID = 50000 - 1
+    LEN_TEST = 100000 - 7
 
     def __init__(self,
                  root: typing.Union[str, _TrackPairType] = None,
@@ -175,16 +177,15 @@ class ImageNet(ClassificationDataset):
         """
         try:
             archive, split, tracks, input_label = \
-                self._validate_args(None, split, root, input_label)
+                ImageNet._validate_args(None, split, root, input_label)
         except (TypeError, ValueError):
             archive, split, tracks, input_label = \
-                self._validate_args(root, split, tracks, input_label)
+                ImageNet._validate_args(root, split, tracks, input_label)
 
         ClassificationDataset.__init__(self, archive, tracks, input_label)
 
-        self._indices = np.array((ClassificationDataset.__len__(self),),
+        self._indices = np.array(range(ClassificationDataset.__len__(self)),
                                  np.int64)
-        self._indices[:] = range(ClassificationDataset.__len__(self))
 
         if split == "test":
             self._indices = self._indices[-self.LEN_TEST:]
