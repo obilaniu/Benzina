@@ -14,11 +14,11 @@ from   benzina.utils.file import Track
 
 class DataLoader(torch.utils.data.DataLoader):
     """
-    Loads images from a benzina.torch.dataset.Dataset. Encapsulates a sampler
+    Loads images from a :class:`benzina.torch.dataset.Dataset`. Encapsulates a sampler
     and data processing transformations.
 
     Args:
-        dataset (benzina.torch.dataset.Dataset): dataset from which to load the
+        dataset (:class:`benzina.torch.dataset.Dataset`): dataset from which to load the
             data.
         shape (int or tuple of ints): set the shape of the samples. Note that
             this does not imply a resize of the image but merely set the shape
@@ -27,7 +27,7 @@ class DataLoader(torch.utils.data.DataLoader):
             decoded. If not specified, the dataloader will attempt to get it
             from :attr:`dataset`.
         batch_size (int, optional): how many samples per batch to load.
-            (default: ``1`)
+            (default: ``1``)
         shuffle (bool, optional): set to ``True`` to have the data reshuffled
             at every epoch. (default: ``False``)
         sampler (torch.utils.data.Sampler, optional): defines the strategy to
@@ -50,15 +50,15 @@ class DataLoader(torch.utils.data.DataLoader):
         multibuffering (int, optional): set the size of the multibuffering
             buffer. (default: ``3``)
         seed (int, optional): set the seed for the random transformations.
-        bias_transform (benzina.torch.operations.BiasTransform or float, optional):
+        bias_transform (:class:`benzina.torch.operations.BiasTransform` or float, optional):
             set the bias transformation. Values to substract a pixel's channels
             with. Note that this transformation is applied before
             :attr:`norm_transform`.
-        norm_transform (benzina.torch.operations.NormTransform or float or iterable of float, optional):
+        norm_transform (:class:`benzina.torch.operations.NormTransform` or float or iterable of float, optional):
             set the normalization transformation. Values to multiply a pixel's
             channels with. Note that this transformation is applied after
             :attr:`bias_transform`.
-        warp_transform (benzina.torch.operations.WarpTransform or iterable of float, optional):
+        warp_transform (:class:`benzina.torch.operations.WarpTransform` or iterable of float, optional):
             set the warp transformation or use as the arguments to initialize a
             WarpTransform.
     """

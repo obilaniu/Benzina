@@ -15,19 +15,20 @@ _ClassTracksType = typing.Tuple[_TrackType, _TrackType]
 
 
 class Dataset(torch.utils.data.Dataset):
+    """
+    Args:
+        archive (str or :class:`Track`): path to the archive or a Track. If a
+            Track, :attr:`track` will be ignored.
+        track (str or :class:`Track`, optional): track label or a Track. If a
+            Track, :attr:`archive` must not be specified.
+            (default: ``"bzna_input"``)
+    """
+
     _Item = namedtuple("Item", ["input"])
 
     def __init__(self,
                  archive: typing.Union[str, _TrackType] = None,
                  track: _TrackType = "bzna_input"):
-        """
-        Args:
-            archive (str or Track): path to the archive or a Track. If a Track,
-                :attr:`track` will be ignored.
-            track (str or Track, optional): track label or a Track. If a Track,
-                :attr:`archive` must not be specified.
-                (default: ``"bzna_input"``)
-        """
         if isinstance(archive, Track):
             track = archive
             archive = None
@@ -68,23 +69,24 @@ class Dataset(torch.utils.data.Dataset):
 
 
 class ClassificationDataset(Dataset):
+    """
+    Args:
+        archive (str or pair of :class:`Track`): path to the archive or a pair
+            of Track. If a pair of Track, :attr:`tracks` will be ignored.
+        tracks (pair of str or :class:`Track`, optional): pair of input and
+            target tracks labels or a pair of input and target Track. If a pair
+            of Track, :attr:`archive` must not be specified.
+            (default: ``("bzna_input", "bzna_target")``)
+        input_label (str, optional): label of the inputs to use in the input
+            track. (default: ``"bzna_thumb"``)
+    """
+
     _Item = namedtuple("Item", ["input", "input_label", "target"])
 
     def __init__(self,
                  archive: typing.Union[str, _TrackPairType] = None,
                  tracks: _ClassTracksType = ("bzna_input", "bzna_target"),
                  input_label: str = "bzna_thumb"):
-        """
-        Args:
-            archive (str or pair of Track): path to the archive or a pair of
-                Track. If a pair of Track, :attr:`tracks` will be ignored.
-            tracks (pair of str or Track, optional): pair of input and target
-                tracks labels or a pair of input and target Track. If a pair of
-                Track, :attr:`archive` must not be specified.
-                (default: ``("bzna_input", "bzna_target")``)
-            input_label (str, optional): label of the inputs to use in the
-                input track. (default: ``"bzna_thumb"``)
-        """
         try:
             archive, tracks, input_label = \
                 ClassificationDataset._validate_args(
@@ -152,6 +154,24 @@ class ClassificationDataset(Dataset):
 
 
 class ImageNet(ClassificationDataset):
+    """
+    Args:
+        root (str or pair of :class:`Track`): root of the ImageNet dataset or
+            path to the archive or a pair of Track. If a pair of Track,
+            :attr:`tracks` will be ignored.
+        split (None or str, optional): The dataset split, supports ``test``,
+            ``train``, ``val``. If not specified, samples will be drawn from
+            all splits.
+        tracks (pair of str or :class:`Track`, optional): pair of input and
+            target tracks labels or a pair of input and target Track. If a pair
+            of Track, :attr:`root` must not be specified.
+            (default: ``("bzna_input", "bzna_target")``)
+        input_label (str, optional): label of the inputs to use in the input
+            track. (default: ``"bzna_thumb"``)
+    """
+
+    # Some images are missing from the dataset. Please read the README of the
+    # dataset for more information.
     LEN_VALID = 50000 - 1
     LEN_TEST = 100000 - 7
 
@@ -160,21 +180,6 @@ class ImageNet(ClassificationDataset):
                  split: str = None,
                  tracks: _ClassTracksType = ("bzna_input", "bzna_target"),
                  input_label: str = "bzna_thumb"):
-        """
-        Args:
-            root (str or pair of Track): root of the ImageNet dataset or path
-                to the archive or a pair of Track. If a pair of Track,
-                :attr:`tracks` will be ignored.
-            split (None or str, optional): The dataset split, supports
-                ``test``, ``train``, ``val``. If not specified, samples will be
-                drawn from all splits.
-            tracks (pair of str or Track, optional): pair of input and target
-                tracks labels or a pair of input and target Track. If a pair of
-                Track, :attr:`root` must not be specified.
-                (default: ``("bzna_input", "bzna_target")``)
-            input_label (str, optional): label of the inputs to use in the
-                input track. (default: ``"bzna_thumb"``)
-        """
         try:
             archive, split, tracks, input_label = \
                 ImageNet._validate_args(None, split, root, input_label)

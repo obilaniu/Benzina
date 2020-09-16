@@ -14,7 +14,6 @@ import torch.utils.data
 import torchvision.models as models
 
 ### Benzina       ###
-# Dependancies
 import benzina.torch as bz
 import benzina.torch.operations as ops
 ### Benzina - end ###
@@ -138,7 +137,9 @@ def main_worker(gpu, args):
 
     train_loader = bz.DataLoader(
         train_dataset, shape=(224, 224), batch_size=args.batch_size,
-        shuffle=True, seed=args.seed, bias_transform=bias, norm_transform=std,
+        shuffle=True, seed=args.seed,
+        bias_transform=bias,
+        norm_transform=std,
         warp_transform=ops.SimilarityTransform(
             scale=(0.08, 1.0),
             ratio=(3./4., 4./3.),
@@ -148,7 +149,8 @@ def main_worker(gpu, args):
     val_loader = bz.DataLoader(
         bz.dataset.ImageNet(args.data, split="val"), shape=(224, 224),
         batch_size=args.batch_size, shuffle=args.batch_size, seed=args.seed,
-        bias_transform=bias, norm_transform=std,
+        bias_transform=bias,
+        norm_transform=std,
         warp_transform=ops.CenterResizedCrop(224/256))
     ### Benzina - end ###
 

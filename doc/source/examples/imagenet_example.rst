@@ -58,7 +58,7 @@ with the location of the dataset and the desired split specified.
 
 .. note::
    To be able to quickly load your dataset with the hardware decoder of a GPU,
-   Benzina needs the data to be converted in its own format embedding h.265
+   Benzina needs the data to be converted in its own format embedding H.265
    images.
 
 .. code-block:: python
@@ -141,36 +141,35 @@ Benzina holds in only a few lines.
                                                                     >  import torchvision.transforms as transforms
                                                                     >  import torchvision.datasets as datasets
     ### Benzina       ###                                           <
-    # Dependancies                                                  <
     import benzina.torch as bz                                      <
     import benzina.torch.operations as ops                          <
     ### Benzina - end ###                                           <
                                                                     <
                                                                     >  parser.add_argument('-j', '--workers', default=4, type=int, met
                                                                     >                      help='number of data loading workers (defau
-        ### Benzina       ###                                       |      traindir = os.path.join(args.data, 'train')
-        train_dataset = bz.dataset.ImageNet(args.data, split="train |      valdir = os.path.join(args.data, 'val')
-                                                                    |      normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406]
-        bias = ops.ConstantBiasTransform(bias=(0.485 * 255, 0.456 * |                                       std=[0.229, 0.224, 0.225])
-        std = ops.ConstantNormTransform(norm=(0.229 * 255, 0.224 *  |
-                                                                    |      train_dataset = datasets.ImageFolder(
-        train_loader = bz.DataLoader(                               |          traindir,
-            train_dataset, shape=(224, 224), batch_size=args.batch_ |          transforms.Compose([
-            shuffle=True, seed=args.seed, bias_transform=bias, norm |              transforms.RandomResizedCrop(224),
-            warp_transform=ops.SimilarityTransform(                 |              transforms.RandomHorizontalFlip(),
-                scale=(0.08, 1.0),                                  |              transforms.ToTensor(),
-                ratio=(3./4., 4./3.),                               |              normalize,
-                flip_h=0.5,                                         |          ]))
-                random_crop=True))                                  |
-                                                                    |      train_loader = torch.utils.data.DataLoader(
-        val_loader = bz.DataLoader(                                 |          train_dataset, batch_size=args.batch_size, shuffle=True
-            bz.dataset.ImageNet(args.data, split="val"), shape=(224 |          num_workers=args.workers, pin_memory=True)
-            batch_size=args.batch_size, shuffle=args.batch_size, se |
-            bias_transform=bias, norm_transform=std,                |      val_loader = torch.utils.data.DataLoader(
-            warp_transform=ops.CenterResizedCrop(224/256))          |          datasets.ImageFolder(valdir, transforms.Compose([
-        ### Benzina - end ###                                       |              transforms.Resize(256),
-                                                                    >              transforms.CenterCrop(224),
-                                                                    >              transforms.ToTensor(),
+        ### Benzina       ###                                       |      normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406]
+        train_dataset = bz.dataset.ImageNet(args.data, split="train |                                       std=[0.229, 0.224, 0.225])
+                                                                    <
+        bias = ops.ConstantBiasTransform(bias=(0.485 * 255, 0.456 * <
+        std = ops.ConstantNormTransform(norm=(0.229 * 255, 0.224 *  <
+        train_loader = bz.DataLoader(                               |      train_dataset = datasets.ImageNet(
+            train_dataset, shape=(224, 224), batch_size=args.batch_ |          args.data, "train",
+            shuffle=True, seed=args.seed,                           |          transforms.Compose([
+            bias_transform=bias,                                    |              transforms.RandomResizedCrop(224),
+            norm_transform=std,                                     |              transforms.RandomHorizontalFlip(),
+            warp_transform=ops.SimilarityTransform(                 |              transforms.ToTensor(),
+                scale=(0.08, 1.0),                                  |              normalize,
+                ratio=(3./4., 4./3.),                               |          ]))
+                flip_h=0.5,                                         |
+                random_crop=True))                                  |      train_loader = torch.utils.data.DataLoader(
+                                                                    |          train_dataset, batch_size=args.batch_size, shuffle=True
+        val_loader = bz.DataLoader(                                 |          num_workers=args.workers, pin_memory=True)
+            bz.dataset.ImageNet(args.data, split="val"), shape=(224 |
+            batch_size=args.batch_size, shuffle=args.batch_size, se |      val_loader = torch.utils.data.DataLoader(
+            bias_transform=bias,                                    |          datasets.ImageNet(args.data, "val", transforms.Compose(
+            norm_transform=std,                                     |              transforms.Resize(256),
+            warp_transform=ops.CenterResizedCrop(224/256))          |              transforms.CenterCrop(224),
+        ### Benzina - end ###                                       |              transforms.ToTensor(),
                                                                     >              normalize,
                                                                     >          ])),
                                                                     >          batch_size=args.batch_size, shuffle=False,
