@@ -188,4 +188,4 @@ epub_exclude_files = ['search.html']
 todo_include_todos = True
 
 autodoc_member_order = 'bysource'
-autodoc_mock_imports = ['benzina.native', 'benzina.version', 'numpy', 'torch']
+autodoc_mock_imports = ['numpy', 'torch', 'pybenzinaparse', 'benzina.native', 'benzina.version']

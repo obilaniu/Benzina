@@ -1,10 +1,12 @@
+from collections import namedtuple
 
-from bitstring import ConstBitStream
 import numpy as np
 
-from pybenzinaparse import Parser
-from pybenzinaparse.utils import find_boxes, find_traks, get_shape, \
-    get_sample_table, get_sample_location
+from benzina.utils.mp4 import get_chunk_offset_at, get_name_at, \
+    get_sample_size_at, get_shape_at, find_headers_at, \
+    find_sample_table_at, find_video_configuration_at
+
+Trak = namedtuple("Trak", ["label", "shape", "stbl_pos"])
 
 
 class File:
@@ -12,8 +14,7 @@ class File:
         self._path = None
         self._disk_file = None
         self._offset = offset
-        self._moov = None
-        self._moov_pos = None
+        self._traks = None
 
         # If disk_file is a path, ownership of the disk file will be held by
         # this instance
@@ -47,7 +48,7 @@ class File:
     def open(self):
         if not self._disk_file or self._disk_file.closed:
             self._disk_file = open(self._path, "rb")
-        if not self._moov:
+        if self._traks is None:
             self._parse()
 
     def close(self):
@@ -62,39 +63,41 @@ class File:
         return self._disk_file.read(size)
 
     def trak(self, label):
-        if self._moov is None:
+        if self._traks is None:
             raise RuntimeError("File [{}] is missing a moov box"
                                .format(self._disk_file.name if self._disk_file else self._path))
 
         if isinstance(label, str):
             label = label.encode("utf-8")
-        if label[-1] != 0:
-            label += b'\0'
 
-        return next(find_traks(self._moov.boxes, label), None), self._moov_pos
+        if label[-1] == 0:
+            label = label[:-1]
+
+        return self._traks.get(label, None)
 
     def subfile(self, offset):
         return File(self._disk_file, offset=offset)
 
     def _parse(self):
-        self._disk_file.seek(self._offset)
-        pos = self._offset
+        self._traks = {}
 
-        headers = (Parser.parse_header(ConstBitStream(chunk))
-                   for chunk in iter(lambda: self._disk_file.read(32), b''))
+        moov_pos, box_size, _, header_size = \
+            next(find_headers_at(self._disk_file, {b"moov"}, self._offset))
+        self._disk_file.seek(moov_pos)
+        for trak_pos, _, _, _ in \
+            find_headers_at(self._disk_file, {b"trak"},
+                            moov_pos + header_size, box_size - header_size):
+            trak_label = get_name_at(self._disk_file, trak_pos)
 
-        for header in headers:
-            if header.type != b"moov":
-                pos += header.box_size
-                self._disk_file.seek(pos)
-                continue
+            if trak_label[-1] == 0:
+                trak_label = trak_label[:-1]
 
-            # Parse MOOV
-            self._disk_file.seek(pos)
-            moov_bstr = ConstBitStream(self._disk_file.read(header.box_size))
-            self._moov = next(Parser.parse(moov_bstr))
-            self._moov_pos = pos
-            break
+            trak_shape = get_shape_at(self._disk_file, trak_pos)
+            trak_stbl_pos, _, _, _ = find_sample_table_at(self._disk_file, trak_pos)
+
+            self._traks[trak_label] = Trak(trak_label,
+                                           trak_shape,
+                                           trak_stbl_pos)
 
 
 class Track:
@@ -103,7 +106,6 @@ class Track:
         self._file = None
         self._label = label
         self._trak = None
-        self._moov_pos = None
 
         self._len = None
         self._co_buffer = None
@@ -122,6 +124,8 @@ class Track:
         return self._len
 
     def __getitem__(self, index):
+        if index >= len(self):
+            raise IndexError
         return Sample(self, index)
 
     def __iter__(self):
@@ -144,7 +148,7 @@ class Track:
         if not self._file:
             self._file = File(self._file_path)
         self._file.open()
-        if not self._trak:
+        if self._trak is None:
             self._parse()
 
     def close(self):
@@ -160,12 +164,11 @@ class Track:
     def label(self):
         return self._label
 
+    @property
     def shape(self):
-        return get_shape(self._trak)
+        return self._trak.shape
 
     def sample_location(self, index):
-        if index < 0:
-            index = len(self) + index
         return int(self._file.offset + self._co[index]), int(self._sz[index])
 
     def sample_bytes(self, index):
@@ -178,48 +181,29 @@ class Track:
         return self._file.subfile(offset)
 
     def video_configuration_location(self):
-        stsd = next(find_boxes(get_sample_table(self._trak).boxes, [b"stsd"]))
-        c1 = next(find_boxes(stsd.boxes, [b"avc1", b"hec1", b"hvc1"]), None)
+        _vcC = find_video_configuration_at(self._file, self._trak.stbl_pos)
 
-        if not c1:
+        if _vcC is None:
             return None
 
-        cC = next(find_boxes(c1.boxes, [b"avcC", b"hvcC"]))
-        return (self._moov_pos + cC.header.start_pos + cC.header.header_size,
-                cC.header.box_size - cC.header.header_size)
+        pos, box_size, _, header_size = _vcC
+
+        return pos + header_size, box_size - header_size
 
     def _parse(self):
-        self._trak, self._moov_pos = self._file.trak(self._label)
+        self._trak = self._file.trak(self._label)
 
-        stbl = get_sample_table(self._trak)
+        self._co, self._co_buffer = \
+            get_chunk_offset_at(self._file, self._trak.stbl_pos)
 
-        co_box = next(find_boxes(stbl.boxes, [b"stco", b"co64"]))
-        self._file.seek(self._moov_pos +
-                        co_box.header.start_pos + co_box.header.header_size +
-                        4)  # entry_count
-        self._co_buffer = self._file.read(co_box.header.box_size -
-                                          co_box.header.header_size -
-                                          4)    # entry_count
+        self._sz, self._sz_buffer = \
+            get_sample_size_at(self._file, self._trak.stbl_pos)
 
-        self._co = np.frombuffer(self._co_buffer,
-                                 np.dtype(">u4") if co_box.header.type == b"stco"
-                                 else np.dtype(">u8"))
+        if self._sz_buffer is None:
+            self._sz: int
+            self._sz = np.full(len(self._co), self._sz, np.uint32)
 
-        sz_box = next(find_boxes(stbl.boxes, [b"stsz"]))
-        if sz_box.sample_size > 0:
-            self._sz = np.full(co_box.entry_count, sz_box.sample_size, np.uint32)
-        else:
-            self._file.seek(self._moov_pos +
-                            sz_box.header.start_pos + sz_box.header.header_size +
-                            4 +  # sample_size
-                            4)   # sample_count
-            self._sz_buffer = self._file.read(sz_box.header.box_size -
-                                              sz_box.header.header_size -
-                                              4 -  # sample_size
-                                              4)   # sample_count
-            self._sz = np.frombuffer(self._sz_buffer, np.dtype(">u4"))
-
-        self._len = co_box.entry_count
+        self._len = len(self._co)
 
 
 class Sample:

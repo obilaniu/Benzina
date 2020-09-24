@@ -27,8 +27,8 @@ A Benzina dataset is structured using the mp4 format
               :duration: Duration of the container in *timescale* units
               :next_track_id: The id of the next track that could be appended to *moov*
 
-       :trak: * *Benzina input track*: This is the first track and it references
-                                       all the inputs
+       :trak: * *Benzina input samples track*: This is the first track and it references
+                                               all the input samples
               * *Benzina target track*
               * *Benzina filename track*: This track is optional
               * *Video track*: This track is optional. If present it should be
@@ -89,27 +89,51 @@ A Benzina dataset is structured using the mp4 format
                                           :chunk_offset: The chunk offset. This field
                                                          is repeated for each chunk
 
-Dataset's Input Structure
--------------------------
+Dataset's Input Sample Structure
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-A Benzina dataset's input can also be structured using the mp4 format. It is roughly
-the same as the dataset's structure with the differences that *mdat* will contains the
-raw concatenation of a single input, its target and possibly filename.
+A Benzina dataset's input sample can also be structured using the mp4 format.
+It is roughly the same as the dataset's structure with the differences that
+*mdat* will contains the raw concatenation of a single input, its target,
+possibly filename and possibly a 512 x 512 thumbnails stream.
+
+.. _imagenet_2012:
 
 ImageNet 2012
 =============
 
-This is the first dataset created for Benzina. It includes the following preprocessing
-of the images:
+`ImageNet 2012 <http://image-net.org/>`_ classification dataset. It contains
+two size of the images along with their classification target and filename:
 
-* Resize the image to have its smallest edge be of length 512
+* Resized high resolution images each with a smaller edge of at most 512 while
+  preserving the aspect ratio. This set is accessed by referencing the
+  *bzna_input* track of the input samples.
+* Resized images each  with a longer edge of at most 512 while preserving the
+  aspect ratio. This set is accessed by referencing the *bzna_thumb* track of
+  the input samples.
+
+The dataset is represented by :py:class:`~benzina.dataset.ImageNet` which
+simplifies the iteration of the data as a classification dataset.
+
+.. warning::
+   81 images are currently missing from the dataset and 111 had to be first
+   transcoded to PNG prior to the final H.265 format. More details can be found
+   in the dataset's README.
+
+.. warning::
+   High resolution images stored in the the *bzna_input* track of the input
+   samples are currently not available through the
+   :py:class:`~benzina.torch.dataloader.DataLoader`. Their widely varying sizes
+   prevent them from being decoded using a single hardware decoder
+   configuration. The selected solution is to represent the images in the HEIF
+   format which will be completed in future development.
 
 Dataset Composition
 -------------------
 
 The dataset is composed of a train set, followed by a validation set then a
-test set for a total of 1 431 167 entries. The targets and filenames are provided
-for each seats:
+test set for a total of 1 431 167 entries. Targets and filenames are provided
+for each sets:
 
 * | **Train set**
   | Entries 1 to 1281167 (1 281 167 entries)
@@ -121,8 +145,8 @@ for each seats:
 Dataset Structure
 -----------------
 
-ilsvrc2012.mp4
-^^^^^^^^^^^^^^
+ilsvrc2012.bzna
+^^^^^^^^^^^^^^^
 
 :ftyp: Defines the compatibilities of the mp4 container
 
@@ -133,9 +157,9 @@ ilsvrc2012.mp4
 :mdat: Raw concatenation in 3 blocks of the images, targets and filenames
 
        * Concatenation of .mp4 files containing a single image, a thumbnail of a
-         maximum size of 512 x 512, the image's original filename and the target
-         associated with the image
-       * Concatenation of images' targets in 8 bytes
+         maximum size of 512 x 512 if the image does not already fit this resolution,
+         the image's original filename and the target associated with the image
+       * Concatenation of images' targets as little-endian int64
        * Concatenation of images' original filename
 
 :moov: Contains the metadata needed to load and present the raw data of *mdat*
@@ -146,7 +170,7 @@ ilsvrc2012.mp4
               :duration: 20 * 1 431 167
               :next_track_id: The id of the next track that could be appended to *moov*
 
-       :trak: *Benzina input track*
+       :trak: *Benzina input samples track*
 
               This track references all the images of the dataset
 
@@ -330,10 +354,10 @@ ilsvrc2012.mp4
                                                          is repeated for each chunk,
                                                          i.e. for each sample
 
-Dataset's Input Structure
--------------------------
+Dataset's Input Samples Structure
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-A Benzina ImageNet dataset's input is structured using the mp4 format.
+A Benzina ImageNet dataset's input sample is structured using the mp4 format.
 
 :ftyp: Defines the compatibilities of the mp4 container
 
@@ -343,15 +367,15 @@ A Benzina ImageNet dataset's input is structured using the mp4 format.
 
 :mdat: Raw concatenation of the image, thumbnail, target and filename:
 
-       * A single image in h265 format. The image is put in a frame with a size
+       * A single image in H.265 format. The image is put in a frame with a size
          of a product of 512 in the 2 dimensions. The padding to make the image
          fit is filled with a smear of the image's borders
-       * A thumbnail in h265 format. The image is put in a frame of size 512 x 512.
+       * A thumbnail in H.265 format. The image is put in a frame of size 512 x 512.
          The image is first resized to have its longest side be of 512. The padding
          to make the thumbnail fit the frame is filled with a smear of the image's
          borders. There will be no explicit thumbnail if the image already fit the
          thumbnail's frame
-       * The image's target in 8 bytes
+       * The image's target in a little-endian int64
        * The image's original filename
 
 :moov: Contains the metadata needed to load and present the raw data of *mdat*
