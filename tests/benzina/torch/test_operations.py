@@ -126,33 +126,31 @@ def test_similarity_transform_ratio():
 
     similarity = ops.SimilarityTransform(ratio=(2, 2))
 
-    sim_t = similarity(0, (512, 144), (288, 144), rng)
+    sim_t = similarity(0, (512, 144), (384, 192), rng)
+    assert sim_t == (1, 0, 64,
+                     0, 1, -24,
+                     0, 0, 1)
     assert (np.asarray(sim_t).reshape((3, 3)).dot((0, 0, 1)) ==
-            (112, 0, 1)).all()
-    assert (np.asarray(sim_t).reshape((3, 3)).dot((287, 143, 1)) ==
-            (399, 143, 1)).all()
+            (64, -24, 1)).all()
+    assert (np.asarray(sim_t).reshape((3, 3)).dot((383, 191, 1)) ==
+            (447, 167, 1)).all()
 
-    sim_t = similarity(0, (512, 144), (144, 288), rng)
-    # x: (288/144) * 0.5 - 0.5 = 0.5
-    # y: (144/288) * 0.5 - 0.5 = -0.25
+    sim_t = similarity(0, (512, 144), (192, 384), rng)
     assert (np.absolute(np.asarray(sim_t).reshape((3, 3)).dot((0, 0, 1)) -
-                        (112.5, -0.25, 1)) < 0.0001).all()
-    # x: -1 * (288/144) + 0.5 = -1.5
-    # y: -1 * (144/288) + -0.25 = -0.75
-    assert (np.absolute(np.asarray(sim_t).reshape((3, 3)).dot((143, 287, 1)) -
-                        (398.5, 143.25, 1)) < 0.0001).all()
+                        (64.5, -24.25, 1)) < 0.0001).all()
+    assert (np.absolute(np.asarray(sim_t).reshape((3, 3)).dot((191, 383, 1)) -
+                        (446.5, 167.25, 1)) < 0.0001).all()
 
     similarity = ops.SimilarityTransform(ratio=(0.5, 0.5))
 
-    sim_t = similarity(0, (144, 512), (288, 144), rng)
-    # x: (144/288) * 0.5 - 0.5 = -0.25
-    # y: (288/144) * 0.5 - 0.5 = 0.5
+    sim_t = similarity(0, (512, 144), (192, 384), rng)
+    assert sim_t == (1, 0, 160,
+                     0, 1, -120,
+                     0, 0, 1)
     assert (np.asarray(sim_t).reshape((3, 3)).dot((0, 0, 1)) ==
-            (-0.25, 112.5, 1)).all()
-    # x: -1 * (144/288) + -0.25 = -0.75
-    # y: -1 * (288/144) + 0.5 = -1.5
-    assert (np.asarray(sim_t).reshape((3, 3)).dot((287, 143, 1)) ==
-            (143.25, 398.5, 1)).all()
+            (160, -120, 1)).all()
+    assert (np.asarray(sim_t).reshape((3, 3)).dot((191, 383, 1)) ==
+            (351, 263, 1)).all()
 
 
 def test_similarity_transform_degrees():
@@ -258,18 +256,18 @@ def test_similarity_transform_translate():
     assert sim_t_samples[:, 2].min() > -256 * similarity.t[0]
     assert sim_t_samples[:, 5].min() > -144 * similarity.t[0]
 
-    sim_t = ops.compute_affine_matrix((256, 144),
-                                      (256, 144),
-                                      translate=(10, -10))
+    sim_t = ops.get_similarity_transform_matrix((256, 144),
+                                                (256, 144),
+                                                translate=(10, -10))
     assert (sim_t == ((1, 0, 10),
                       (0, 1, -10),
                       (0, 0, 1))).all()
     assert (sim_t.dot((0, 0, 1)) == (10, -10, 1)).all()
     assert (sim_t.dot((255, 143, 1)) == (265, 133, 1)).all()
 
-    sim_t = ops.compute_affine_matrix((256, 144),
-                                      (128, 72),
-                                      translate=(10, -10))
+    sim_t = ops.get_similarity_transform_matrix((256, 144),
+                                                (128, 72),
+                                                translate=(10, -10))
     assert (sim_t == ((1, 0, 74),
                       (0, 1, 26),
                       (0, 0, 1))).all()
@@ -431,28 +429,28 @@ def test_similarity_transform_crop():
     assert sim_t_samples[:, 2].max() <= 112
     assert sim_t_samples[:, 2].min() >= 0
 
-    sim_t = ops.compute_affine_matrix((256, 144),
-                                      (256, 144),
-                                      crop=(10, -10, 40, 20))
+    sim_t = ops.get_similarity_transform_matrix((256, 144),
+                                                (256, 144),
+                                                crop=(10, -10, 40, 20))
     assert (sim_t == ((1, 0, 10),
                       (0, 1, -10),
                       (0, 0, 1))).all()
     assert (sim_t.dot((0, 0, 1)) == (10, -10, 1)).all()
     assert (sim_t.dot((255, 143, 1)) == (265, 133, 1)).all()
 
-    sim_t = ops.compute_affine_matrix((256, 144),
-                                      (128, 72),
-                                      crop=(10, -10, 40, 20))
+    sim_t = ops.get_similarity_transform_matrix((256, 144),
+                                                (128, 72),
+                                                crop=(10, -10, 40, 20))
     assert (sim_t == ((1, 0, 74),
                       (0, 1, 26),
                       (0, 0, 1))).all()
     assert (sim_t.dot((0, 0, 1)) == (74, 26, 1)).all()
     assert (sim_t.dot((127, 71, 1)) == (201, 97, 1)).all()
 
-    sim_t = ops.compute_affine_matrix((256, 144),
-                                      (256, 144),
-                                      crop=(10, -10, 40, 20),
-                                      resize=True)
+    sim_t = ops.get_similarity_transform_matrix((256, 144),
+                                                (256, 144),
+                                                crop=(10, -10, 40, 20),
+                                                resize=True)
     o_top_left = sim_t.dot((0, 0, 1))
     o_bot_right = sim_t.dot((255, 143, 1))
     o_width, o_height = (o_bot_right - o_top_left)[0:2]
@@ -460,10 +458,10 @@ def test_similarity_transform_crop():
     assert abs(o_width * 256/40) + 1 - 256 < 0.0001
     assert abs(o_height * 144/20) + 1 - 144 < 0.0001
 
-    sim_t = ops.compute_affine_matrix((256, 144),
-                                      (128, 72),
-                                      crop=(10, -10, 40, 20),
-                                      resize=True)
+    sim_t = ops.get_similarity_transform_matrix((256, 144),
+                                                (128, 72),
+                                                crop=(10, -10, 40, 20),
+                                                resize=True)
     o_top_left = sim_t.dot((0, 0, 1))
     o_bot_right = sim_t.dot((255, 143, 1))
     o_width, o_height = (o_bot_right - o_top_left)[0:2]
@@ -511,19 +509,19 @@ def test_similarity_transform_mix():
     assert abs(o_width * 256/72) + 1 - 144 < 0.0001
     assert abs(o_height * 256/72) + 1 - 256 < 0.0001
 
-    sim_t = ops.compute_affine_matrix((256, 144),
-                                      (144, 256),
-                                      crop=(10, -10, 40, 20),
-                                      degrees=90)
+    sim_t = ops.get_similarity_transform_matrix((256, 144),
+                                                (144, 256),
+                                                crop=(10, -10, 40, 20),
+                                                degrees=90)
     assert (np.absolute(sim_t.dot((0, 0, 1)) - (265, -10, 1)) < 0.0001).all()
     assert (np.absolute(sim_t.dot((143, 255, 1)) - (10, 133, 1))
             < 0.0001).all()
 
-    sim_t = ops.compute_affine_matrix((256, 144),
-                                      (144, 256),
-                                      crop=(10, -10, 40, 20),
-                                      degrees=90,
-                                      resize=True)
+    sim_t = ops.get_similarity_transform_matrix((256, 144),
+                                                (144, 256),
+                                                crop=(10, -10, 40, 20),
+                                                degrees=90,
+                                                resize=True)
     o_top_left = sim_t.dot((0, 0, 1))
     o_bot_right = sim_t.dot((255, 143, 1))
     o_width, o_height = (o_bot_right - o_top_left)[0:2]
@@ -531,67 +529,67 @@ def test_similarity_transform_mix():
     assert abs(o_width * 256/40) + 1 - 144 < 0.0001
     assert abs(o_height * 144/20) + 1 - 256 < 0.0001
 
-    sim_t = ops.compute_affine_matrix((256, 144),
-                                      (256, 144),
-                                      crop=(10, -10, 40, 20),
-                                      translate=(-15, 15))
+    sim_t = ops.get_similarity_transform_matrix((256, 144),
+                                                (256, 144),
+                                                crop=(10, -10, 40, 20),
+                                                translate=(-15, 15))
     assert (sim_t == ((1, 0, -5),
                       (0, 1, 5),
                       (0, 0, 1))).all()
     assert (sim_t.dot((0, 0, 1)) == (-5, 5, 1)).all()
     assert (sim_t.dot((255, 143, 1)) == (250, 148, 1)).all()
 
-    sim_t = ops.compute_affine_matrix((256, 144),
-                                      (128, 72),
-                                      crop=(10, -10, 40, 20),
-                                      translate=(-15, 15))
+    sim_t = ops.get_similarity_transform_matrix((256, 144),
+                                                (128, 72),
+                                                crop=(10, -10, 40, 20),
+                                                translate=(-15, 15))
     assert (sim_t == ((1, 0, 59),
                       (0, 1, 41),
                       (0, 0, 1))).all()
     assert (sim_t.dot((0, 0, 1)) == (59, 41, 1)).all()
     assert (sim_t.dot((127, 71, 1)) == (186, 112, 1)).all()
 
-    sim_t = ops.compute_affine_matrix((256, 144),
-                                      (256, 144),
-                                      crop=(10, -10, 40, 20),
-                                      translate=(-15, 15),
-                                      resize=True)
-    sim_t_other = ops.compute_affine_matrix((256, 144),
-                                            (256, 144),
-                                            crop=(10, -10, 40, 20),
-                                            resize=True)
+    sim_t = ops.get_similarity_transform_matrix((256, 144),
+                                                (256, 144),
+                                                crop=(10, -10, 40, 20),
+                                                translate=(-15, 15),
+                                                resize=True)
+    sim_t_other = ops.get_similarity_transform_matrix((256, 144),
+                                                      (256, 144),
+                                                      crop=(10, -10, 40, 20),
+                                                      resize=True)
     assert (np.absolute(sim_t.dot((15, -15, 1)) - sim_t_other.dot((0, 0, 1)))
             < 0.0001).all()
     assert (np.absolute(sim_t.dot((270, 128, 1)) -
                         sim_t_other.dot((255, 143, 1)))
             < 0.0001).all()
 
-    sim_t = ops.compute_affine_matrix((256, 144),
-                                      (128, 72),
-                                      crop=(10, -10, 40, 20),
-                                      translate=(-15, 15),
-                                      resize=True)
-    sim_t_other = ops.compute_affine_matrix((256, 144),
-                                            (128, 72),
-                                            crop=(10, -10, 40, 20),
-                                            resize=True)
+    sim_t = ops.get_similarity_transform_matrix((256, 144),
+                                                (128, 72),
+                                                crop=(10, -10, 40, 20),
+                                                translate=(-15, 15),
+                                                resize=True)
+    sim_t_other = ops.get_similarity_transform_matrix((256, 144),
+                                                      (128, 72),
+                                                      crop=(10, -10, 40, 20),
+                                                      resize=True)
     assert (np.absolute(sim_t.dot((15, -15, 1)) - sim_t_other.dot((0, 0, 1)))
             < 0.0001).all()
     assert (np.absolute(sim_t.dot((142, 56, 1)) -
                         sim_t_other.dot((127, 71, 1)))
             < 0.0001).all()
 
-    sim_t = ops.compute_affine_matrix((256, 144),
-                                      (144, 256),
-                                      crop=(10, -10, 40, 20),
-                                      degrees=90,
-                                      translate=(-15, 15),
-                                      resize=True)
-    sim_t_other = ops.compute_affine_matrix((256, 144),
-                                            (144, 256),
-                                            crop=(10, -10, 40, 20),
-                                            degrees=90,
-                                            resize=True)
+    sim_t = ops.get_similarity_transform_matrix((256, 144),
+                                                (144, 256),
+                                                crop=(10, -10, 40, 20),
+                                                degrees=90,
+                                                translate=(-15, 15),
+                                                resize=True)
+    sim_t_other = ops.get_similarity_transform_matrix((256, 144),
+                                                      (144, 256),
+                                                      crop=(10, -10, 40, 20),
+                                                      degrees=90,
+                                                      resize=True)
     assert (np.absolute(sim_t.dot((15, -15, 1)) - sim_t_other.dot((0, 0, 1)))
             < 0.0001).all()
     assert (np.absolute(sim_t.dot((270, 128, 1)) -
