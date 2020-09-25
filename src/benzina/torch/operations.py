@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 from collections import Sequence
-from numbers import Number
 
 import numpy as np
 
@@ -326,42 +325,41 @@ class SimilarityTransform   (WarpTransform):
                  resize=False,
                  keep_ratio=False,
                  random_crop=False):
-        if isinstance(scale, Number):
-            scale: float
+        if not isinstance(scale, Sequence):
             scale = min(scale, 1/scale)
             scale = (scale, 1/scale)
-        assert isinstance(scale, Sequence) and len(scale) == 2, \
-            "scale should be a sequence and it must be of length 2."
+        assert len(scale) == 2, \
+            "scale should be a number or a sequence of length 2."
         for s in scale:
             if s <= 0:
                 raise ValueError("scale values should be positive")
 
         if ratio is not None:
-            if isinstance(ratio, Number):
-                ratio: float
-                ratio = min(ratio, 1/ratio)
+            if not isinstance(ratio, Sequence):
                 ratio = (ratio, 1/ratio)
-            assert isinstance(ratio, Sequence) and len(ratio) == 2, \
-                "ratio should be a sequence and it must be of length 2."
+            assert len(ratio) == 2, \
+                "ratio should be a number or a sequence of length 2."
             for ar in ratio:
                 if ar <= 0:
                     raise ValueError("ratio values should be positive")
+            ratio = (min(ratio), max(ratio))
 
-        if isinstance(degrees, Number):
-            degrees: float
+        if not isinstance(degrees, Sequence):
             if degrees < 0:
-                raise ValueError("If radians is a single number, it must be positive.")
+                raise ValueError("If radians is a single number, it must be "
+                                 "positive.")
             degrees = (-degrees, degrees)
         else:
-            assert isinstance(degrees, Sequence) and len(degrees) == 2, \
-                "radians should be a sequence and it must be of length 2."
+            assert len(degrees) == 2, \
+                "degrees should be a number or a sequence of length 2."
             degrees = degrees
 
         assert isinstance(translate, Sequence) and len(translate) == 2, \
             "translate should be a sequence and it must be of length 2."
         for t in translate:
             if not (0.0 <= t <= 1.0):
-                raise ValueError("translation values should be between 0 and 1")
+                raise ValueError("translation values should be between 0 and "
+                                 "1")
 
         self.s = scale
         self.ar = ratio
@@ -377,11 +375,27 @@ class SimilarityTransform   (WarpTransform):
         """Return a random similarity transformation."""
         s = np.exp(rng.uniform(low=np.log(self.s[0]), high=np.log(self.s[1])))
         if self.ar is not None:
-            ar = np.exp(rng.uniform(low=np.log(self.ar[0]),
-                                    high=np.log(self.ar[1])))
-            crop_area = s * in_shape[0] * in_shape[1]
-            crop_w = np.sqrt(crop_area * ar)
-            crop_h = np.sqrt(crop_area / ar)
+            for _ in range(10):
+                ar = np.exp(rng.uniform(low=np.log(self.ar[0]),
+                                        high=np.log(self.ar[1])))
+                crop_area = s * in_shape[0] * in_shape[1]
+                crop_w = np.sqrt(crop_area * ar)
+                crop_h = np.sqrt(crop_area / ar)
+
+                if 0 < crop_w <= in_shape[0] and 0 < crop_h <= in_shape[1]:
+                    break
+            else:
+                # Fallback to central crop
+                in_ar = float(in_shape[0]) / float(in_shape[1])
+                if in_ar < self.ar[0]:
+                    crop_w = in_shape[0]
+                    crop_h = int(round(crop_w / self.ar[0]))
+                elif in_ar > self.ar[1]:
+                    crop_h = in_shape[1]
+                    crop_w = int(round(crop_h * self.ar[1]))
+                else:  # whole image
+                    crop_w, crop_h = in_shape
+                self.random_crop = False
         elif self.resize:
             sqrt_s = np.sqrt(s)
             crop_w = in_shape[0] * sqrt_s
@@ -404,10 +418,10 @@ class SimilarityTransform   (WarpTransform):
         fh = rng.uniform() < self.fh
         fv = rng.uniform() < self.fv
 
-        H = get_similarity_transform_matrix(in_shape, out_shape,
-                                            (crop_x, crop_y, crop_w, crop_h),
-                                            r, (tx, ty), fh, fv, self.resize,
-                                            self.keep_ratio)
+        H = compute_affine_matrix(in_shape, out_shape,
+                                  (crop_x, crop_y, crop_w, crop_h),
+                                  r, (tx, ty), fh, fv, self.resize,
+                                  self.keep_ratio)
 
         return tuple(H.flatten().tolist())
 
@@ -461,15 +475,15 @@ class CenterResizedCrop     (SimilarityTransform):
                                      resize=True, keep_ratio=keep_ratio)
 
 
-def get_similarity_transform_matrix(in_shape,
-                                    out_shape,
-                                    crop=None,
-                                    degrees=0.0,
-                                    translate=(0.0, 0.0),
-                                    flip_h=False,
-                                    flip_v=False,
-                                    resize=False,
-                                    keep_ratio=False):
+def compute_affine_matrix(in_shape,
+                          out_shape,
+                          crop=None,
+                          degrees=0.0,
+                          translate=(0.0, 0.0),
+                          flip_h=False,
+                          flip_v=False,
+                          resize=False,
+                          keep_ratio=False):
     """
     Similarity warp transformation of the image keeping center invariant.
 
