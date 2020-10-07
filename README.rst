@@ -16,38 +16,47 @@
 Description of the project
 ==========================
 
-Benzina is an image loading library that accelerates image loading and preprocessing
-by making use of the hardware decoder in NVIDIA's GPUs.
+Benzina is an image loading library that accelerates image loading and
+preprocessing by making use of the hardware decoder in NVIDIA's GPUs.
 
-The documentation for this project can be found `here <https://benzina.readthedocs.io/en/latest/>`_.
+Since it minimize the use of the CPU and of the GPU computing units, it's
+easier to reach saturation of GPU computing power / CPU. In our tests using
+ResNet18 models in PyTorch on the ImageNet 2012 dataset, we could observe an
+increase by 1.8x the amount of images loaded, preprocessed then processed by
+the model when using a single CPU and GPU:
 
-Since it minimizes the use of the CPU and of the GPU computing units, it is easier
-to reach saturation of GPU computing power / CPU. In our tests using ResNet18 models
-in PyTorch on the ImageNet 2012 dataset, we could observe an increase by 2.4x the
-amount of images loaded, preprocessed then processed by the model when using a
-single CPU and GPU:
-
-===================   ===================   ===========   ===========   =================   ========================
-Data loader           CPU                   CPU Workers   GPU           GPU compute speed   Pipeline effective speed
-===================   ===================   ===========   ===========   =================   ========================
-PyTorch ImageFolder   Intel Xeon E5-2623*   2             Tesla V100*   1050 img/s          400 img/s
-Benzina               Intel Xeon E5-2623*   1             Tesla V100*   1050 img/s          960 img/s
-===================   ===================   ===========   ===========   =================   ========================
+===================   ================   ===========   =========   ===========   ==========   ==============
+Data Loader           CPU                CPU Workers   CPU Usage   GPU           Batch Size   Pipeline Speed
+===================   ================   ===========   =========   ===========   ==========   ==============
+Benzina               Intel Xeon 2698*   1             33%         Tesla V100*   256          525 img/s
+PyTorch ImageFolder   Intel Xeon 2698*   2             100%        Tesla V100*   256          290 img/s
+PyTorch ImageFolder   Intel Xeon 2698*   4             100%        Tesla V100*   256          395 img/s
+PyTorch ImageFolder   Intel Xeon 2698*   6             100%        Tesla V100*   256          425 img/s
+DALI                  Intel Xeon 2698*   1             100%        Tesla V100*   256          575 img/s
+===================   ================   ===========   =========   ===========   ==========   ==============
 
 .. Note::
-   * Intel Xeon E5-2623 is the Xeon E5-2623 v3 @ 3.00 GHz version
-   * Tesla V100 is the Tesla V100 PCIE 16GB version
+   * Intel Xeon 2698 is the Intel Xeon E5-2698 v4 @ 2.20GHz version
+   * Tesla V100 is the Tesla V100 SXM2 16GB version
 
-The name "Benzina" is a phonetic transliteration of the Ukrainian word "Бензина", meaning "gasoline" (or "petrol").
+While DALI currently outperforms Benzina, the speedup can only be seen on JPEGs
+through the `nvJPEG <https://developer.nvidia.com/nvjpeg>`_ decoder. Benzina
+requires to transcode the input dataset to H.265 but then the gain can be seen
+on all type of images as well as providing the dataset in a format that is
+easier to distribute.
+
+The name "Benzina" is a phonetic transliteration of the Ukrainian word
+"Бензина", meaning "gasoline" (or "petrol").
 
 
 ImageNet loading in PyTorch
 ===========================
 
-As long as your dataset is converted into Benzina's data format, you can load it
-to train a PyTorch model in a few lines of code. Here is an example demonstrating
-how this can be done with an ImageNet dataset. It is based on the
-`ImageNet example from PyTorch <https://github.com/pytorch/examples/tree/master/imagenet>`_
+As long as your dataset is converted into Benzina's data format, you can load
+it to train a PyTorch model in a few lines of code. Here is an example
+demonstrating how this can be done with an ImageNet dataset. It is based on the
+`ImageNet example from PyTorch
+<https://github.com/pytorch/examples/tree/master/imagenet>`_
 
 .. code-block:: python
 
@@ -59,37 +68,34 @@ how this can be done with an ImageNet dataset. It is based on the
     torch.manual_seed(seed)
 
     # Dataset
-    dataset = bz.ImageNet("path/to/data")
-
-    indices = list(range(len(dataset)))
-    n_valid = 50000
-    n_test = 100000
-    n_train = len(dataset) - n_valid - n_test
-    train_sampler = torch.utils.data.SubsetRandomSampler(indices[:n_train])
-    valid_sampler = torch.utils.data.SubsetRandomSampler(indices[n_train:-n_test])
+    train_dataset = bz.dataset.ImageNet("path/to/dataset", split="train")
+    val_dataset = bz.dataset.ImageNet("path/to/dataset", split="val")
 
     # Dataloaders
-    bias = ops.ConstantBiasTransform(bias=(123.675, 116.28 , 103.53))
-    std = ops.ConstantNormTransform(norm=(58.395, 57.12 , 57.375))
+    bias = ops.ConstantBiasTransform(bias=(0.485 * 255, 0.456 * 255, 0.406 * 255))
+    std = ops.ConstantNormTransform(norm=(0.229 * 255, 0.224 * 255, 0.225 * 255))
 
-    train_dataloader = bz.DataLoader(
-        dataset,
+    train_loader = bz.DataLoader(
+        train_dataset,
+        shape=(224, 224),
         batch_size=256,
-        sampler=train_sampler,
+        shuffle=True,
         seed=seed,
-        shape=(224, 224),
         bias_transform=bias,
         norm_transform=std,
-        warp_transform=ops.SimilarityTransform(flip_h=0.5))
-    valid_dataloader = bz.DataLoader(
-        dataset,
-        batch_size=512,
-        sampler=valid_sampler,
-        seed=seed,
+        warp_transform=ops.SimilarityTransform(scale=(0.08, 1.0),
+                                               ratio=(3./4., 4./3.),
+                                               flip_h=0.5,
+                                               random_crop=True))
+    val_loader = bz.DataLoader(
+        val_dataset,
         shape=(224, 224),
+        batch_size=256,
+        shuffle=False,
+        seed=seed,
         bias_transform=bias,
         norm_transform=std,
-        warp_transform=ops.SimilarityTransform())
+        warp_transform=ops.CenterResizedCrop(224/256)))
 
     for epoch in range(1, 10):
         # train for one epoch
@@ -103,7 +109,7 @@ how this can be done with an ImageNet dataset. It is based on the
 ========================================================================
 
 
-`Known limitations <https://benzina.readthedocs.io/en/latest/limits.html>`_
+`Known limitations and important notes <https://benzina.readthedocs.io/en/latest/limits.html>`_
 ===========================================================================
 
 
