@@ -464,8 +464,7 @@ class CenterResizedCrop     (SimilarityTransform):
             (default: ``+1.0``)
         keep_ratio (bool, optional): match the smaller edge to the
             corresponding output edge size, keeping the aspect ratio after
-            resize. Has no effect if :attr:`resize` is ``False``.
-            (default: ``False``)
+            resize. (default: ``False``)
     """
     def __init__(self,
                  scale=+1.0,

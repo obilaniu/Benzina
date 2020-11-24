@@ -51,8 +51,12 @@ class Dataset(torch.utils.data.Dataset):
                              "not specified.")
 
         self._track = track
-        self._track.open()
-        self._filename = track.file.path
+        if self._track.file.closed:
+            # Parse metadata then re-close the file handle
+            self._track.open()
+            self._track.close()
+
+        self._filename = track.file.name
 
     @property
     def filename(self):
@@ -81,20 +85,18 @@ class ClassificationDataset(Dataset):
             track. (default: ``"bzna_thumb"``)
     """
 
-    _Item = namedtuple("Item", ["input", "input_label", "target"])
+    _Item = namedtuple("Item", ["input", "input_label", "aux"])
 
     def __init__(self,
                  archive: typing.Union[str, _TrackPairType] = None,
                  tracks: _ClassTracksType = ("bzna_input", "bzna_target"),
                  input_label: str = "bzna_thumb"):
         try:
-            archive, tracks, input_label = \
-                ClassificationDataset._validate_args(
-                    None, archive, input_label)
+            archive, tracks = \
+                ClassificationDataset._validate_source(None, archive)
         except (TypeError, ValueError):
-            archive, tracks, input_label = \
-                ClassificationDataset._validate_args(
-                    archive, tracks, input_label)
+            archive, tracks = \
+                ClassificationDataset._validate_source(archive, tracks)
 
         if archive is not None:
             input_track = Track(archive, tracks[0])
@@ -105,22 +107,31 @@ class ClassificationDataset(Dataset):
 
         Dataset.__init__(self, input_track)
 
-        self._input_label = input_label
+        self._indices = np.arange(Dataset.__len__(self), dtype=np.int64)
 
-        target_track.open()
+        is_target_track_closed = target_track.file.closed
+        if is_target_track_closed:
+            target_track.open()
         location_first, _ = target_track[0].location
         location_last, size_last = target_track[-1].location
         target_track.file.seek(location_first)
         buffer = target_track.file.read(location_last + size_last - location_first)
+        if is_target_track_closed:
+            target_track.close()
 
         self._targets = np.full(len(self._track), -1, np.int64)
         self._targets[:len(target_track)] = np.frombuffer(buffer, np.dtype("<i8"))
 
+        self._input_label = input_label
+
+    def __len__(self):
+        return len(self._indices)
+
     def __getitem__(self, index: int):
-        item = Dataset.__getitem__(self, index)
-        return self._Item(input=item.input,
-                          input_label=self._input_label,
-                          target=(self.targets[index],))
+        item = Dataset.__getitem__(self, self._indices[index])
+        return ClassificationDataset._Item(input=item.input,
+                                           input_label=self._input_label,
+                                           aux=self._targets[index])
 
     def __add__(self, other):
         raise NotImplementedError()
@@ -130,8 +141,8 @@ class ClassificationDataset(Dataset):
         return self._targets
 
     @staticmethod
-    def _validate_args(*args):
-        archive, tracks, input_label = args
+    def _validate_source(*args):
+        archive, tracks = args
 
         if archive is not None:
             if any(not isinstance(t, str) for t in tracks):
@@ -150,7 +161,7 @@ class ClassificationDataset(Dataset):
             raise ValueError("tracks option must be a pair of Track when "
                              "archive is not specified.")
 
-        return archive, tracks, input_label
+        return archive, tracks
 
 
 class ImageNet(ClassificationDataset):
@@ -181,16 +192,13 @@ class ImageNet(ClassificationDataset):
                  tracks: _ClassTracksType = ("bzna_input", "bzna_target"),
                  input_label: str = "bzna_thumb"):
         try:
-            archive, split, tracks, input_label = \
-                ImageNet._validate_args(None, split, root, input_label)
+            archive, split, tracks = \
+                ImageNet._validate_source(None, split, root)
         except (TypeError, ValueError):
-            archive, split, tracks, input_label = \
-                ImageNet._validate_args(root, split, tracks, input_label)
+            archive, split, tracks = \
+                ImageNet._validate_source(root, split, tracks)
 
         ClassificationDataset.__init__(self, archive, tracks, input_label)
-
-        self._indices = np.array(range(ClassificationDataset.__len__(self)),
-                                 np.int64)
 
         if split == "test":
             self._indices = self._indices[-self.LEN_TEST:]
@@ -206,21 +214,12 @@ class ImageNet(ClassificationDataset):
             self._indices = self._indices[len_train:-self.LEN_TEST]
             self._targets = self._targets[len_train:-self.LEN_TEST]
 
-    def __getitem__(self, index: int):
-        item = Dataset.__getitem__(self, self._indices[index])
-        return ImageNet._Item(input=item.input,
-                              input_label=self._input_label,
-                              target=(self._targets[index],))
-
-    def __len__(self):
-        return len(self._indices)
-
     def __add__(self, other):
         raise NotImplementedError()
 
     @staticmethod
-    def _validate_args(*args):
-        root, split, tracks, input_label = args
+    def _validate_source(*args):
+        root, split, tracks = args
 
         archive = None
 
@@ -256,4 +255,4 @@ class ImageNet(ClassificationDataset):
         if split not in {"test", "train", "val", None}:
             raise ValueError("split option must be one of test, train, val")
 
-        return archive, split, tracks, input_label
+        return archive, split, tracks
