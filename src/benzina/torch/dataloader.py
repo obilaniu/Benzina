@@ -258,22 +258,24 @@ class _DataLoaderIter:
         indices     = [int(i)                     for i in indices]
         ptrs        = [int(buffer[n].data_ptr())  for n in range(len(indices))]
         samples     = [self.dataset[i]            for i in indices]
-        items, auxd = zip(*[((item.input, item.input_label), item.target) for item in samples])
-        # Use "bzna_thumb" until having a dataloader that is able to load
-        # the size variant images in "bzna_input"
-        inputs      = [Track(item.as_file(), label) for item, label in items]
-        token       = (buffer, *self.collate_fn(auxd))
+        items, auxd = zip(*[(Track(item.input.as_file(), item.input_label), item.aux)
+                            for item in samples])
+        token       = (buffer, self.collate_fn(auxd))
         t_args      = (self.shape, self.RNG)
 
+        # Open items outside of the lock
+        for item in items:
+            item.open()
+
         with self.core.batch(token) as batch:
-            for i,ptr,input in zip(indices, ptrs, inputs):
-                with batch.sample(i, ptr, input.sample_location(0),
-                                  input.video_configuration_location()):
-                    self.core.setHomography    (*self.warp_transform (i, input.shape, *t_args))
-                    self.core.selectColorMatrix(*self.color_transform(i, input.shape, *t_args))
-                    self.core.setBias          (*self.bias_transform (i, input.shape, *t_args))
-                    self.core.setScale         (*self.norm_transform (i, input.shape, *t_args))
-                    self.core.setOOBColor      (*self.oob_transform  (i, input.shape, *t_args))
+            for i,ptr,item in zip(indices, ptrs, items):
+                with batch.sample(i, ptr, item.sample_location(0),
+                                  item.video_configuration_location()):
+                    self.core.setHomography    (*self.warp_transform (i, item.shape, *t_args))
+                    self.core.selectColorMatrix(*self.color_transform(i, item.shape, *t_args))
+                    self.core.setBias          (*self.bias_transform (i, item.shape, *t_args))
+                    self.core.setScale         (*self.norm_transform (i, item.shape, *t_args))
+                    self.core.setOOBColor      (*self.oob_transform  (i, item.shape, *t_args))
     
     def pull(self):
         if self.core.pulls >= self.core.pushes:

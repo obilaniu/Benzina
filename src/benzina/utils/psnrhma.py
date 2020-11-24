@@ -2,9 +2,18 @@
 # -*- coding: utf-8 -*-
 
 # Imports
-import cv2           as cv
-import numpy         as np
-import scipy.fftpack
+import importlib.util
+
+import numpy as np
+
+cv2_spec = importlib.util.find_spec("cv2")
+is_cv2_installed = cv2_spec is not None
+if is_cv2_installed:
+    import cv2 as cv
+scipy_spec = importlib.util.find_spec("scipy")
+is_scipy_installed = scipy_spec is not None
+if is_scipy_installed:
+    import scipy.fftpack
 
 
 #
