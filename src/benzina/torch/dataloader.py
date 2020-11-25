@@ -9,8 +9,6 @@ from   torch.utils.data.dataloader import default_collate
 from   contextlib                  import suppress
 from   .                           import operations as ops
 
-from   benzina.utils.file import Track
-
 
 class DataLoader(torch.utils.data.DataLoader):
     """
@@ -258,8 +256,7 @@ class _DataLoaderIter:
         indices     = [int(i)                     for i in indices]
         ptrs        = [int(buffer[n].data_ptr())  for n in range(len(indices))]
         samples     = [self.dataset[i]            for i in indices]
-        items, auxd = zip(*[(Track(item.input.as_file(), item.input_label), item.aux)
-                            for item in samples])
+        items, auxd = zip(*[(sample.input, sample.aux) for sample in samples])
         token       = (buffer, self.collate_fn(auxd))
         t_args      = (self.shape, self.RNG)
 

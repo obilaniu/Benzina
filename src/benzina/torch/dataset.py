@@ -14,6 +14,22 @@ _TrackPairType = typing.Tuple[_TrackType, _TrackType]
 _ClassTracksType = typing.Tuple[_TrackType, _TrackType]
 
 
+def default_getter(dataset, getter):
+    del dataset
+    return getter
+
+
+def cached_getter(dataset, getter):
+    cache = None
+
+    def _getter(index: int):
+        nonlocal cache
+        if cache is None:
+            cache = [getter(i) for i in range(len(dataset))]
+        return cache[index]
+    return _getter
+
+
 class Dataset(torch.utils.data.Dataset):
     """
     Args:
@@ -28,7 +44,8 @@ class Dataset(torch.utils.data.Dataset):
 
     def __init__(self,
                  archive: typing.Union[str, _TrackType] = None,
-                 track: _TrackType = "bzna_input"):
+                 track: _TrackType = "bzna_input",
+                 getter=default_getter):
         if isinstance(archive, Track):
             track = archive
             archive = None
@@ -57,6 +74,7 @@ class Dataset(torch.utils.data.Dataset):
             self._track.close()
 
         self._filename = track.file.name
+        self._getitem = getter(self, self._getitem)
 
     @property
     def filename(self):
@@ -66,10 +84,13 @@ class Dataset(torch.utils.data.Dataset):
         return len(self._track)
     
     def __getitem__(self, index: int):
-        return Dataset._Item(self._track[index])
+        return self._getitem(index)
 
     def __add__(self, other):
         raise NotImplementedError()
+
+    def _getitem(self, index: int):
+        return Dataset._Item(input=self._track[index])
 
 
 class ClassificationDataset(Dataset):
@@ -85,12 +106,13 @@ class ClassificationDataset(Dataset):
             track. (default: ``"bzna_thumb"``)
     """
 
-    _Item = namedtuple("Item", ["input", "input_label", "aux"])
+    _Item = namedtuple("Item", ["input", "aux"])
 
     def __init__(self,
                  archive: typing.Union[str, _TrackPairType] = None,
                  tracks: _ClassTracksType = ("bzna_input", "bzna_target"),
-                 input_label: str = "bzna_thumb"):
+                 input_label: str = "bzna_thumb",
+                 getter=default_getter):
         try:
             archive, tracks = \
                 ClassificationDataset._validate_source(None, archive)
@@ -105,7 +127,7 @@ class ClassificationDataset(Dataset):
         else:
             input_track, target_track = tracks
 
-        Dataset.__init__(self, input_track)
+        Dataset.__init__(self, input_track, getter=getter)
 
         self._indices = np.arange(Dataset.__len__(self), dtype=np.int64)
 
@@ -127,18 +149,18 @@ class ClassificationDataset(Dataset):
     def __len__(self):
         return len(self._indices)
 
-    def __getitem__(self, index: int):
-        item = Dataset.__getitem__(self, self._indices[index])
-        return ClassificationDataset._Item(input=item.input,
-                                           input_label=self._input_label,
-                                           aux=self._targets[index])
-
     def __add__(self, other):
         raise NotImplementedError()
 
     @property
     def targets(self):
         return self._targets
+
+    def _getitem(self, index: int):
+        item = Dataset._getitem(self, self._indices[index])
+        return ClassificationDataset._Item(
+            input=Track(item.input.as_file(), self._input_label),
+            aux=self._targets[index])
 
     @staticmethod
     def _validate_source(*args):
@@ -188,7 +210,8 @@ class ImageNet(ClassificationDataset):
                  root: typing.Union[str, _TrackPairType] = None,
                  split: str = None,
                  tracks: _ClassTracksType = ("bzna_input", "bzna_target"),
-                 input_label: str = "bzna_thumb"):
+                 input_label: str = "bzna_thumb",
+                 getter=cached_getter):
         try:
             archive, split, tracks = \
                 ImageNet._validate_source(None, split, root)
@@ -196,7 +219,8 @@ class ImageNet(ClassificationDataset):
             archive, split, tracks = \
                 ImageNet._validate_source(root, split, tracks)
 
-        ClassificationDataset.__init__(self, archive, tracks, input_label)
+        ClassificationDataset.__init__(self, archive, tracks, input_label,
+                                       getter=getter)
 
         if split == "test":
             self._indices = self._indices[-self.LEN_TEST:]
