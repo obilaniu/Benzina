@@ -466,7 +466,7 @@ static PyObject* NvdecodeDataLoaderIterCore_defineSample            (NvdecodeDat
 	
 	static char *kwargsList[] = {"datasetIndex", "dstPtr", "location", "config_location", NULL};
 	
-	if(!PyArg_ParseTupleAndKeywords(args, kwargs, "KK", kwargsList,
+	if(!PyArg_ParseTupleAndKeywords(args, kwargs, "KKOO", kwargsList,
 	                                &datasetIndex, &devicePtr, &pyLocation, &pyConfigLocation)){
 		PyErr_SetString(PyExc_RuntimeError,
 		                "Could not parse arguments!");
@@ -474,13 +474,13 @@ static PyObject* NvdecodeDataLoaderIterCore_defineSample            (NvdecodeDat
 	}
 	
 	if(pyLocation != NULL && !PyTuple_Check(pyLocation) &&
-	   !PyArg_ParseTuple(pyLocation, "kk", &location, &location + 1)){
+	   !PyArg_ParseTuple(pyLocation, "kk", &location[0], &location[1])){
         Py_DECREF(pyLocation);
         pyLocation = NULL;
 	}
 
 	if(pyConfigLocation != NULL && !PyTuple_Check(pyConfigLocation) &&
-	   !PyArg_ParseTuple(pyConfigLocation, "kk", &configLocation, &configLocation + 1)){
+	   !PyArg_ParseTuple(pyConfigLocation, "kk", &configLocation[0], &configLocation[1])){
         Py_DECREF(pyConfigLocation);
         pyConfigLocation = NULL;
 	}
