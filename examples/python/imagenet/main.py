@@ -148,7 +148,7 @@ def main_worker(gpu, args):
 
     val_loader = bz.DataLoader(
         bz.dataset.ImageNet(args.data, split="val"), shape=(224, 224),
-        batch_size=args.batch_size, shuffle=args.batch_size, seed=args.seed,
+        batch_size=args.batch_size, shuffle=False, seed=args.seed,
         bias_transform=bias,
         norm_transform=std,
         warp_transform=ops.CenterResizedCrop(224/256))

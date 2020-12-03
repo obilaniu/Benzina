@@ -170,10 +170,8 @@ class ImageNet(ClassificationDataset):
             track. (default: ``"bzna_thumb"``)
     """
 
-    # Some images are missing from the dataset. Please read the README of the
-    # dataset for more information.
-    LEN_VALID = 50000 - 1
-    LEN_TEST = 100000 - 7
+    LEN_VALID = 50000
+    LEN_TEST = 100000
 
     def __init__(self,
                  root: typing.Union[str, _TrackPairType] = None,
