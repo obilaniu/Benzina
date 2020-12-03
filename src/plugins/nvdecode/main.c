@@ -1251,7 +1251,8 @@ BENZINA_PLUGIN_STATIC int         nvdecodeFeederThrdContinue      (NVDECODE_CTX*
  */
 
 BENZINA_PLUGIN_STATIC int         nvdecodeFeederThrdHasWork       (NVDECODE_CTX* ctx){
-	return ctx->feeder.cnt < ctx->reader.cnt;
+	return ctx->feeder.cnt < ctx->reader.cnt &&
+	       ctx->feeder.cnt < ctx->worker.cnt + ctx->decoderInfo.ulNumDecodeSurfaces;
 }
 
 /**
@@ -2266,6 +2267,9 @@ BENZINA_PLUGIN_STATIC int         nvdecodeWorkerThrdCore          (NVDECODE_CTX*
 	
 	/* Exit. */
 	ctx->worker.cnt++;
+	// In case feeder is waiting after worker, let him know a new surface is
+	// available
+	pthread_cond_broadcast(&ctx->feeder.cond);
 	return 0;
 }
 
@@ -2928,8 +2932,6 @@ BENZINA_PLUGIN_HIDDEN int         nvdecodeSubmitSample            (NVDECODE_CTX*
 		break;
 		default: break;
 	}
-    NVDECODE_RQ*    rq;
-    nvdecodeMasterThrdGetSubmRq(ctx, &rq);
 	ctx->master.push.sample++;
 	ret = nvdecodeHelpersStart(ctx);
 	pthread_cond_broadcast(&ctx->reader.cond);
@@ -3023,7 +3025,6 @@ BENZINA_PLUGIN_HIDDEN int         nvdecodeSetBuffer               (NVDECODE_CTX*
 			ctx->picParams      = calloc(ctx->totalSlots,     sizeof(*ctx->picParams));
 			ctx->request        = calloc(ctx->totalSlots,     sizeof(*ctx->request));
 			ctx->batch          = calloc(ctx->multibuffering, sizeof(*ctx->batch));
-            memset(ctx->picParams, 0, ctx->totalSlots * sizeof(CUVIDPICPARAMS));
 			if(ctx->picParams && ctx->request && ctx->batch){
 				ret = BENZINA_DATALOADER_ITER_SUCCESS;
 			}else{
