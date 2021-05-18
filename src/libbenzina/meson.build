@@ -25,7 +25,7 @@ libbenzina_dict     = {
 subdir('os')
 subdir('iso')
 subdir('itu')
-
+subdir('lua')
 
 #
 # Define the shared library and dependency.

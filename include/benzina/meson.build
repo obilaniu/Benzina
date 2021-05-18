@@ -29,4 +29,5 @@ install_headers('attribute.h',
 
 subdir('iso')
 subdir('itu')
+subdir('lua')
 subdir('plugins')
