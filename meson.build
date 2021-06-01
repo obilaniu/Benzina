@@ -1,6 +1,6 @@
 project('Benzina', 'c', 'cpp',
         version:                 '0.0.4',
-        meson_version:           '>=0.54.0',
+        meson_version:           '>=0.58.0',
         license:                 'MIT',
         default_options:         [
             'c_std=gnu99',
@@ -161,8 +161,7 @@ foreach L : [libavcodec, libavformat, libavfilter, libavutil, libswscale]
   if L.found()
     ffmpeg_names += [L.name() + '-' + L.version()]
     if L.type_name() == 'pkgconfig'
-      foreach D : L.get_pkgconfig_variable('includedir',
-                                           default: '/usr/include/ffmpeg').split(':')
+      foreach D : L.get_variable('includedir', default_value: '/usr/include/ffmpeg').split(':')
         if FS.is_dir(D) and D not in ffmpeg_incdir
           ffmpeg_incdir += [D]
         endif
