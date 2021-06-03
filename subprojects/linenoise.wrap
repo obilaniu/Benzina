@@ -1,0 +1,4 @@
+[wrap-git]
+url = https://github.com/yhirose/linenoise.git
+revision = head
+patch_directory = linenoise

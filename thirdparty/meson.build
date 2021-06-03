@@ -32,7 +32,6 @@
 #     do that we try to use the stubs, then the system libraries. If programs
 #     link and run with specific APIs, they are assumed usable.
 #
-CUDA                = import('unstable-cuda')
 CUDA_VERSION        = 'unknown'
 CUDA_ARCH           = get_option('nvidia_arch')
 CUDA_HOME           = get_option('nvidia_home').split(':')[0]

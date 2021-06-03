@@ -1,12 +1,12 @@
 project('Benzina', 'c', 'cpp',
-        version:                 '0.0.4',
-        meson_version:           '>=0.58.0',
-        license:                 'MIT',
-        default_options:         [
-            'c_std=gnu99',
-            'warning_level=3',
-            'b_ndebug=if-release',
-        ],
+    version:                 '0.0.4',
+    meson_version:           '>=0.58.0',
+    license:                 'MIT',
+    default_options:         [
+        'c_std=gnu99',
+        'warning_level=3',
+        'b_ndebug=if-release',
+    ],
 )
 
 
@@ -44,6 +44,22 @@ elif IS_HOST_WINDOWS
           'Windows equivalents or approximations do exist and Benzina could '+
           'in principle be ported to that OS.')
 endif
+
+
+#
+# Initial Meson module imports
+#
+fs   = import('fs')
+ss   = import('sourceset')
+CUDA = import('unstable-cuda')
+
+
+#
+# Build subprojects we will use.
+#
+project_linenoise = subproject('linenoise')
+project_lua       = subproject('lua')
+project_lfs       = subproject('lfs')
 
 
 #
@@ -141,12 +157,6 @@ configdata.set10('BENZINA_ENDIAN_LITTLE',    IS_HOST_LE,
 
 
 #
-# Initial Meson module imports
-#
-FS = import('fs')
-
-
-#
 # FFmpeg
 #
 libavcodec    = dependency('libavcodec',  version: '>=57', required: false, disabler: true)
@@ -162,7 +172,7 @@ foreach L : [libavcodec, libavformat, libavfilter, libavutil, libswscale]
     ffmpeg_names += [L.name() + '-' + L.version()]
     if L.type_name() == 'pkgconfig'
       foreach D : L.get_variable('includedir', default_value: '/usr/include/ffmpeg').split(':')
-        if FS.is_dir(D) and D not in ffmpeg_incdir
+        if fs.is_dir(D) and D not in ffmpeg_incdir
           ffmpeg_incdir += [D]
         endif
       endforeach

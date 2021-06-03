@@ -78,3 +78,9 @@ install
 src/benzina/version.py
 src/benzina/lib
 src/benzina/include
+
+
+# Wraps
+subprojects/*
+!subprojects/*.wrap
+!subprojects/packagefiles
