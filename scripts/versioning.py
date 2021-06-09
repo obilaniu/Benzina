@@ -1,10 +1,13 @@
 import os, re, time
-from   . import git
+from pathlib import Path
+from .       import git
+
 
 #
 # Public Version.
 #
-# This is the master declaration of the version number for this project.
+# VERSION.txt in combination with this file contain the master declaration of
+# the version number for this project.
 #
 # We will obey PEP 440 (https://www.python.org/dev/peps/pep-0440/) here. PEP440
 # recommends the pattern
@@ -14,7 +17,8 @@ from   . import git
 # which has a well-defined normalization.
 #
 
-ver_public  = "0.0.5.dev0"
+ver_release = open(Path(__file__).with_name('VERSION.txt')).read().strip()
+ver_public  = ver_release+".dev0"
 
 #
 # Information computed from the public version.
@@ -35,7 +39,6 @@ regex_match = re.match(r"""(?:
 )""", ver_public, re.X)
 assert regex_match
 ver_epoch   = regex_match.group("epoch")   or ""
-ver_release = regex_match.group("release")
 ver_prerel  = regex_match.group("pre")     or ""
 ver_postrel = regex_match.group("post")    or ""
 ver_devrel  = regex_match.group("dev")     or ""
@@ -90,9 +93,5 @@ if metadata:
 # Version utilities
 #
 def synthesize_version_py():
-    templatePath = os.path.join(git.get_src_root(),
-                                "scripts",
-                                "version.py.in")
-    
-    with open(templatePath, "r") as f:
+    with open(Path(__file__).with_name('version.py.in')) as f:
         return f.read().format(**globals())
