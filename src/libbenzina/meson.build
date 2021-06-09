@@ -28,10 +28,44 @@ libbenzina_dict     = {
                   'version.c',
                   'main.c')
 }
-
-subdir('os')
 subdir('iso')
 subdir('itu')
+
+
+#
+# Add Linker Version Script.
+#
+# Linker version scripts are passed through to ld, and can modify the
+# visibility of symbols.
+#
+# In Meson, it is not easy to add a linker version script to the build:
+#
+#   - With GNU ld.bfd, it is possible to pass a full, *implicit* linker script
+#     with a VERSION clause to the linker as if it were an "object file".
+#   - With the PGI 19.4 compiler's linker, this fails because a VERSION clause
+#     is always included in the builtin script, and the combination of all
+#     linker scripts may only declare at most one such section.
+#   - With Google's ld.gold, a full implicit linker script is rejected, whereas
+#     the more limited --version-script works=.
+#   - With LLVM lld/ld.lld, only a subset of GNU ld.bfd's linker script syntax
+#     is supported, but the more limited --version-script= works.
+#
+# On balance, therefore, it is preferable to use the --version-script= flag
+# passed to the linker directly. Unfortunately, Meson does not support auto-
+# formatting files() as strings yet, and link_args must be an array of strings.
+# So we go about it the hard way - get the current source directory and
+# construct the full absolute path to the linker version script, and add that
+# manually as an implicit link (though not compile) dependency.
+#
+
+if cc.get_linker_id() in ['ld.bfd', 'ld.gold', 'ld.lld']
+  libbenzina_vers_name = 'libbenzina.version'
+  libbenzina_vers_path = meson.current_source_dir() / 'libbenzina.version'
+  libbenzina_dict += {
+      'link_args': libbenzina_dict['link_args'] + [f'-Wl,--version-script=@libbenzina_vers_path@'],
+      'link_deps': libbenzina_dict['link_deps'] + files(libbenzina_vers_name),
+  }
+endif
 
 
 #

@@ -1,6 +1,4 @@
-VERSION {
 {
     global: benzina*; benz_*;
     local:  *;
 };
-}
