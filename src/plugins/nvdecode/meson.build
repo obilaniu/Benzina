@@ -54,10 +54,12 @@ libbenzina_plugin_nvdecode_deps = [threads, libm, libdl,
                                    libcuda, libcudart, libcudadevrt, libnvcuvid,
                                    libbenzina, plugin,
                                    libbenzina_plugin_nvdecodeCuda_dep]
+libbenzina_plugin_nvdecode_c_args = cc.get_supported_arguments(['-Wno-unused-variable', '-Wno-sign-compare'])
 libbenzina_plugin_nvdecode_sha  = shared_library('benzina-plugin-nvdecode',
                                                 libbenzina_plugin_nvdecode_srcs,
                                                 dependencies         : libbenzina_plugin_nvdecode_deps,
                                                 gnu_symbol_visibility: 'hidden',
+                                                c_args               : libbenzina_plugin_nvdecode_c_args,
                                                 build_rpath          : librpath,
                                                 install_rpath        : librpath,
                                                 install              : true,
