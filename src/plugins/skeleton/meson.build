@@ -15,7 +15,7 @@ endif
 libbenzina_plugin_skeletonSrcs = files('main.c')
 libbenzina_plugin_skeletonDeps = [threads, libm, libdl,
                                   libcuda, libcudart, libcudadevrt, libnvcuvid,
-                                  libbenzina, libbenzinacuda, plugin]
+                                  libbenzina, plugin]
 libbenzina_plugin_skeletonSha  = shared_library('benzina-plugin-skeleton',
                                                 libbenzina_plugin_skeletonSrcs,
                                                 dependencies         : libbenzina_plugin_skeletonDeps,

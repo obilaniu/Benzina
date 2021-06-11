@@ -1,8 +1,7 @@
 #
-# Build libbenzina CPU and CUDA libraries first
+# Build libbenzina library first
 #
 subdir('libbenzina')
-subdir('libbenzina-cuda')
 
 #
 # Build selected plugins & tools.

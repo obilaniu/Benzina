@@ -54,24 +54,6 @@
 
 
 /**
- * Benzina CUDA library attributes (libbenzina-cuda.so)
- */
-
-#if BENZINA_CUDA_IS_SHARED
-# if BENZINA_CUDA_IS_BUILDING
-#  define BENZINA_CUDA_PUBLIC BENZINA_ATTRIBUTE_EXPORT
-# else
-#  define BENZINA_CUDA_PUBLIC BENZINA_ATTRIBUTE_IMPORT
-# endif
-# define  BENZINA_CUDA_HIDDEN BENZINA_ATTRIBUTE_HIDDEN
-#else
-# define  BENZINA_CUDA_PUBLIC
-# define  BENZINA_CUDA_HIDDEN
-#endif
-#define   BENZINA_CUDA_STATIC static
-
-
-/**
  * Benzina plugin attributes (libbenzina-plugin-*.so)
  * 
  * As a matter of fact, plugins are always dynamically-built and -loaded, so
