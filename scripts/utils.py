@@ -7,7 +7,7 @@ from   distutils.file_util import copy_file
 from   distutils.dir_util  import copy_tree
 import ast
 import glob
-import os, sys, shutil
+import os, shlex, sys, shutil
 import subprocess
 
 
@@ -71,6 +71,8 @@ class build_configure(setuptools.command.build_ext.build_ext, build_mixin):
                 pkg_config_path.append(p)
         pkg_config_path = ":".join(pkg_config_path)
         
+        extra_args = shlex.split(env.pop("MESON_ARGS", ""))
+        
         cmd  = [
             "meson",            git.get_src_root(),
             "--prefix",         os.path.abspath(self.build_lib),
@@ -83,7 +85,7 @@ class build_configure(setuptools.command.build_ext.build_ext, build_mixin):
             "-Dnvidia_runtime=" +env.get("CUDA_RUNTIME",  "static"),
             "-Dnvidia_arch="    +env.get("CUDA_ARCH",     "Auto"),
             "-Dnvidia_home="    +os.environ.get("CUDA_HOME", "/usr/local/cuda"),
-        ]
+        ] + extra_args
         if self.reconfigure: cmd.append("--reconfigure")
         
         subprocess.check_call(cmd,
