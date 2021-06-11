@@ -234,8 +234,9 @@ static int   nvdtDisplayCb (UNIVERSE* u, CUVIDPARSERDISPINFO* dispInfo){
 
 static int   nvdtInitFFmpeg(UNIVERSE* u){
     int ret;
-    
+    #if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58,9,100)
     avcodec_register_all();
+    #endif
     u->codecID  = AV_CODEC_ID_HEVC;
     u->codec    = avcodec_find_decoder  (u->codecID);
     u->codecCtx = avcodec_alloc_context3(u->codec);
