@@ -140,17 +140,11 @@ else
     # May fail because of NVIDIA kernel driver not being loaded, but cannot
     # fail because of a userland-kernel mismatch.
     #
-    if NVIDIA_DRIVER == 'auto' and IS_HOST_LINUX
-      cat = find_program('cat', required: false, disabler: true)
-      if cat.found()
-        CAT_RUN = run_command(cat, ['/sys/module/nvidia/version'])
-        if CAT_RUN.returncode() == 0
-          NVIDIA_DRIVER     = CAT_RUN.stdout().strip()
-          NVIDIA_DRIVER_MIN = NVIDIA_DRIVER
-          NVIDIA_DRIVER_MAX = NVIDIA_DRIVER
-          message('Detected NVIDIA Driver: '+NVIDIA_DRIVER+', /sys/module/nvidia/version')
-        endif
-      endif
+    if NVIDIA_DRIVER == 'auto' and IS_HOST_LINUX and fs.exists('/sys/module/nvidia/version')
+      NVIDIA_DRIVER     = fs.read('/sys/module/nvidia/version').strip()
+      NVIDIA_DRIVER_MIN = NVIDIA_DRIVER
+      NVIDIA_DRIVER_MAX = NVIDIA_DRIVER
+      message('Detected NVIDIA Driver: '+NVIDIA_DRIVER+', /sys/module/nvidia/version')
     endif
     #
     # Third, Linux-specific attempt:
