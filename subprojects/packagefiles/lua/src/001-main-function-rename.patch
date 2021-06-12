@@ -1,0 +1,30 @@
+diff -ru a/src/lua.c b/src/lua.c
+--- a/src/lua.c	2021-05-24 21:06:04.037710151 -0400
++++ b/src/lua.c	2021-06-11 23:07:15.637915973 -0400
+@@ -640,7 +640,10 @@
+ }
+ 
+ 
+-int main (int argc, char **argv) {
++#ifndef  main_lua
++# define main_lua main
++#endif
++int main_lua (int argc, char **argv) {
+   int status, result;
+   lua_State *L = luaL_newstate();  /* create state */
+   if (L == NULL) {
+diff -ru a/src/luac.c b/src/luac.c
+--- a/src/luac.c	2021-05-24 21:06:04.037710151 -0400
++++ b/src/luac.c	2021-06-11 23:07:41.766879167 -0400
+@@ -194,7 +194,10 @@
+  return 0;
+ }
+ 
+-int main(int argc, char* argv[])
++#ifndef  main_luac
++# define main_luac main
++#endif
++int main_luac(int argc, char* argv[])
+ {
+  lua_State* L;
+  int i=doargs(argc,argv);

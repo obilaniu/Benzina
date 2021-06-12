@@ -1,0 +1,23 @@
+diff -ru a/src/linit.c b/src/linit.c
+--- a/src/linit.c	2021-05-24 21:06:04.033710007 -0400
++++ b/src/linit.c	2021-06-12 02:28:53.173594738 -0400
+@@ -34,6 +34,11 @@
+ #include "lualib.h"
+ #include "lauxlib.h"
+ 
++#ifdef LUA_USE_STATIC_LFS
++# define LUA_LFSLIBNAME "lfs"
++# define LUA_REGISTER_LFS {LUA_LFSLIBNAME, luaopen_lfs},
++LUAMOD_API int (luaopen_lfs) (lua_State *L);
++#endif
+ 
+ /*
+ ** these libs are loaded by lua.c and are readily available to any Lua
+@@ -50,6 +55,7 @@
+   {LUA_MATHLIBNAME, luaopen_math},
+   {LUA_UTF8LIBNAME, luaopen_utf8},
+   {LUA_DBLIBNAME, luaopen_debug},
++   LUA_REGISTER_LFS
+   {NULL, NULL}
+ };
+ 

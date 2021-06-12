@@ -7,8 +7,8 @@
 extern const char linenoise_license[];
 extern const char lua_license[];
 extern const char lfs_license[];
-extern int luac_main(int argc, char* argv[]);
-extern int lua_main (int argc, char* argv[]);
+extern int main_luac(int argc, char* argv[]);
+extern int main_lua (int argc, char* argv[]);
 
 
 
@@ -25,7 +25,7 @@ BENZINA_STATIC int strstartswith(const char* s, const char* prefix){
 }
 
 
-BENZINA_STATIC int license_main(int argc, char* argv[]){
+BENZINA_STATIC int main_license(int argc, char* argv[]){
     (void)argc;
     (void)argv;
     printf("Printing licenses!\n%s\n%s\n%s\n",
@@ -86,9 +86,9 @@ BENZINA_HIDDEN int main(int argc, char* argv[]){
     
     
     if     (strstartswith(basename, "luac"))
-        return luac_main(argc, argv);
+        return main_luac(argc, argv);
     else if(strstartswith(basename, "lua"))
-        return lua_main(argc, argv);
+        return main_lua(argc, argv);
     
     
     if(argc<=1)
@@ -96,12 +96,12 @@ BENZINA_HIDDEN int main(int argc, char* argv[]){
     
     
     if     (strequals(argv[1], "luac"))
-        return luac_main(argc-1, argv+1);
+        return main_luac(argc-1, argv+1);
     else if(strequals(argv[1], "lua"))
-        return lua_main(argc-1, argv+1);
+        return main_lua(argc-1, argv+1);
     else if(strequals(argv[1], "license") ||
             strequals(argv[1], "licenses"))
-        return license_main(argc-1, argv+1);
+        return main_license(argc-1, argv+1);
     
     
     return no_main(argc, argv);

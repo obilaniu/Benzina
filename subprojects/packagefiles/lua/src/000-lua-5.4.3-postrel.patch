@@ -1,0 +1,520 @@
+diff -ru a/src/lapi.c b/src/lapi.c
+--- a/src/lapi.c	2021-03-15 09:32:49.000000000 -0400
++++ b/src/lapi.c	2021-05-31 05:30:26.668648862 -0400
+@@ -53,6 +53,10 @@
+ #define isupvalue(i)		((i) < LUA_REGISTRYINDEX)
+ 
+ 
++/*
++** Convert an acceptable index to a pointer to its respective value.
++** Non-valid indices return the special nil value 'G(L)->nilvalue'.
++*/
+ static TValue *index2value (lua_State *L, int idx) {
+   CallInfo *ci = L->ci;
+   if (idx > 0) {
+@@ -70,22 +74,26 @@
+   else {  /* upvalues */
+     idx = LUA_REGISTRYINDEX - idx;
+     api_check(L, idx <= MAXUPVAL + 1, "upvalue index too large");
+-    if (ttislcf(s2v(ci->func)))  /* light C function? */
+-      return &G(L)->nilvalue;  /* it has no upvalues */
+-    else {
++    if (ttisCclosure(s2v(ci->func))) {  /* C closure? */
+       CClosure *func = clCvalue(s2v(ci->func));
+       return (idx <= func->nupvalues) ? &func->upvalue[idx-1]
+                                       : &G(L)->nilvalue;
+     }
++    else {  /* light C function or Lua function (through a hook)?) */
++      api_check(L, ttislcf(s2v(ci->func)), "caller not a C function");
++      return &G(L)->nilvalue;  /* no upvalues */
++    }
+   }
+ }
+ 
+-
++/*
++** Convert a valid actual index (not a pseudo-index) to its address.
++*/
+ static StkId index2stack (lua_State *L, int idx) {
+   CallInfo *ci = L->ci;
+   if (idx > 0) {
+     StkId o = ci->func + idx;
+-    api_check(L, o < L->top, "unacceptable index");
++    api_check(L, o < L->top, "invalid index");
+     return o;
+   }
+   else {    /* non-positive index */
+diff -ru a/src/lbaselib.c b/src/lbaselib.c
+--- a/src/lbaselib.c	2021-03-15 09:32:49.000000000 -0400
++++ b/src/lbaselib.c	2021-05-31 05:30:26.668648862 -0400
+@@ -261,6 +261,11 @@
+ }
+ 
+ 
++static int pairscont (lua_State *L, int status, lua_KContext k) {
++  (void)L; (void)status; (void)k;  /* unused */
++  return 3;
++}
++
+ static int luaB_pairs (lua_State *L) {
+   luaL_checkany(L, 1);
+   if (luaL_getmetafield(L, 1, "__pairs") == LUA_TNIL) {  /* no metamethod? */
+@@ -270,7 +275,7 @@
+   }
+   else {
+     lua_pushvalue(L, 1);  /* argument 'self' to metamethod */
+-    lua_call(L, 1, 3);  /* get 3 values from metamethod */
++    lua_callk(L, 1, 3, 0, pairscont);  /* get 3 values from metamethod */
+   }
+   return 3;
+ }
+diff -ru a/src/lcode.c b/src/lcode.c
+--- a/src/lcode.c	2021-03-15 09:32:49.000000000 -0400
++++ b/src/lcode.c	2021-05-31 05:30:26.672648997 -0400
+@@ -10,6 +10,7 @@
+ #include "lprefix.h"
+ 
+ 
++#include <float.h>
+ #include <limits.h>
+ #include <math.h>
+ #include <stdlib.h>
+@@ -580,24 +581,41 @@
+ 
+ /*
+ ** Add an integer to list of constants and return its index.
+-** Integers use userdata as keys to avoid collision with floats with
+-** same value; conversion to 'void*' is used only for hashing, so there
+-** are no "precision" problems.
+ */
+ static int luaK_intK (FuncState *fs, lua_Integer n) {
+-  TValue k, o;
+-  setpvalue(&k, cast_voidp(cast_sizet(n)));
++  TValue o;
+   setivalue(&o, n);
+-  return addk(fs, &k, &o);
++  return addk(fs, &o, &o);  /* use integer itself as key */
+ }
+ 
+ /*
+-** Add a float to list of constants and return its index.
++** Add a float to list of constants and return its index. Floats
++** with integral values need a different key, to avoid collision
++** with actual integers. To that, we add to the number its smaller
++** power-of-two fraction that is still significant in its scale.
++** For doubles, that would be 1/2^52.
++** (This method is not bulletproof: there may be another float
++** with that value, and for floats larger than 2^53 the result is
++** still an integer. At worst, this only wastes an entry with
++** a duplicate.)
+ */
+ static int luaK_numberK (FuncState *fs, lua_Number r) {
+   TValue o;
++  lua_Integer ik;
+   setfltvalue(&o, r);
+-  return addk(fs, &o, &o);  /* use number itself as key */
++  if (!luaV_flttointeger(r, &ik, F2Ieq))  /* not an integral value? */
++    return addk(fs, &o, &o);  /* use number itself as key */
++  else {  /* must build an alternative key */
++    const int nbm = l_floatatt(MANT_DIG);
++    const lua_Number q = l_mathop(ldexp)(1.0, -nbm + 1);
++    const lua_Number k = (ik == 0) ? q : r + r*q;  /* new key */
++    TValue kv;
++    setfltvalue(&kv, k);
++    /* result is not an integral value, unless value is too large */
++    lua_assert(!luaV_flttointeger(k, &ik, F2Ieq) ||
++                l_mathop(fabs)(r) >= l_mathop(1e6));
++    return addk(fs, &kv, &o);
++  }
+ }
+ 
+ 
+diff -ru a/src/ldebug.c b/src/ldebug.c
+--- a/src/ldebug.c	2021-03-15 09:32:49.000000000 -0400
++++ b/src/ldebug.c	2021-05-31 05:30:26.672648997 -0400
+@@ -675,9 +675,21 @@
+ }
+ 
+ 
++static const char *formatvarinfo (lua_State *L, const char *kind,
++                                                const char *name) {
++  if (kind == NULL)
++    return "";  /* no information */
++  else
++    return luaO_pushfstring(L, " (%s '%s')", kind, name);
++}
++
++/*
++** Build a string with a "description" for the value 'o', such as
++** "variable 'x'" or "upvalue 'y'".
++*/
+ static const char *varinfo (lua_State *L, const TValue *o) {
+-  const char *name = NULL;  /* to avoid warnings */
+   CallInfo *ci = L->ci;
++  const char *name = NULL;  /* to avoid warnings */
+   const char *kind = NULL;
+   if (isLua(ci)) {
+     kind = getupvalname(ci, o, &name);  /* check whether 'o' is an upvalue */
+@@ -685,26 +697,40 @@
+       kind = getobjname(ci_func(ci)->p, currentpc(ci),
+                         cast_int(cast(StkId, o) - (ci->func + 1)), &name);
+   }
+-  return (kind) ? luaO_pushfstring(L, " (%s '%s')", kind, name) : "";
++  return formatvarinfo(L, kind, name);
+ }
+ 
+ 
+-l_noret luaG_typeerror (lua_State *L, const TValue *o, const char *op) {
++/*
++** Raise a type error
++*/
++static l_noret typeerror (lua_State *L, const TValue *o, const char *op,
++                          const char *extra) {
+   const char *t = luaT_objtypename(L, o);
+-  luaG_runerror(L, "attempt to %s a %s value%s", op, t, varinfo(L, o));
++  luaG_runerror(L, "attempt to %s a %s value%s", op, t, extra);
+ }
+ 
+ 
++/*
++** Raise a type error with "standard" information about the faulty
++** object 'o' (using 'varinfo').
++*/
++l_noret luaG_typeerror (lua_State *L, const TValue *o, const char *op) {
++  typeerror(L, o, op, varinfo(L, o));
++}
++
++
++/*
++** Raise an error for calling a non-callable object. Try to find
++** a name for the object based on the code that made the call
++** ('funcnamefromcode'); if it cannot get a name there, try 'varinfo'.
++*/
+ l_noret luaG_callerror (lua_State *L, const TValue *o) {
+   CallInfo *ci = L->ci;
+   const char *name = NULL;  /* to avoid warnings */
+-  const char *what = (isLua(ci)) ? funcnamefromcode(L, ci, &name) : NULL;
+-  if (what != NULL) {
+-    const char *t = luaT_objtypename(L, o);
+-    luaG_runerror(L, "%s '%s' is not callable (a %s value)", what, name, t);
+-  }
+-  else
+-    luaG_typeerror(L, o, "call");
++  const char *kind = (isLua(ci)) ? funcnamefromcode(L, ci, &name) : NULL;
++  const char *extra = kind ? formatvarinfo(L, kind, name) : varinfo(L, o);
++  typeerror(L, o, "call", extra);
+ }
+ 
+ 
+diff -ru a/src/lobject.h b/src/lobject.h
+--- a/src/lobject.h	2021-03-15 09:32:51.000000000 -0400
++++ b/src/lobject.h	2021-05-31 05:30:26.672648997 -0400
+@@ -112,7 +112,7 @@
+ #define settt_(o,t)	((o)->tt_=(t))
+ 
+ 
+-/* main macro to copy values (from 'obj1' to 'obj2') */
++/* main macro to copy values (from 'obj2' to 'obj1') */
+ #define setobj(L,obj1,obj2) \
+ 	{ TValue *io1=(obj1); const TValue *io2=(obj2); \
+           io1->value_ = io2->value_; settt_(io1, io2->tt_); \
+diff -ru a/src/lopcodes.h b/src/lopcodes.h
+--- a/src/lopcodes.h	2021-03-15 09:32:51.000000000 -0400
++++ b/src/lopcodes.h	2021-05-31 05:30:26.672648997 -0400
+@@ -190,7 +190,8 @@
+ 
+ 
+ /*
+-** grep "ORDER OP" if you change these enums
++** Grep "ORDER OP" if you change these enums. Opcodes marked with a (*)
++** has extra descriptions in the notes after the enumeration.
+ */
+ 
+ typedef enum {
+@@ -203,7 +204,7 @@
+ OP_LOADK,/*	A Bx	R[A] := K[Bx]					*/
+ OP_LOADKX,/*	A	R[A] := K[extra arg]				*/
+ OP_LOADFALSE,/*	A	R[A] := false					*/
+-OP_LFALSESKIP,/*A	R[A] := false; pc++				*/
++OP_LFALSESKIP,/*A	R[A] := false; pc++	(*)			*/
+ OP_LOADTRUE,/*	A	R[A] := true					*/
+ OP_LOADNIL,/*	A B	R[A], R[A+1], ..., R[A+B] := nil		*/
+ OP_GETUPVAL,/*	A B	R[A] := UpValue[B]				*/
+@@ -254,7 +255,7 @@
+ OP_SHL,/*	A B C	R[A] := R[B] << R[C]				*/
+ OP_SHR,/*	A B C	R[A] := R[B] >> R[C]				*/
+ 
+-OP_MMBIN,/*	A B C	call C metamethod over R[A] and R[B]		*/
++OP_MMBIN,/*	A B C	call C metamethod over R[A] and R[B]	(*)	*/
+ OP_MMBINI,/*	A sB C k	call C metamethod over R[A] and sB	*/
+ OP_MMBINK,/*	A B C k		call C metamethod over R[A] and K[B]	*/
+ 
+@@ -280,7 +281,7 @@
+ OP_GEI,/*	A sB k	if ((R[A] >= sB) ~= k) then pc++		*/
+ 
+ OP_TEST,/*	A k	if (not R[A] == k) then pc++			*/
+-OP_TESTSET,/*	A B k	if (not R[B] == k) then pc++ else R[A] := R[B]	*/
++OP_TESTSET,/*	A B k	if (not R[B] == k) then pc++ else R[A] := R[B] (*) */
+ 
+ OP_CALL,/*	A B C	R[A], ... ,R[A+C-2] := R[A](R[A+1], ... ,R[A+B-1]) */
+ OP_TAILCALL,/*	A B C k	return R[A](R[A+1], ... ,R[A+B-1])		*/
+@@ -315,6 +316,18 @@
+ 
+ /*===========================================================================
+   Notes:
++
++  (*) Opcode OP_LFALSESKIP is used to convert a condition to a boolean
++  value, in a code equivalent to (not cond ? false : true).  (It
++  produces false and skips the next instruction producing true.)
++
++  (*) Opcodes OP_MMBIN and variants follow each arithmetic and
++  bitwise opcode. If the operation succeeds, it skips this next
++  opcode. Otherwise, this opcode calls the corresponding metamethod.
++
++  (*) Opcode OP_TESTSET is used in short-circuit expressions that need
++  both to jump and to produce a value, such as (a = b or c).
++
+   (*) In OP_CALL, if (B == 0) then B = top - A. If (C == 0), then
+   'top' is set to last_result+1, so next open instruction (OP_CALL,
+   OP_RETURN*, OP_SETLIST) may use 'top'.
+diff -ru a/src/lparser.c b/src/lparser.c
+--- a/src/lparser.c	2021-03-15 09:32:51.000000000 -0400
++++ b/src/lparser.c	2021-05-31 05:30:26.672648997 -0400
+@@ -417,6 +417,17 @@
+ 
+ 
+ /*
++** Mark that current block has a to-be-closed variable.
++*/
++static void marktobeclosed (FuncState *fs) {
++  BlockCnt *bl = fs->bl;
++  bl->upval = 1;
++  bl->insidetbc = 1;
++  fs->needclose = 1;
++}
++
++
++/*
+ ** Find a variable with the given name 'n'. If it is an upvalue, add
+ ** this upvalue into all intermediate functions. If it is a global, set
+ ** 'var' as 'void' as a flag.
+@@ -1599,7 +1610,7 @@
+   line = ls->linenumber;
+   adjust_assign(ls, 4, explist(ls, &e), &e);
+   adjustlocalvars(ls, 4);  /* control variables */
+-  markupval(fs, fs->nactvar);  /* last control var. must be closed */
++  marktobeclosed(fs);  /* last control var. must be closed */
+   luaK_checkstack(fs, 3);  /* extra space to call generator */
+   forbody(ls, base, line, nvars - 4, 1);
+ }
+@@ -1703,11 +1714,9 @@
+ }
+ 
+ 
+-static void checktoclose (LexState *ls, int level) {
++static void checktoclose (FuncState *fs, int level) {
+   if (level != -1) {  /* is there a to-be-closed variable? */
+-    FuncState *fs = ls->fs;
+-    markupval(fs, level + 1);
+-    fs->bl->insidetbc = 1;  /* in the scope of a to-be-closed variable */
++    marktobeclosed(fs);
+     luaK_codeABC(fs, OP_TBC, reglevel(fs, level), 0, 0);
+   }
+ }
+@@ -1751,7 +1760,7 @@
+     adjust_assign(ls, nvars, nexps, &e);
+     adjustlocalvars(ls, nvars);
+   }
+-  checktoclose(ls, toclose);
++  checktoclose(fs, toclose);
+ }
+ 
+ 
+diff -ru a/src/lstate.c b/src/lstate.c
+--- a/src/lstate.c	2021-03-15 09:32:51.000000000 -0400
++++ b/src/lstate.c	2021-05-31 05:30:26.672648997 -0400
+@@ -269,7 +269,7 @@
+ static void close_state (lua_State *L) {
+   global_State *g = G(L);
+   if (!completestate(g))  /* closing a partially built state? */
+-    luaC_freeallobjects(L);  /* jucst collect its objects */
++    luaC_freeallobjects(L);  /* just collect its objects */
+   else {  /* closing a fully built state */
+     luaD_closeprotected(L, 1, LUA_OK);  /* close all upvalues */
+     luaC_freeallobjects(L);  /* collect all objects */
+diff -ru a/src/lstate.h b/src/lstate.h
+--- a/src/lstate.h	2021-03-15 09:32:51.000000000 -0400
++++ b/src/lstate.h	2021-05-31 05:30:26.672648997 -0400
+@@ -165,7 +165,7 @@
+ ** - field 'nyield' is used only while a function is "doing" an
+ ** yield (from the yield until the next resume);
+ ** - field 'nres' is used only while closing tbc variables when
+-** returning from a C function;
++** returning from a function;
+ ** - field 'transferinfo' is used only during call/returnhooks,
+ ** before the function starts or after it ends.
+ */
+diff -ru a/src/lstrlib.c b/src/lstrlib.c
+--- a/src/lstrlib.c	2021-03-15 09:32:51.000000000 -0400
++++ b/src/lstrlib.c	2021-05-31 05:30:26.672648997 -0400
+@@ -1352,15 +1352,6 @@
+ } nativeendian = {1};
+ 
+ 
+-/* dummy structure to get native alignment requirements */
+-struct cD {
+-  char c;
+-  union { double d; void *p; lua_Integer i; lua_Number n; } u;
+-};
+-
+-#define MAXALIGN	(offsetof(struct cD, u))
+-
+-
+ /*
+ ** information to pack/unpack stuff
+ */
+@@ -1435,6 +1426,8 @@
+ ** Read and classify next option. 'size' is filled with option's size.
+ */
+ static KOption getoption (Header *h, const char **fmt, int *size) {
++  /* dummy structure to get native alignment requirements */
++  struct cD { char c; union { LUAI_MAXALIGN; } u; };
+   int opt = *((*fmt)++);
+   *size = 0;  /* default */
+   switch (opt) {
+@@ -1465,7 +1458,11 @@
+     case '<': h->islittle = 1; break;
+     case '>': h->islittle = 0; break;
+     case '=': h->islittle = nativeendian.little; break;
+-    case '!': h->maxalign = getnumlimit(h, fmt, MAXALIGN); break;
++    case '!': {
++      const int maxalign = offsetof(struct cD, u);
++      h->maxalign = getnumlimit(h, fmt, maxalign);
++      break;
++    }
+     default: luaL_error(h->L, "invalid format option '%c'", opt);
+   }
+   return Knop;
+diff -ru a/src/ltable.c b/src/ltable.c
+--- a/src/ltable.c	2021-03-15 09:32:51.000000000 -0400
++++ b/src/ltable.c	2021-05-31 05:30:26.672648997 -0400
+@@ -84,8 +84,6 @@
+ #define hashstr(t,str)		hashpow2(t, (str)->hash)
+ #define hashboolean(t,p)	hashpow2(t, p)
+ 
+-#define hashint(t,i)		hashpow2(t, i)
+-
+ 
+ #define hashpointer(t,p)	hashmod(t, point2uint(p))
+ 
+@@ -101,6 +99,20 @@
+ static const TValue absentkey = {ABSTKEYCONSTANT};
+ 
+ 
++/*
++** Hash for integers. To allow a good hash, use the remainder operator
++** ('%'). If integer fits as a non-negative int, compute an int
++** remainder, which is faster. Otherwise, use an unsigned-integer
++** remainder, which uses all bits and ensures a non-negative result.
++*/
++static Node *hashint (const Table *t, lua_Integer i) {
++  lua_Unsigned ui = l_castS2U(i);
++  if (ui <= (unsigned int)INT_MAX)
++    return hashmod(t, cast_int(ui));
++  else
++    return hashmod(t, ui);
++}
++
+ 
+ /*
+ ** Hash for floating-point numbers.
+diff -ru a/src/ltablib.c b/src/ltablib.c
+--- a/src/ltablib.c	2021-03-15 09:32:51.000000000 -0400
++++ b/src/ltablib.c	2021-05-31 05:30:26.672648997 -0400
+@@ -147,7 +147,7 @@
+   lua_geti(L, 1, i);
+   if (l_unlikely(!lua_isstring(L, -1)))
+     luaL_error(L, "invalid value (%s) at index %I in table for 'concat'",
+-                  luaL_typename(L, -1), i);
++                  luaL_typename(L, -1), (LUAI_UACINT)i);
+   luaL_addvalue(b);
+ }
+ 
+diff -ru a/src/luaconf.h b/src/luaconf.h
+--- a/src/luaconf.h	2021-03-15 09:32:52.000000000 -0400
++++ b/src/luaconf.h	2021-05-31 05:30:26.672648997 -0400
+@@ -485,7 +485,6 @@
+ @@ LUA_MAXINTEGER is the maximum value for a LUA_INTEGER.
+ @@ LUA_MININTEGER is the minimum value for a LUA_INTEGER.
+ @@ LUA_MAXUNSIGNED is the maximum value for a LUA_UNSIGNED.
+-@@ LUA_UNSIGNEDBITS is the number of bits in a LUA_UNSIGNED.
+ @@ lua_integer2str converts an integer to a string.
+ */
+ 
+@@ -506,9 +505,6 @@
+ #define LUA_UNSIGNED		unsigned LUAI_UACINT
+ 
+ 
+-#define LUA_UNSIGNEDBITS	(sizeof(LUA_UNSIGNED) * CHAR_BIT)
+-
+-
+ /* now the variable definitions */
+ 
+ #if LUA_INT_TYPE == LUA_INT_INT		/* { int */
+diff -ru a/src/lua.h b/src/lua.h
+--- a/src/lua.h	2021-03-15 09:32:52.000000000 -0400
++++ b/src/lua.h	2021-06-11 19:02:25.472162592 -0400
+@@ -21,7 +21,7 @@
+ #define LUA_VERSION_RELEASE	"3"
+ 
+ #define LUA_VERSION_NUM			504
+-#define LUA_VERSION_RELEASE_NUM		(LUA_VERSION_NUM * 100 + 0)
++#define LUA_VERSION_RELEASE_NUM		(LUA_VERSION_NUM * 100 + 3)
+ 
+ #define LUA_VERSION	"Lua " LUA_VERSION_MAJOR "." LUA_VERSION_MINOR
+ #define LUA_RELEASE	LUA_VERSION "." LUA_VERSION_RELEASE
+diff -ru a/src/lvm.c b/src/lvm.c
+--- a/src/lvm.c	2021-03-15 09:32:52.000000000 -0400
++++ b/src/lvm.c	2021-05-31 05:30:26.672648997 -0400
+@@ -847,10 +847,19 @@
+       luaV_concat(L, total);  /* concat them (may yield again) */
+       break;
+     }
+-    case OP_CLOSE:  case OP_RETURN: {  /* yielded closing variables */
++    case OP_CLOSE: {  /* yielded closing variables */
+       ci->u.l.savedpc--;  /* repeat instruction to close other vars. */
+       break;
+     }
++    case OP_RETURN: {  /* yielded closing variables */
++      StkId ra = base + GETARG_A(inst);
++      /* adjust top to signal correct number of returns, in case the
++         return is "up to top" ('isIT') */
++      L->top = ra + ci->u2.nres;
++      /* repeat instruction to close other vars. and complete the return */
++      ci->u.l.savedpc--;
++      break;
++    }
+     default: {
+       /* only these other opcodes can yield */
+       lua_assert(op == OP_TFORCALL || op == OP_CALL ||
+@@ -1156,8 +1165,10 @@
+     Instruction i;  /* instruction being executed */
+     StkId ra;  /* instruction's A register */
+     vmfetch();
+-// low-level line tracing for debugging Lua
+-// printf("line: %d\n", luaG_getfuncline(cl->p, pcRel(pc, cl->p)));
++    #if 0
++      /* low-level line tracing for debugging Lua */
++      printf("line: %d\n", luaG_getfuncline(cl->p, pcRel(pc, cl->p)));
++    #endif
+     lua_assert(base == ci->func + 1);
+     lua_assert(base <= L->top && L->top < L->stack_last);
+     /* invalidate top for instructions not expecting it */
+@@ -1670,6 +1681,7 @@
+           n = cast_int(L->top - ra);  /* get what is available */
+         savepc(ci);
+         if (TESTARG_k(i)) {  /* may there be open upvalues? */
++          ci->u2.nres = n;  /* save number of returns */
+           if (L->top < ci->top)
+             L->top = ci->top;
+           luaF_close(L, base, CLOSEKTOP, 1);
