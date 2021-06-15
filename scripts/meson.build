@@ -37,3 +37,9 @@ endif
 #
 detectgpus_c = files('detectgpus.c')
 
+
+#
+# ELF hacking tools
+#
+elf_py                = files('elf.py')
+elf_strip_df_1_pie_py = files('elf-strip-df-1-pie.py')

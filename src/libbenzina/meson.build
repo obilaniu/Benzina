@@ -69,25 +69,37 @@ endif
 
 
 #
-# Define the shared library and dependency.
+# Build the shared library, patch it, then declare a dependency.
 #
-
-libbenzina_sha = shared_library('benzina',             libbenzina_dict['srcs'],
-                                objects              : libbenzina_dict['objs'],
-                                include_directories  : libbenzina_dict['incs'],
-                                dependencies         : libbenzina_dict['deps'],
-                                c_args               : libbenzina_dict['c_args'],
-                                link_args            : libbenzina_dict['link_args'],
-                                link_with            : libbenzina_dict['link_with'],
-                                link_whole           : libbenzina_dict['link_whole'],
-                                link_depends         : libbenzina_dict['link_deps'],
-                                gnu_symbol_visibility: 'hidden',
-                                version              : meson.project_version(),
-                                build_rpath          : librpath,
-                                install_rpath        : librpath,
-                                install              : true,
-                                install_dir          : libdir)
-libbenzina     = declare_dependency(include_directories: benzina_incs,
-                                    compile_args       : ['-DBENZINA_IS_SHARED=1'],
-                                    link_with          : libbenzina_sha)
+libbenzina_sha = shared_library(
+    'benzina', libbenzina_dict['srcs'],
+    objects:               libbenzina_dict['objs'],
+    include_directories:   libbenzina_dict['incs'],
+    dependencies:          libbenzina_dict['deps'],
+    c_args:                libbenzina_dict['c_args'],
+    link_args:             libbenzina_dict['link_args'],
+    link_with:             libbenzina_dict['link_with'],
+    link_whole:            libbenzina_dict['link_whole'],
+    link_depends:          libbenzina_dict['link_deps'],
+    gnu_symbol_visibility: 'hidden',
+    version:               meson.project_version(),
+    build_rpath:           librpath,
+    install_rpath:         librpath,
+    install_dir:           libdir,
+    install:               true,
+)
+libbenzina_sha = custom_target(
+    'patched libbenzina',
+    command: [python, elf_strip_df_1_pie_py, '@INPUT0@', '@OUTPUT0@'],
+    input:   [libbenzina_sha],
+    output:  'libbenzina-patched.so',
+    install: false,
+    depend_files: [elf_py],
+    build_by_default: true,
+)
+libbenzina = declare_dependency(
+    include_directories: benzina_incs,
+    compile_args:        ['-DBENZINA_IS_SHARED=1'],
+    link_with:           libbenzina_sha,
+)
 
