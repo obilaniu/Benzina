@@ -81,18 +81,63 @@ cc          = meson.get_compiler('c')
 cxx         = meson.get_compiler('cpp')
 CC_ID       = cc.get_id()
 CXX_ID      = cxx.get_id()
+CCLD_ID     = cc.get_linker_id()
 CC_SYNTAX   = cc.get_argument_syntax()
 CXX_SYNTAX  = cxx.get_argument_syntax()
 if CC_SYNTAX == 'gcc' or CXX_SYNTAX == 'gcc'
-  relax_warnings     = ['-Wno-pedantic',
-                        '-Wno-implicit-fallthrough',
-                        '-Wno-missing-field-initializers',
-                        '-Wno-missing-braces',
-                        '-Wno-unused-function']
+  relax_warnings = [
+      '-Wno-pedantic',
+      '-Wno-implicit-fallthrough',
+      '-Wno-missing-field-initializers',
+      '-Wno-missing-braces',
+      '-Wno-unused-function',
+  ]
   relax_warnings_c   = cc .get_supported_arguments(relax_warnings)
   relax_warnings_cxx = cxx.get_supported_arguments(relax_warnings)
   add_project_arguments(relax_warnings_c,   language: 'c')
   add_project_arguments(relax_warnings_cxx, language: 'cpp')
+endif
+force_link_args = []
+special_link_args = []
+if CC_SYNTAX == 'gcc'
+  if CCLD_ID == 'ld.gold'
+    if   cc.has_link_argument('-fuse-ld=bfd')
+      warning('The ld.gold linker does not support our linker script. Forcing '+
+              'instead GNU ld.bfd (-fuse-ld=bfd)')
+      force_link_args += ['-fuse-ld=bfd']
+    elif cc.has_link_argument('-fuse-ld=lld')
+      warning('The ld.gold linker does not support our linker script. Forcing '+
+              'instead LLVM ld.lld (-fuse-ld=lld)')
+      force_link_args += ['-fuse-ld=lld']
+    else
+      error  ('The ld.gold linker does not support our linker script, but we '+
+              'are unable to force-select an alternative with the flag '+
+              '-fuse-ld=[bfd|lld]. Aborting.')
+    endif
+  endif
+  #
+  # Before we could carry out feature tests on the linker, we had to determine
+  # whether and how to pick an alternative to the default ld. We have now done
+  # so, and proceed to the feature tests, forcing the alternate linker if
+  # required. We cannot use cc.get_supported_link_arguments([...]) here because
+  # it tests linker arguments individually rather than in unison with any
+  # -fuse-ld= flag determined above.
+  #
+  foreach link_arg: [
+      '-pie',
+      '-Wl,-E',
+      '-Wl,-z,now',
+      '-Wl,-z,relro',
+      '-Wl,-z,combreloc',
+      '-Wl,-z,noseparate-code',
+      '-Wl,-z,noexecstack',
+      '-Wl,-z,nocopyreloc',
+      '-Wl,-z,text',
+    ]
+    if cc.has_multi_link_arguments(force_link_args+[link_arg])
+      special_link_args += [link_arg]
+    endif
+  endforeach
 endif
 libm        = cc.find_library('m',  required: IS_HOST_LINUX)
 libdl       = cc.find_library('dl', required: IS_HOST_LINUX)

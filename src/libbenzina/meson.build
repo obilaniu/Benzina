@@ -7,7 +7,7 @@
 
 libbenzina_dict     = {
     'c_args':     ['-DBENZINA_IS_SHARED=1', '-DBENZINA_IS_BUILDING=1'],
-    'link_args':  ['-pie', '-Wl,-E'],
+    'link_args':  force_link_args+special_link_args,
     'link_with':  [],
     'link_whole': [],
     'link_deps':  [],
@@ -60,7 +60,7 @@ subdir('itu')
 
 if cc.get_linker_id() in ['ld.bfd', 'ld.gold', 'ld.lld']
   libbenzina_vers_name = 'libbenzina.version'
-  libbenzina_vers_path = meson.current_source_dir() / 'libbenzina.version'
+  libbenzina_vers_path = meson.current_source_dir() / libbenzina_vers_name
   libbenzina_dict += {
       'link_args': libbenzina_dict['link_args'] + [f'-Wl,--version-script=@libbenzina_vers_path@'],
       'link_deps': libbenzina_dict['link_deps'] + files(libbenzina_vers_name),
