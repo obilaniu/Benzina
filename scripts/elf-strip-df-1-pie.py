@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import shutil, sys
+import shutil, os, sys
 import elf
 
 def strip_df_1_pie(f):
@@ -27,14 +27,16 @@ def strip_df_1_pie(f):
 if __name__ == "__main__":
     #
     # Yes, this script does a really nasty thing. It modifies its input argv[1]
-    # *first* and *in-place*, *then* copies it to the output argv[2].
+    # *first* and *in-place*, *then* creates "unrelated" symlinks.
     # This was done because there is no easier way to modify within Meson a
     # shared library after it has been build and without losing the ability
     # to use shared_library() to construct it.
     #
     with elf.ELF(sys.argv[1]) as f:
         strip_df_1_pie(f)
-    try:
-        shutil.copy2(sys.argv[1], sys.argv[2])
-    except shutil.SameFileError:
-        pass
+    
+    # libbenzina.so.X -> libbenzina.so.X.Y.Z
+    os.symlink(os.path.basename(sys.argv[1]), sys.argv[2])
+    
+    # libbenzina.so   -> libbenzina.so.X
+    os.symlink(os.path.basename(sys.argv[2]), sys.argv[3])

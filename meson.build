@@ -124,8 +124,6 @@ if CC_SYNTAX == 'gcc'
   # -fuse-ld= flag determined above.
   #
   foreach link_arg: [
-      '-pie',
-      '-Wl,-E',
       '-Wl,-z,now',
       '-Wl,-z,relro',
       '-Wl,-z,combreloc',
