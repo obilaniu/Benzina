@@ -87,7 +87,7 @@ c_args += libdl.found() ? ['-DLUA_USE_DLOPEN'] : []
 c_args += ['-DLUA_USER_H="luabenz.h"']
 custom_lua_sta = static_library(
     'lua',
-    core_files+aux_files+lib_files+lua_files+luac_files+files('LICENSE.S'),
+    core_files+aux_files+lib_files+lua_files+luac_files,
     c_args: c_args + [
         '-DLUA_USE_STATIC_LFS',
         '-Dmain_lua=main_lua',
@@ -106,4 +106,7 @@ custom_lua_dep = declare_dependency(
     include_directories: lua_inc,
     compile_args:        c_args,
     link_with:           custom_lua_sta,
+    link_whole:          [
+        static_library('lua-license', files('LICENSE.S'), pic: true, name_prefix: ''),
+    ],
 )

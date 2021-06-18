@@ -1,5 +1,4 @@
-.section .rodata.license, "aS"
-.globl lua_license
-lua_license:
+.section .license, "a"
+    .ascii  "Lua license:\n\n"
     .incbin "./LICENSE.md"
-    .byte 0
+    .ascii  "\n\n"

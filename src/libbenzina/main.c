@@ -4,9 +4,6 @@
 #include "benzina/benzina.h"
 
 
-extern const char linenoise_license[];
-extern const char lua_license[];
-extern const char lfs_license[];
 extern int main_luac(int argc, char* argv[]);
 extern int main_lua (int argc, char* argv[]);
 
@@ -28,10 +25,8 @@ BENZINA_STATIC int strstartswith(const char* s, const char* prefix){
 BENZINA_STATIC int main_license(int argc, char* argv[]){
     (void)argc;
     (void)argv;
-    printf("Printing licenses!\n%s\n%s\n%s\n",
-           linenoise_license,
-           lua_license,
-           lfs_license);
+    extern const char license_benzina[];
+    printf("%s\n", license_benzina);
     return 0;
 }
 BENZINA_STATIC int no_main(int argc, char* argv[]){

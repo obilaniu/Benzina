@@ -10,7 +10,7 @@ project('linenoise', 'c',
 linenoise_inc = include_directories('.')
 linenoise_sta = static_library(
     'linenoise',
-    files('linenoise.c', 'encodings/utf8.c', 'LICENSE.S'),
+    files('linenoise.c', 'encodings/utf8.c'),
     include_directories: linenoise_inc,
     pic:                 true,
     name_prefix:         '',
@@ -20,4 +20,7 @@ linenoise_sta = static_library(
 linenoise_dep = declare_dependency(
     include_directories: linenoise_inc,
     link_with:           linenoise_sta,
+    link_whole:          [
+        static_library('linenoise-license', files('LICENSE.S'), pic: true, name_prefix: ''),
+    ],
 )

@@ -19,14 +19,17 @@ libbenzina_dict     = {
         project_lfs      .get_variable('lfs_dep'),
     ],
     'incs': [benzina_incs],
-    'srcs': files('benzina.c',
-                  'benzinaproto.c',
-                  'endian.c',
-                  'init.c',
-                  'intops.c',
-                  'ptrops.c',
-                  'version.c',
-                  'main.c')
+    'srcs': files(
+        'benzina.c',
+        'benzinaproto.c',
+        'endian.c',
+        'init.c',
+        'intops.c',
+        'ptrops.c',
+        'version.c',
+        'internal.S',
+        'main.c',
+    ),
 }
 subdir('iso')
 subdir('itu')
@@ -59,11 +62,21 @@ subdir('itu')
 #
 
 if cc.get_linker_id() in ['ld.bfd', 'ld.gold', 'ld.lld']
-  libbenzina_vers_name = 'libbenzina.version'
-  libbenzina_vers_path = meson.current_source_dir() / libbenzina_vers_name
+  libbenzina_lds_name = 'libbenzina.lds'
+  libbenzina_ver_name = 'libbenzina.ver'
+  libbenzina_lds_path = meson.current_source_dir() / libbenzina_lds_name
+  libbenzina_ver_path = meson.current_source_dir() / libbenzina_ver_name
+  libbenzina_lds_file = files(libbenzina_lds_name)
+  libbenzina_ver_file = files(libbenzina_ver_name)
   libbenzina_dict += {
-      'link_args': libbenzina_dict['link_args'] + [f'-Wl,--version-script=@libbenzina_vers_path@'],
-      'link_deps': libbenzina_dict['link_deps'] + files(libbenzina_vers_name),
+      'link_args': libbenzina_dict['link_args'] + [
+          '-Wl,-T,'+libbenzina_lds_path,
+          '-Wl,--version-script='+libbenzina_ver_path,
+      ],
+      'link_deps': libbenzina_dict['link_deps'] + [
+          libbenzina_lds_file,
+          libbenzina_ver_file,
+      ],
   }
 endif
 

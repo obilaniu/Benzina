@@ -8,7 +8,7 @@ custom_lua_dep = subproject('lua').get_variable('custom_lua_dep')
 lfs_inc = include_directories('src')
 lfs_sta = static_library(
     'lfs',
-    files('src/lfs.c', 'LICENSE.S'),
+    files('src/lfs.c'),
     include_directories: lfs_inc,
     dependencies:        custom_lua_dep,
     pic:                 true,
@@ -20,4 +20,7 @@ lfs_dep = declare_dependency(
     dependencies:        custom_lua_dep,
     include_directories: lfs_inc,
     link_with:           lfs_sta,
+    link_whole:          [
+        static_library('lfs-license', files('LICENSE.S'), pic: true, name_prefix: ''),
+    ],
 )

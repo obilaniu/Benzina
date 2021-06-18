@@ -1,5 +1,4 @@
-.section .rodata.license, "aS"
-.globl lfs_license
-lfs_license:
+.section .license, "a"
+    .ascii  "luafilesystem license:\n\n"
     .incbin "./LICENSE"
-    .byte 0
+    .ascii  "\n\n"
