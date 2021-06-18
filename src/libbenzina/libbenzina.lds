@@ -69,9 +69,6 @@ SECTIONS {
         HIDDEN(__lua_open_array_end = .);
         QUAD(0); QUAD(0);          /* NULL sentinel */
     }
-} INSERT BEFORE .fini_array;
-
-SECTIONS {
     .lua.text_array : ALIGN(8) {
         HIDDEN(__lua_text_array_start = .);
         KEEP(*(.lua.text_array));
