@@ -21,6 +21,6 @@ linenoise_dep = declare_dependency(
     include_directories: linenoise_inc,
     link_with:           linenoise_sta,
     link_whole:          [
-        static_library('linenoise-license', files('LICENSE.S'), pic: true, name_prefix: ''),
+        static_library('linenoise-linker', files('linker.S'), pic: true, name_prefix: ''),
     ],
 )
