@@ -1,0 +1,46 @@
+diff -ru a/src/loadlib.c b/src/loadlib.c
+--- a/src/loadlib.c	2021-03-15 09:32:50.000000000 -0400
++++ b/src/loadlib.c	2021-06-22 00:59:55.984460562 -0400
+@@ -621,6 +621,31 @@
+ }
+ 
+ 
++static int searcher_static_C (lua_State* L) {
++  const char *name = luaL_checkstring(L, 1);
++#ifdef LUAOPEN_EXTRA
++# define CONCATX(x,y) x ## y
++# define CONCAT(x,y)  CONCATX(x,y)
++# define ARRAY(n) CONCAT(LUAOPEN_EXTRA, n)
++  const luaL_Reg* lib;
++  extern const luaL_Reg ARRAY(_start)[];
++  extern const luaL_Reg ARRAY(_end)[];
++  for (lib = ARRAY(_start); lib < ARRAY(_end); lib++) {
++    if (strcmp(lib->name, name) == 0) { /* hit? */
++      lua_pushcfunction(L, lib->func);
++      lua_pushliteral(L, ":static_C:");
++      return 2;
++    }
++  }
++# undef CONCATX
++# undef CONCAT
++# undef ARRAY
++#endif
++  lua_pushfstring(L, "no module '%s' statically linked in", name);
++  return 1;
++}
++
++
+ static void findloader (lua_State *L, const char *name) {
+   int i;
+   luaL_Buffer msg;  /* to build error message */
+@@ -709,7 +734,9 @@
+ 
+ static void createsearcherstable (lua_State *L) {
+   static const lua_CFunction searchers[] =
+-    {searcher_preload, searcher_Lua, searcher_C, searcher_Croot, NULL};
++    {searcher_preload,
++     searcher_static_C,
++     searcher_Lua, searcher_C, searcher_Croot, NULL};
+   int i;
+   /* create 'searchers' table */
+   lua_createtable(L, sizeof(searchers)/sizeof(searchers[0]) - 1, 0);

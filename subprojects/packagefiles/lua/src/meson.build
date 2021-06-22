@@ -52,6 +52,7 @@ patch_filenames = [
     '000-lua-5.4.3-postrel.patch',     # Update from 5.4.3 with postrelease bugfixes
     '001-main-function-rename.patch',  # Allow renaming main()
     '002-luaopen-extra-preload.patch', # Allow preloading of statically-linked libraries.
+    '003-searcher-static-C.patch',     # Allow demand-loading of statically-linked libraries.
 ]
 lua_inc = include_directories('.')
 
