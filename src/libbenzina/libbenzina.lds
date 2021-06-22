@@ -16,11 +16,15 @@
  *     - A concatenation of entries
  *           struct luaL_Reg{const char* name; lua_CFunction func;};
  *       somewhat modelled on .init_array.
- *     - Array start: luaL_Reg __lua_open_array_start[]
- *     - Array end:   luaL_Reg __lua_open_array_end[]
+ *     - Array start:         luaL_Reg __lua_open_array_start[]
+ *     - Preload array start: luaL_Reg __lua_open_array_preload_start[]
+ *     - Preload array end:   luaL_Reg __lua_open_array_preload_end[]
+ *     - Array end:           luaL_Reg __lua_open_array_end[]
  *     - Every <name> is a Lua package name. Every <func> is its corresponding
  *       luaopen_<name>() initializer.
  *     - This array is searched as one possible source for require'd packages.
+ *     - Within this array, the first few elements are also designated as
+ *       "preloaded" packages that will be automatically loaded into Lua.
  *
  * .section .lua.text_array, "aw"
  *     - A concatenation of entries
@@ -65,7 +69,10 @@ SECTIONS {
 SECTIONS {
     .lua.open_array : ALIGN(16) {
         HIDDEN(__lua_open_array_start = .);
-        KEEP(*(.lua.open_array));
+        HIDDEN(__lua_open_array_preload_start = .);
+        KEEP(*(.lua.open_array.preload .lua.open_array.preload.*));
+        HIDDEN(__lua_open_array_preload_end = .);
+        KEEP(*(.lua.open_array .lua.open_array.*));
         HIDDEN(__lua_open_array_end = .);
         QUAD(0); QUAD(0);          /* NULL sentinel */
     }

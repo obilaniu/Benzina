@@ -1,0 +1,23 @@
+diff -ru a/src/linit.c b/src/linit.c
+--- a/src/linit.c	2021-03-15 09:32:50.000000000 -0400
++++ b/src/linit.c	2021-06-21 23:01:51.969188785 -0400
+@@ -61,5 +61,19 @@
+     luaL_requiref(L, lib->name, lib->func, 1);
+     lua_pop(L, 1);  /* remove lib */
+   }
++#ifdef LUAOPEN_PRELOAD_EXTRA
++# define CONCATX(x,y) x ## y
++# define CONCAT(x,y)  CONCATX(x,y)
++# define ARRAY(n) CONCAT(LUAOPEN_PRELOAD_EXTRA, n)
++  extern const luaL_Reg ARRAY(_start)[];
++  extern const luaL_Reg ARRAY(_end)[];
++  for (lib = ARRAY(_start); lib < ARRAY(_end); lib++) {
++    luaL_requiref(L, lib->name, lib->func, 1);
++    lua_pop(L, 1);  /* remove lib */
++  }
++# undef CONCATX
++# undef CONCAT
++# undef ARRAY
++#endif
+ }
+ 

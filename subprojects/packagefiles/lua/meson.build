@@ -89,7 +89,7 @@ custom_lua_sta = static_library(
     'lua',
     core_files+aux_files+lib_files+lua_files+luac_files,
     c_args: c_args + [
-        '-DLUA_USE_STATIC_LFS',
+        '-DLUAOPEN_PRELOAD_EXTRA=__lua_open_array_preload',
         '-Dmain_lua=main_lua',
         '-Dmain_luac=main_luac',
     ],
