@@ -57,6 +57,7 @@ CUDA = import('unstable-cuda')
 #
 # Build subprojects we will use.
 #
+project_lz4       = subproject('lz4')
 project_linenoise = subproject('linenoise')
 project_lua       = subproject('lua')
 project_lfs       = subproject('lfs')

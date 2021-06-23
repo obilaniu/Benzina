@@ -17,6 +17,7 @@ libbenzina_dict      = {
     'objs': [],
     'deps': [
         threads, libm, libdl,
+        project_lz4      .get_variable('lz4_dep'),
         project_linenoise.get_variable('linenoise_dep'),
         project_lua      .get_variable('custom_lua_dep'),
         project_lfs      .get_variable('lfs_dep'),
