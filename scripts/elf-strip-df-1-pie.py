@@ -25,6 +25,14 @@ def strip_df_1_pie(f):
             break
 
 if __name__ == "__main__":
+    path_libbenzina_so_X_Y_Z = sys.argv[1] # Meson @INPUT0@  (*)
+    path_libbenzina_so_X     = sys.argv[2] # Meson @OUTPUT0@
+    path_libbenzina_so       = sys.argv[3] # Meson @OUTPUT1@
+    libbenzina_so_X_Y_Z      = os.path.basename(path_libbenzina_so_X_Y_Z)
+    libbenzina_so_X          = os.path.basename(path_libbenzina_so_X)
+    
+    #
+    # (*)
     #
     # Yes, this script does a really nasty thing. It modifies its input argv[1]
     # *first* and *in-place*, *then* creates "unrelated" symlinks.
@@ -32,11 +40,18 @@ if __name__ == "__main__":
     # shared library after it has been build and without losing the ability
     # to use shared_library() to construct it.
     #
-    with elf.ELF(sys.argv[1]) as f:
+    with elf.ELF(path_libbenzina_so_X_Y_Z) as f:
         strip_df_1_pie(f)
     
-    # libbenzina.so.X -> libbenzina.so.X.Y.Z
-    os.symlink(os.path.basename(sys.argv[1]), sys.argv[2])
+    #
+    # Force-create/overwrite output symlinks:
+    #     libbenzina.so.X.Y.Z <- libbenzina.so.X
+    #     libbenzina.so.X     <- libbenzina.so
+    #
+    def overwrite_symlink(src, dst):
+        if os.path.islink(dst) and os.readlink(dst) == src: return
+        if os.path.exists(dst):    os.unlink(dst)
+        os.symlink(src, dst)
     
-    # libbenzina.so   -> libbenzina.so.X
-    os.symlink(os.path.basename(sys.argv[2]), sys.argv[3])
+    overwrite_symlink(libbenzina_so_X_Y_Z, path_libbenzina_so_X)
+    overwrite_symlink(libbenzina_so_X,     path_libbenzina_so)
