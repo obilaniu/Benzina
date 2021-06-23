@@ -85,19 +85,56 @@ endif
 
 
 #
-# Build the shared library, patch it, then declare a dependency.
+# Build the sources of the shared library as static-pic, relink the static
+# library as shared, patch it, symlink it, then declare a dependency.
 #
-# Since libbenzina.so is also a PIE executable, we use executable() here, as
-# the alternative through shared_library() runs into trouble with Clang.
-# Clang ignores the -pie flag after -shared has been selected, whereas GCC
-# accepts both.
+# The reasons for this contribed process are manifold:
+# 
+#    - Since libbenzina.so is meant to *also* be a PIE executable, we use
+#      executable() here, as the alternative through shared_library() runs into
+#      trouble with Clang. Clang ignores the -pie flag after -shared has been
+#      selected, whereas GCC accepts both.
 #
-libbenzina_sha = executable(
+#    - However, when compiling PIE executables (as opposed to PIC libraries),
+#      Meson sets the -fPIE flag on sources. When this flag is used instead of
+#      -fPIC, it allows the compiler to use inappropriate relocations that
+#      translate into errors such as
+#          init.c.o: warning: relocation against `stderr@@GLIBC_2.2.5' in
+#                             read-only section `.text.startup'
+#          ld: read-only segment has dynamic relocations
+#      This is particularly likely with GCC. The solution is that all
+#      *source files* *must* be gated through a Meson static_library(pic:true).
+#
+#    - But this is still not enough. The linker unconditionally sets an ELF
+#      flag DF_1_PIE on PIE executables, which the GNU C library >= 2.30 checks
+#      for to block their dlopen()'ing (this may be justified when thread-local
+#      storage or copy relocations are used, but neither is a concern for us).
+#      We choose to manually patch out that flag using a Python script. This
+#      script modifies its input *in-place* for convenience's sake and also
+#      generates the .so and .so.X symlinks.
+#
+# As a result of all this, we manage to declare libbenzina_sha with every type
+# (static_library, executable, custom_target, declare_dependency) except the
+# one we might truly have intended (shared_library).
+#
+libbenzina_sha = declare_dependency(dependencies: libbenzina_dict['deps'])
+libbenzina_sha = libbenzina_sha.partial_dependency(compile_args: true, includes: true)
+libbenzina_sha = static_library( # *STATIC-PIC*! SEE NOTES ABOVE!
     libbenzina_name,       libbenzina_dict['srcs'],
-    objects:               libbenzina_dict['objs'],
     include_directories:   libbenzina_dict['incs'],
-    dependencies:          libbenzina_dict['deps'],
     c_args:                libbenzina_dict['c_args'],
+    dependencies:          libbenzina_sha,
+    gnu_symbol_visibility: 'hidden',
+    pic:                   true,
+    install:               false,
+)
+libbenzina_sha = declare_dependency(dependencies: libbenzina_dict['deps'],
+                                    link_whole:   libbenzina_sha)
+libbenzina_sha = libbenzina_sha.partial_dependency(link_args: true, links: true)
+libbenzina_sha = executable(
+    libbenzina_name,       [],   # *MUST BE EMPTY*! SEE NOTES ABOVE!
+    objects:               libbenzina_dict['objs'],
+    dependencies:          libbenzina_sha,
     link_args:             libbenzina_dict['link_args'],
     link_with:             libbenzina_dict['link_with'],
     link_whole:            libbenzina_dict['link_whole'],
@@ -111,7 +148,7 @@ libbenzina_sha = executable(
     install_dir:           libdir,
     install:               true,
 )
-libbenzina_sha = custom_target(
+libbenzina_sha = custom_target(  # MODIFIES IN-PLACE!
     'patched '+libbenzina_name,
     command:          [python, elf_strip_df_1_pie_py, '@INPUT0@', '@OUTPUT@'],
     input:            [libbenzina_sha],
