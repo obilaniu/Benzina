@@ -14,6 +14,7 @@ libbenzina_dict      = {
     'link_with':  [],
     'link_whole': [],
     'link_deps':  [],
+    'lua_srcs':   {},
     'objs': [],
     'deps': [
         threads, libm, libdl,
@@ -40,7 +41,44 @@ subdir('itu')
 
 
 #
-# Add Linker Version Script.
+# Collect and Pack Lua Code.
+#
+# Translate the libbenzina_dict['lua_srcs'] dictionary of {package: files} to
+# a command-line invocation of the packer script, which uses a native-built lz4
+# executable to compress the Lua code into an LZ4 frame. At runtime, the
+# constructor and library initializer unpack themselves into statically-
+# allocated space in .bss.
+#
+# The packer is invoked as:
+#     python lz4-lua-pack.py
+#            build/path/to/lz4
+#            out.S
+#            out.lz4
+#            [packagename, packagesource.lua]*
+#
+# While the LZ4 CLI tool itself is GPLv2, the liblz4.a library is BSD2 licensed
+# and its output obviously is not licensed. Because the CLI tool is only used
+# at build time and not incorporated into the project (whether statically or
+# dynamically), we do not guard this portion of the build using ENABLE_GPL.
+#
+
+lua_input_list = []
+foreach name, file: libbenzina_dict['lua_srcs']
+  lua_input_list += [name, file]
+endforeach
+if lua_input_list.length() > 0
+  packed_lua = custom_target(
+      'LZ4-packed Lua code',
+      command: [python, lz4_lua_pack_py, project_lz4.get_variable('lz4_exe_native'),
+                '@OUTPUT0@', '@OUTPUT1@'] + lua_input_list,
+      output:  ['packed-lua.S', 'packed-lua.lz4'],
+  )
+  libbenzina_dict += {'srcs': libbenzina_dict['srcs'] + [packed_lua[0]]}
+endif
+
+
+#
+# Add Linker Script and Version Script.
 #
 # Linker version scripts are passed through to ld, and can modify the
 # visibility of symbols.

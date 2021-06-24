@@ -43,3 +43,9 @@ detectgpus_c = files('detectgpus.c')
 #
 elf_py                = files('elf.py')
 elf_strip_df_1_pie_py = files('elf-strip-df-1-pie.py')
+
+
+#
+# Pack LZ4-compressed Lua code inside ELF
+#
+lz4_lua_pack_py = files('lz4-lua-pack.py')

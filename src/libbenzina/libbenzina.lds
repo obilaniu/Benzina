@@ -12,6 +12,15 @@
  *     - Linker script terminates string concatenation with a NUL byte to make
  *       the symbol above usable as a C string.
  *
+ * .section .lz4.decompress_array, "aw"
+ *     - A concatenation of entries
+ *           struct lz4_entry{const char* src_start, *src_end;
+ *                            char*       dst_start, *dst_end;};
+ *       somewhat modelled on .init_array.
+ *     - Array start:         lz4_entry __lz4_decompress_array_start[]
+ *     - Array end:           lz4_entry __lz4_decompress_array_end[]
+ *     - Every entry represents one decompression order.
+ *
  * .section .lua.open_array, "aw"
  *     - A concatenation of entries
  *           struct luaL_Reg{const char* name; lua_CFunction func;};
@@ -32,13 +41,9 @@
  *     - Array start: entry __lua_text_array_start[]
  *     - Array end:   entry __lua_text_array_end[]
  *     - Every <name> is a Lua package name. Every <start> and <end> is its
- *       corresponding embedded source code or byte code and points into the
- *       .lua.text section.
+ *       corresponding embedded source code or byte code (May first require
+ *       decompression in the library initializer!)
  *     - This array is searched as one possible source for require'd packages.
- *
- * .section .lua.text, "a"
- *     - A concatenation or Lua source code or byte code with adequate symbols.
- *     - The pointers in the array of section .lua.text_array point here.
  */
 
 SECTIONS {
@@ -54,19 +59,25 @@ SECTIONS {
 } INSERT BEFORE .rodata;
 
 SECTIONS {
-    .lua.text : ALIGN(4) {
+    /**
+     * This section is entirely optional, but the idea is that LZ4 data is
+     * "cold" and so should be grouped together and behind the main .rodata
+     * section.
+     */
+    .rodata.lz4 : {
         FILL(0x00000000);
-        KEEP(*(.lua.text .lua.text.*));
-        /**
-         * If the final file is Lua source code, terminate it with a convenient
-         * NUL byte or four, as though it were a C string. If it is Lua bytecode,
-         * should maintain alignment.
-         */
-        QUAD(0);
+        KEEP(*(.rodata.lz4 .rodata.lz4.*));
+        QUAD(0); QUAD(0); /* Allow wild 8-byte overread. */
     }
 } INSERT AFTER .rodata;
 
 SECTIONS {
+    .lz4.decompress_array : ALIGN(32) {
+        HIDDEN(__lz4_decompress_array_start = .);
+        KEEP(*(.lz4.decompress_array .lz4.decompress_array.*));
+        HIDDEN(__lz4_decompress_array_end = .);
+        QUAD(0); QUAD(0); QUAD(0); QUAD(0); /* NULL sentinel */
+    }
     .lua.open_array : ALIGN(16) {
         HIDDEN(__lua_open_array_start = .);
         HIDDEN(__lua_open_array_preload_start = .);
