@@ -55,6 +55,34 @@ CUDA = import('unstable-cuda')
 
 
 #
+# Compiler checks
+#
+# We also set here some predefined macros for assembler-language compilations
+# by the C and C++ compilers.
+#
+cc          = meson.get_compiler('c')
+cxx         = meson.get_compiler('cpp')
+CC_ID       = cc.get_id()
+CXX_ID      = cxx.get_id()
+CCLD_ID     = cc.get_linker_id()
+CC_SYNTAX   = cc.get_argument_syntax()
+CXX_SYNTAX  = cxx.get_argument_syntax()
+VOIDP       = 'void*'
+CHARP       = 'char*'
+FUNCP       = 'void(*)(void)'
+VOIDP_SIZE  = cc.sizeof(VOIDP)
+assert(VOIDP_SIZE == cxx.sizeof(VOIDP), f'C and C++ compilers disagree on sizeof(@VOIDP@)!')
+CHARP_SIZE  = cc.sizeof(CHARP)
+assert(CHARP_SIZE == cxx.sizeof(CHARP), f'C and C++ compilers disagree on sizeof(@CHARP@)!')
+FUNCP_SIZE  = cc.sizeof(FUNCP)
+assert(CHARP_SIZE == cxx.sizeof(FUNCP), f'C and C++ compilers disagree on sizeof(@FUNCP@)!')
+assert(VOIDP_SIZE == CHARP_SIZE,        f'Pointers to void and char not of equal size!')
+assert(VOIDP_SIZE == FUNCP_SIZE,        f'Pointers to void and function not of equal size!')
+add_global_arguments([f'-DGASPOINTERSIZE=@VOIDP_SIZE@',
+                      f'-DGASPOINTERWORD=.@VOIDP_SIZE@byte'], language: ['c','cpp'])
+
+
+#
 # Build subprojects we will use.
 #
 project_lz4       = subproject('lz4')
@@ -73,18 +101,11 @@ endif
 
 
 #
-# Compiler, Dependencies & Libraries
+# Dependencies & Libraries
 #
 # Library and Include Search Paths
 # More configurable defaults could surely be provided.
 #
-cc          = meson.get_compiler('c')
-cxx         = meson.get_compiler('cpp')
-CC_ID       = cc.get_id()
-CXX_ID      = cxx.get_id()
-CCLD_ID     = cc.get_linker_id()
-CC_SYNTAX   = cc.get_argument_syntax()
-CXX_SYNTAX  = cxx.get_argument_syntax()
 if CC_SYNTAX == 'gcc' or CXX_SYNTAX == 'gcc'
   relax_warnings = [
       '-Wno-pedantic',

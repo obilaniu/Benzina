@@ -1,12 +1,3 @@
-#if   __SIZEOF_POINTER__ == 4
-# define POINTERWORD .4byte
-#elif __SIZEOF_POINTER__ == 8
-# define POINTERWORD .8byte
-#else
-# error "Adapt macro for strange pointer size!"
-#endif
-
-
 .section .license, "a"
     .ascii  "luafilesystem license:\n\n"
     .incbin "./LICENSE"
@@ -17,4 +8,4 @@
     .asciz "lfs"
 
 .section .lua.open_array.preload, "aw"
-    POINTERWORD .Llfs_module_name, luaopen_lfs
+    GASPOINTERWORD .Llfs_module_name, luaopen_lfs
