@@ -37,42 +37,7 @@ subdir('src')
 
 
 #
-# Compiler and Linker Flags, Part I
-#
-c_args  = []
-c_args += IS_HOST_POSIX ? ['-DLUA_USE_POSIX']  : []
-c_args += IS_HOST_SUNOS ? ['-D_REENTRANT']     : []
-
-
-#
-# Lua Compiler
-#
-luac_c_args = c_args
-if cc.get_argument_syntax() == 'gcc'
-  luac_c_args += cc.get_supported_arguments(['-ffunction-sections', '-fno-PIC'])
-endif
-luac = executable(
-    'luac',
-    core_files+aux_files+luac_files,
-    c_args:           luac_c_args,
-    pie:              false,
-    dependencies:     [libm],
-    override_options: [
-        'optimization=s',
-        'debug=false',
-        'buildtype=minsize',
-        'b_ndebug=true',
-        'b_asneeded=true',
-        'b_pie=false',
-        'strip=true',
-    ],
-)
-luac_gen = generator(luac, arguments: ['@INPUT@', '@EXTRA_ARGS@', '-o', '@OUTPUT@'],
-                           output:    '@BASENAME@')
-
-
-#
-# Compiler and Linker Flags, Part II
+# Compiler and Linker Flags
 #
 # Four macros of the utmost importance are defined here:
 #   - LUA_USER_H: Lua can import a custom header if this is defined.
@@ -83,6 +48,9 @@ luac_gen = generator(luac, arguments: ['@INPUT@', '@EXTRA_ARGS@', '-o', '@OUTPUT
 #         lua.c and luac.c respectively, for the purpose of compiling both into
 #         the same library.
 #
+c_args  = []
+c_args += IS_HOST_POSIX ? ['-DLUA_USE_POSIX']  : []
+c_args += IS_HOST_SUNOS ? ['-D_REENTRANT']     : []
 c_args += libdl.found() ? ['-DLUA_USE_DLOPEN'] : []
 c_args += ['-DLUA_USER_H="luabenz.h"']
 custom_lua_sta = static_library(
