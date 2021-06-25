@@ -33,7 +33,84 @@ libdl       = cc.find_library('dl', required: false)
 #
 # Source Code
 #
-subdir('src')
+# Lua's source code must be patched, but Meson does not make it entirely easy
+# to do so. Meson does support *overlaying* files atop the source distribution,
+# but this requires a copy of the entire file, even for a single-line change.
+#
+# We contort ourselves into a pretzel here to patch Lua's source code using
+# patchfiles.
+#
+lua_inc = include_directories('.')
+patch_script = files('apply-patches.sh')
+patch_filenames = files([
+    '000-lua-5.4.3-postrel.patch',     # Update from 5.4.3 with postrelease bugfixes
+    '001-main-function-rename.patch',  # Allow renaming main()
+    '002-luaopen-extra-preload.patch', # Allow preloading of statically-linked libraries.
+    '003-searcher-static-C.patch',     # Allow demand-loading of statically-linked libraries.
+    '004-searcher-static-Lua.patch',   # Allow demand-loading of statically-linked libraries.
+])
+core_filenames = [
+    'lapi.c',    'lcode.c',
+    'lctype.c',  'ldebug.c',
+    'ldo.c',     'ldump.c',
+    'lfunc.c',   'lgc.c',
+    'llex.c',    'lmem.c',
+    'lobject.c', 'lopcodes.c',
+    'lparser.c', 'lstate.c',
+    'lstring.c', 'ltable.c',
+    'ltm.c',     'lundump.c',
+    'lvm.c',     'lzio.c',
+]
+aux_filenames = ['lauxlib.c']
+lib_filenames = [
+   'lbaselib.c', 'lcorolib.c',
+   'ldblib.c',   'liolib.c',
+   'lmathlib.c', 'loadlib.c',
+   'loslib.c',   'lstrlib.c',
+   'ltablib.c',  'lutf8lib.c',
+   'linit.c',
+]
+hdr_filenames = [
+    'lapi.h',     'lauxlib.h',
+    'lcode.h',    'lctype.h',
+    'ldebug.h',   'ldo.h',
+    'lfunc.h',    'lgc.h',
+    'ljumptab.h', 'llex.h',
+    'llimits.h',  'lmem.h',
+    'lobject.h',  'lopcodes.h',
+    'lopnames.h', 'lparser.h',
+    'lprefix.h',  'lstate.h',
+    'lstring.h',  'ltable.h',
+    'ltm.h',      'luaconf.h',
+    'lua.h',      'lua.hpp',
+    'lualib.h',   'lundump.h',
+    'lvm.h',      'lzio.h',
+    # Custom:
+    'luabenz.h',
+]
+lua_filenames  = ['lua.c']
+luac_filenames = ['luac.c']
+inputs         = []
+outputs        = []
+outvar         = []
+foreach v: ['core','aux','lib','hdr','lua','luac']
+  foreach f: get_variable(v+'_filenames')
+    inputs  += ['src'/f]
+    outputs += [f]
+    outvar  += [v+'_files']
+  endforeach
+endforeach
+all_patched_files = custom_target(
+    'Lua patched files',
+    command:      [patch_script, '@CURRENT_SOURCE_DIR@', '@OUTDIR@', '@INPUT@'],
+    input:        files(inputs),
+    output:       outputs,
+    depend_files: patch_filenames,
+    install:      false,
+)
+foreach i: range(inputs.length())
+  set_variable(outvar[i], get_variable(outvar[i], []) + [all_patched_files[i]])
+endforeach
 
 
 #
@@ -42,8 +119,8 @@ subdir('src')
 # Four macros of the utmost importance are defined here:
 #   - LUA_USER_H: Lua can import a custom header if this is defined.
 #         We set it to "luabenz.h".
-#   - LUA_USE_STATIC_LFS: We have patched Lua to optionally allow one to
-#         statically link luafilesystem into the core. We enable this option.
+#   - LUA*_EXTRA: We have patched Lua to optionally allow one to
+#         statically link Lua code into the core. We enable these options.
 #   - main_lua & main_luac: We rename main() to main_lua() and main_luac() for
 #         lua.c and luac.c respectively, for the purpose of compiling both into
 #         the same library.
