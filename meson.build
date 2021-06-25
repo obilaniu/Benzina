@@ -89,6 +89,7 @@ project_lz4       = subproject('lz4')
 project_linenoise = subproject('linenoise')
 project_lua       = subproject('lua')
 project_lfs       = subproject('lfs')
+project_lpeg      = subproject('lpeg')
 
 
 #

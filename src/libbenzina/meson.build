@@ -8,13 +8,14 @@ libbenzina_name      = 'libbenzina'
 libbenzina_linkname  = libbenzina_name+'.so'
 libbenzina_soversion = meson.project_version().split('.')[0]
 libbenzina_soname    = libbenzina_linkname+'.'+libbenzina_soversion
+libbenzina_lua       = {}
+libbenzina_lua      += project_lpeg.get_variable('lpeg_lua')
 libbenzina_dict      = {
     'c_args':     ['-DBENZINA_IS_SHARED=1', '-DBENZINA_IS_BUILDING=1'],
     'link_args':  ['-Wl,-soname,'+libbenzina_soname]+force_link_args+special_link_args,
     'link_with':  [],
     'link_whole': [],
     'link_deps':  [],
-    'lua_srcs':   {},
     'objs': [],
     'deps': [
         threads, libm, libdl,
@@ -22,6 +23,7 @@ libbenzina_dict      = {
         project_linenoise.get_variable('linenoise_dep'),
         project_lua      .get_variable('custom_lua_dep'),
         project_lfs      .get_variable('lfs_dep'),
+        project_lpeg     .get_variable('lpeg_dep'),
     ],
     'incs': [benzina_incs],
     'srcs': files(
@@ -41,13 +43,12 @@ subdir('itu')
 
 
 #
-# Collect and Pack Lua Code.
+# Pack Lua Code.
 #
-# Translate the libbenzina_dict['lua_srcs'] dictionary of {package: files} to
-# a command-line invocation of the packer script, which uses a native-built lz4
-# executable to compress the Lua code into an LZ4 frame. At runtime, the
-# constructor and library initializer unpack themselves into statically-
-# allocated space in .bss.
+# Translate the libbenzina_lua dictionary of {package: files} to a command-line
+# invocation of the packer script, which uses a native-built lz4 executable to
+# compress the Lua code into an LZ4 frame. At runtime, the constructor and
+# library initializer unpack themselves into statically-allocated .bss space.
 #
 # The packer is invoked as:
 #     python lz4-lua-pack.py
@@ -63,7 +64,7 @@ subdir('itu')
 #
 
 lua_input_list = []
-foreach name, file: libbenzina_dict['lua_srcs']
+foreach name, file: libbenzina_lua
   lua_input_list += [name, file]
 endforeach
 if lua_input_list.length() > 0

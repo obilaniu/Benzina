@@ -1,0 +1,6 @@
+[wrap-file]
+directory = lpeg-1.0.2
+source_filename = lpeg-1.0.2.tar.gz
+source_url = http://www.inf.puc-rio.br/~roberto/lpeg/lpeg-1.0.2.tar.gz
+source_hash = 48d66576051b6c78388faad09b70493093264588fcd0f258ddaab1cdd4a15ffe
+patch_directory = lpeg
