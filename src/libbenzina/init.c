@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <lz4frame.h>
+#include "internal.h"
 #include "benzina/benzina.h"
 
 
@@ -17,12 +18,7 @@
  */
 
 BENZINA_STATIC void benz_init_lz4(void){
-    typedef struct{const char* src_start, *src_end;
-                         char* dst_start, *dst_end;} lz4_entry;
-    extern const lz4_entry __lz4_decompress_array_start[];
-    extern const lz4_entry __lz4_decompress_array_end[];
-    const lz4_entry* p;
-    
+    const BENZ_LZ4_ENTRY* p;
     LZ4F_errorCode_t            derr;
     LZ4F_decompressionContext_t dctx = NULL;
     LZ4F_decompressOptions_t    dopt = {.stableDst=1};

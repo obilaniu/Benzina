@@ -82,6 +82,13 @@
 # define BENZINA_ATTRIBUTE_NOINLINE
 #endif
 
+/* Section */
+#if __GNUC__
+# define BENZINA_ATTRIBUTE_SECTION(sectionname) __attribute__((section(sectionname)))
+#else
+# define BENZINA_ATTRIBUTE_SECTION(sectionname)
+#endif
+
 
 /* End Include Guards */
 #endif
