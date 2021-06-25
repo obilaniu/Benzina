@@ -27,6 +27,6 @@ lpeg_dep = declare_dependency(
     include_directories: lpeg_inc,
     link_with:           lpeg_sta,
     link_whole:          [
-        static_library('lpeg-linker', files('linker.S'), pic: true, name_prefix: ''),
+        static_library('lpeg-linker', files('linker.noarch.S'), pic: true, name_prefix: ''),
     ],
 )

@@ -45,6 +45,6 @@ lz4_dep = declare_dependency(
     include_directories:   lz4_inc,
     link_with:             lz4_sta,
     link_whole:            [
-        static_library('lz4-linker', files('linker.S'), pic: true, name_prefix: ''),
+        static_library('lz4-linker', files('linker.noarch.S'), pic: true, name_prefix: ''),
     ],
 )

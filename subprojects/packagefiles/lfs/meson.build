@@ -21,6 +21,6 @@ lfs_dep = declare_dependency(
     include_directories: lfs_inc,
     link_with:           lfs_sta,
     link_whole:          [
-        static_library('lfs-linker', files('linker.S'), pic: true, name_prefix: ''),
+        static_library('lfs-linker', files('linker.noarch.S'), pic: true, name_prefix: ''),
     ],
 )

@@ -154,6 +154,6 @@ custom_lua_dep = declare_dependency(
     compile_args:        c_args,
     link_with:           custom_lua_sta,
     link_whole:          [
-        static_library('lua-linker', files('linker.S'), pic: true, name_prefix: ''),
+        static_library('lua-linker', files('linker.noarch.S'), pic: true, name_prefix: ''),
     ],
 )

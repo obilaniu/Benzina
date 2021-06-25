@@ -34,7 +34,7 @@ libbenzina_dict      = {
         'intops.c',
         'ptrops.c',
         'version.c',
-        'internal.S',
+        'internal.noarch.S',
         'main.c',
     ),
 }
