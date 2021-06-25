@@ -9,7 +9,8 @@ libbenzina_linkname  = libbenzina_name+'.so'
 libbenzina_soversion = meson.project_version().split('.')[0]
 libbenzina_soname    = libbenzina_linkname+'.'+libbenzina_soversion
 libbenzina_lua       = {}
-libbenzina_lua      += project_lpeg.get_variable('lpeg_lua')
+libbenzina_lua      += project_lpeg    .get_variable('lpeg_lua')
+libbenzina_lua      += project_penlight.get_variable('penlight_lua')
 libbenzina_dict      = {
     'c_args':     ['-DBENZINA_IS_SHARED=1', '-DBENZINA_IS_BUILDING=1'],
     'link_args':  ['-Wl,-soname,'+libbenzina_soname]+force_link_args+special_link_args,
@@ -24,6 +25,7 @@ libbenzina_dict      = {
         project_lua      .get_variable('custom_lua_dep'),
         project_lfs      .get_variable('lfs_dep'),
         project_lpeg     .get_variable('lpeg_dep'),
+        project_penlight .get_variable('penlight_dep'),
     ],
     'incs': [benzina_incs],
     'srcs': files(
