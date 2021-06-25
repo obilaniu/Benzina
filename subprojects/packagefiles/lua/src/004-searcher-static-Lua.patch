@@ -1,0 +1,53 @@
+diff -ru a/src/loadlib.c b/src/loadlib.c
+--- a/src/loadlib.c	2021-06-22 00:59:55.984460562 -0400
++++ b/src/loadlib.c	2021-06-24 20:29:24.192621943 -0400
+@@ -621,6 +621,41 @@
+ }
+ 
+ 
++static int searcher_static_Lua (lua_State* L) {
++  const char *name = luaL_checkstring(L, 1);
++#ifdef LUATEXT_EXTRA
++# define CONCATX(x,y) x ## y
++# define CONCAT(x,y)  CONCATX(x,y)
++# define ARRAY(n) CONCAT(LUATEXT_EXTRA, n)
++  typedef struct{
++      const char* name;
++      const char* start;
++      const char* end;
++  } text_entry;
++  const text_entry* lib;
++  extern const text_entry ARRAY(_start)[];
++  extern const text_entry ARRAY(_end)[];
++  int stat;
++  for (lib = ARRAY(_start); lib < ARRAY(_end); lib++) {
++    if (strcmp(lib->name, name) == 0) { /* hit? */
++      stat = (luaL_loadbuffer(L, lib->start, lib->end-lib->start, name) == LUA_OK);
++      if (l_likely(stat))
++        return lua_pushliteral(L, ":static_Lua:"), 2;
++      else
++        return lua_pushfstring(L, "error loading statically-linked module '%s':\n\t%s",
++                                  name, lua_tostring(L, -1)), 1;
++        
++    }
++  }
++# undef CONCATX
++# undef CONCAT
++# undef ARRAY
++#endif
++  lua_pushfstring(L, "no Lua module '%s' statically linked in", name);
++  return 1;
++}
++
++
+ static int searcher_static_C (lua_State* L) {
+   const char *name = luaL_checkstring(L, 1);
+ #ifdef LUAOPEN_EXTRA
+@@ -735,6 +770,7 @@
+ static void createsearcherstable (lua_State *L) {
+   static const lua_CFunction searchers[] =
+     {searcher_preload,
++     searcher_static_Lua,
+      searcher_static_C,
+      searcher_Lua, searcher_C, searcher_Croot, NULL};
+   int i;

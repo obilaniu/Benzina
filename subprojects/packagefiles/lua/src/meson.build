@@ -53,6 +53,7 @@ patch_filenames = [
     '001-main-function-rename.patch',  # Allow renaming main()
     '002-luaopen-extra-preload.patch', # Allow preloading of statically-linked libraries.
     '003-searcher-static-C.patch',     # Allow demand-loading of statically-linked libraries.
+    '004-searcher-static-Lua.patch',   # Allow demand-loading of statically-linked libraries.
 ]
 lua_inc = include_directories('.')
 
