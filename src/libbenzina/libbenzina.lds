@@ -21,6 +21,14 @@
  *     - Array end:           lz4_entry __lz4_decompress_array_end[]
  *     - Every entry represents one decompression order.
  *
+ * .section .tool_array, "aw"
+ *     - A concatenation of entries
+ *           struct entry{const char* name; int(*func)(int argc, char* argv[]);};
+ *     - Array start: entry __tool_array_start[]
+ *     - Array end:   entry __tool_array_end[]
+ *     - Every <name> is a command/tool name. Every <func> is its corresponding
+ *       main() function entry point.
+ *
  * .section .lua.open_array, "aw"
  *     - A concatenation of entries
  *           struct luaL_Reg{const char* name; lua_CFunction func;};
@@ -77,6 +85,14 @@ SECTIONS {
         KEEP(*(.lz4.decompress_array .lz4.decompress_array.*));
         HIDDEN(__lz4_decompress_array_end = .);
         QUAD(0); QUAD(0); QUAD(0); QUAD(0); /* NULL sentinel */
+    }
+    .tool_array : ALIGN(16) {
+        HIDDEN(__tool_array_start = .);
+        KEEP(*main*.o(.tool_array));
+        ASSERT(. > __tool_array_start, "Failed to register Lua/Luac tools!");
+        KEEP(*(.tool_array));
+        HIDDEN(__tool_array_end = .);
+        QUAD(0); QUAD(0);          /* NULL sentinel */
     }
     .lua.open_array : ALIGN(16) {
         HIDDEN(__lua_open_array_start = .);

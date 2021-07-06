@@ -1,6 +1,7 @@
 /* Includes */
 #include <stdio.h>
 #include <string.h>
+#include "internal.h"
 #include "benzina/benzina.h"
 
 
@@ -8,9 +9,8 @@ extern int main_luac(int argc, char* argv[]);
 extern int main_lua (int argc, char* argv[]);
 
 
-
-BENZINA_STATIC const char* strbasename(const char* s){
-    const char* r = strrchr(s, '/');
+BENZINA_STATIC char* strbasename(char* s){
+    char* r = strrchr(s, '/');
     return r ? r+1 : s;
 }
 BENZINA_STATIC int strequals(const char* s, const char* p){
@@ -20,16 +20,18 @@ BENZINA_STATIC int strstartswith(const char* s, const char* prefix){
     size_t ls=strlen(s), lp=strlen(prefix);
     return ls<lp ? 0 : memcmp(s, prefix, lp)==0;
 }
+BENZINA_STATIC int toolequals(const char* s, const char* tool){
+    return strstartswith(s, "benz-") && strequals(s+5, tool);
+}
 
 
 BENZINA_STATIC int main_license(int argc, char* argv[]){
     (void)argc;
     (void)argv;
-    extern const char license_benzina[];
     printf("%s\n", license_benzina);
     return 0;
 }
-BENZINA_STATIC int no_main(int argc, char* argv[]){
+BENZINA_STATIC int main_none(int argc, char* argv[]){
     (void)argc;
     (void)argv;
     printf("Benzina version: %s\n"
@@ -67,37 +69,52 @@ BENZINA_STATIC int no_main(int argc, char* argv[]){
  */
 
 BENZINA_HIDDEN int main(int argc, char* argv[]){
-    const char* basename;
+    char* basename;
+    const BENZ_TOOL_ENTRY* t;
     
     
     /* Should we be execve()'d with no args or (more strangely) no name, simply
      * print our own configuration. */
+    char  fake_arg0[] = "";
+    char* fake_argv[] = {fake_arg0, NULL};
     if(argc<=0 || !argv[0] || !*argv[0])
-        return no_main(argc, argv);
+        return main_none(1, fake_argv);
     
+    
+    /* Otherwise, check if the basename is empty, prefixed with luac/lua or
+     * the single argument and dispatch these as special cases. */
     basename = strbasename(argv[0]);
-    if(!basename)
-        return no_main(argc, argv);
+    if(!basename || !*basename)              return main_none(argc, argv);
+    else if(strstartswith(basename, "luac")) return main_luac(argc, argv);
+    else if(strstartswith(basename, "lua"))  return main_lua (argc, argv);
     
     
-    if     (strstartswith(basename, "luac"))
-        return main_luac(argc, argv);
-    else if(strstartswith(basename, "lua"))
-        return main_lua(argc, argv);
+    /* Dispatch on tool match in basename of first argument:
+     * `benz-<toolname>` */
+    for(t=__tool_array_start; t<__tool_array_end; t++)
+        if(toolequals(basename, t->name))
+            return t->func(argc, argv);
     
     
-    if(argc<=1)
-        return no_main(argc, argv);
+    /* If called with any other name and only one argument, print own
+     * configuration. */
+    if(argc <= 1) return main_none(argc, argv);
     
     
-    if     (strequals(argv[1], "luac"))
-        return main_luac(argc-1, argv+1);
-    else if(strequals(argv[1], "lua"))
-        return main_lua(argc-1, argv+1);
-    else if(strequals(argv[1], "license") ||
-            strequals(argv[1], "licenses"))
-        return main_license(argc-1, argv+1);
+    /* Dispatch on exact match in second argument: */
+    for(t=__tool_array_start; t<__tool_array_end; t++)
+        if(strequals(argv[1], t->name))
+            return t->func(argc-1, argv+1);
     
     
-    return no_main(argc, argv);
+    /* Unknown tool. */
+    return main_none(argc, argv);
 }
+
+
+/* Register tools */
+BENZINA_TOOL_REGISTER("",         main_none)
+BENZINA_TOOL_REGISTER("lua",      main_lua)
+BENZINA_TOOL_REGISTER("luac",     main_luac)
+BENZINA_TOOL_REGISTER("license",  main_license)
+BENZINA_TOOL_REGISTER("licenses", main_license)

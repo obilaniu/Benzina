@@ -35,6 +35,10 @@
  *   - BENZINA_LUAOPEN_REGISTER_PRELOAD(name, func): As with
  *     BENZINA_LUAOPEN_REGISTER(name, func), but additionally mark the module
  *     for preloading into every Lua state.
+ *   - BENZINA_TOOL_REGISTER(name, func): Registers a tool's main() entry
+ *     point with the libbenzina main() entry point to enable dispatch. If
+ *     tool "name" is requested, the associated int main(int argc, char* argv[])
+ *     function is called.
  * 
  * The other linker constructed arrays don't have macros to add additional
  * entries because for them the optimal solution is unlikely to be within the
@@ -43,16 +47,21 @@
  * it can benefit from LZ4 compression.
  */
 
+#define ____BENZINA_REGISTER(a,b) a ## b
+#define ___BENZINA_REGISTER(a,b)  ____BENZINA_REGISTER(a,b)
+#define __BENZINA_REGISTER(a)     ___BENZINA_REGISTER(a, __COUNTER__)
 #define BENZINA_LUAOPEN_REGISTER(name, func)                      \
-    extern int (func)(lua_State *L);                              \
     BENZINA_ATTRIBUTE_USED                                        \
     BENZINA_ATTRIBUTE_SECTION(".lua.open_array")                  \
-    static const luaL_Reg __benz_luaopen_entry_##__COUNTER__ = {("" name),(func)};
+    static const luaL_Reg __BENZINA_REGISTER(__benz_luaopen_entry_) = {("" name),(func)};
 #define BENZINA_LUAOPEN_REGISTER_PRELOAD(name, func)              \
-    extern int (func)(lua_State *L);                              \
     BENZINA_ATTRIBUTE_USED                                        \
     BENZINA_ATTRIBUTE_SECTION(".lua.open_array.preload")          \
-    static const luaL_Reg __benz_luaopen_entry_##__COUNTER__ = {("" name),(func)};
+    static const luaL_Reg __BENZINA_REGISTER(__benz_luaopen_entry_) = {("" name),(func)};
+#define BENZINA_TOOL_REGISTER(name, func)                         \
+    BENZINA_ATTRIBUTE_USED                                        \
+    BENZINA_ATTRIBUTE_SECTION(".tool_array")                      \
+    static const BENZ_TOOL_ENTRY __BENZINA_REGISTER(__benz_tool_entry_) = {("" name),(func)};
 
 
 
@@ -82,6 +91,15 @@ struct BENZ_LZ4_ENTRY{
 };
 BENZINA_HIDDEN extern const BENZ_LZ4_ENTRY __lz4_decompress_array_start[];
 BENZINA_HIDDEN extern const BENZ_LZ4_ENTRY __lz4_decompress_array_end[];
+
+
+/*** .tool_array ***/
+typedef struct BENZ_TOOL_ENTRY BENZ_TOOL_ENTRY;
+struct BENZ_TOOL_ENTRY{
+    const char* name; int (*func)(int argc, char* argv[]);
+};
+BENZINA_HIDDEN extern const BENZ_TOOL_ENTRY __tool_array_start[];
+BENZINA_HIDDEN extern const BENZ_TOOL_ENTRY __tool_array_end[];
 
 
 /*** .lua.open_array ***/
