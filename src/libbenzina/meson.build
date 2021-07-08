@@ -4,16 +4,18 @@
 # Contains a lot of the "generic" logic for data-loading, as well as ProtoBuf
 # parsing code.
 #
-libbenzina_name      = 'libbenzina'
-libbenzina_linkname  = libbenzina_name+'.so'
+libbenzina_name      = 'benzina'
+libbenzina_libname   = 'lib'+libbenzina_name
+libbenzina_linkname  = libbenzina_libname+'.so'
 libbenzina_soversion = meson.project_version().split('.')[0]
 libbenzina_soname    = libbenzina_linkname+'.'+libbenzina_soversion
+libbenzina_sonamearg = IS_HOST_DARWIN ? [] : ['-Wl,-soname,'+libbenzina_soname]
 libbenzina_lua       = {}
 libbenzina_lua      += project_lpeg    .get_variable('lpeg_lua')
 libbenzina_lua      += project_penlight.get_variable('penlight_lua')
 libbenzina_dict      = {
     'c_args':     ['-DBENZINA_IS_SHARED=1', '-DBENZINA_IS_BUILDING=1'],
-    'link_args':  ['-Wl,-soname,'+libbenzina_soname]+force_link_args+special_link_args,
+    'link_args':  libbenzina_sonamearg+force_link_args+special_link_args,
     'link_with':  [],
     'link_whole': [],
     'link_deps':  [],
@@ -159,10 +161,34 @@ endif
 # (static_library, executable, custom_target, declare_dependency) except the
 # one we might truly have intended (shared_library).
 #
+if IS_HOST_DARWIN
+  libbenzina_sha = shared_library(
+      libbenzina_name,       libbenzina_dict['srcs'],
+      include_directories:   libbenzina_dict['incs'],
+      c_args:                libbenzina_dict['c_args'],
+      dependencies:          libbenzina_dict['deps'],
+      objects:               libbenzina_dict['objs'],
+      link_args:             libbenzina_dict['link_args'],
+      link_with:             libbenzina_dict['link_with'],
+      link_whole:            libbenzina_dict['link_whole'],
+      link_depends:          libbenzina_dict['link_deps'],
+      gnu_symbol_visibility: 'hidden',
+      build_rpath:           librpath,
+      install_rpath:         librpath,
+      install_dir:           libdir,
+      install:               true,
+  )
+  libbenzina = declare_dependency(
+      include_directories: benzina_incs,
+      compile_args:        ['-DBENZINA_IS_SHARED=1'],
+      link_with:           libbenzina_sha,
+  )
+  subdir_done()
+endif
 libbenzina_sha = declare_dependency(dependencies: libbenzina_dict['deps'])
 libbenzina_sha = libbenzina_sha.partial_dependency(compile_args: true, includes: true)
 libbenzina_sha = static_library( # *STATIC-PIC*! SEE NOTES ABOVE!
-    libbenzina_name,       libbenzina_dict['srcs'],
+    libbenzina_libname,    libbenzina_dict['srcs'],
     include_directories:   libbenzina_dict['incs'],
     c_args:                libbenzina_dict['c_args'],
     dependencies:          libbenzina_sha,
@@ -174,7 +200,7 @@ libbenzina_sha = declare_dependency(dependencies: libbenzina_dict['deps'],
                                     link_whole:   libbenzina_sha)
 libbenzina_sha = libbenzina_sha.partial_dependency(link_args: true, links: true)
 libbenzina_sha = executable(
-    libbenzina_name,       [],   # *MUST BE EMPTY*! SEE NOTES ABOVE!
+    libbenzina_libname,    [],   # *MUST BE EMPTY*! SEE NOTES ABOVE!
     objects:               libbenzina_dict['objs'],
     dependencies:          libbenzina_sha,
     link_args:             libbenzina_dict['link_args'],
@@ -191,7 +217,7 @@ libbenzina_sha = executable(
     install:               true,
 )
 libbenzina_sha = custom_target(  # MODIFIES IN-PLACE!
-    'patched '+libbenzina_name,
+    'patched '+libbenzina_libname,
     command:          [python, elf_strip_df_1_pie_py, '@INPUT0@', '@OUTPUT@'],
     input:            [libbenzina_sha],
     output:           [libbenzina_soname, libbenzina_linkname],

@@ -78,8 +78,84 @@ FUNCP_SIZE  = cc.sizeof(FUNCP)
 assert(CHARP_SIZE == cxx.sizeof(FUNCP), f'C and C++ compilers disagree on sizeof(@FUNCP@)!')
 assert(VOIDP_SIZE == CHARP_SIZE,        f'Pointers to void and char not of equal size!')
 assert(VOIDP_SIZE == FUNCP_SIZE,        f'Pointers to void and function not of equal size!')
-add_global_arguments([f'-DGASPOINTERSIZE=@VOIDP_SIZE@',
-                      f'-DGASPOINTERWORD=.@VOIDP_SIZE@byte'], language: ['c','cpp'])
+
+
+#
+# Add predefined macros identifying the:
+#   - C & C++ compilers
+#   - CPU family
+#   - Operating System
+#
+MACRO_COMPILER_CC   = 'BENZINA_COMPILER_'
+MACRO_COMPILER_CXX  = 'BENZINA_COMPILER_'
+MACRO_CPU_FAMILY    = 'BENZINA_CPU_FAMILY_'
+MACRO_OS            = 'BENZINA_OS_'
+MACRO_COMPILER_CC  += {'clang-cl': 'clang',
+                       'intel-cl': 'intel'}.get(CC_ID,  CC_ID)
+MACRO_COMPILER_CXX += {'clang-cl': 'clang',
+                       'intel-cl': 'intel'}.get(CXX_ID, CXX_ID)
+MACRO_CPU_FAMILY   += host_machine.cpu_family()
+MACRO_OS           += host_machine.system()
+MACRO_COMPILER_CC   = MACRO_COMPILER_CC .to_upper().underscorify()
+MACRO_COMPILER_CXX  = MACRO_COMPILER_CXX.to_upper().underscorify()
+MACRO_CPU_FAMILY    = MACRO_CPU_FAMILY  .to_upper().underscorify()
+MACRO_OS            = MACRO_OS          .to_upper().underscorify()
+add_global_arguments([f'-D@MACRO_COMPILER_CC@=1'],  language: 'c')
+add_global_arguments([f'-D@MACRO_COMPILER_CXX@=1'], language: 'cpp')
+add_global_arguments([f'-D@MACRO_CPU_FAMILY@=1',
+                      f'-D@MACRO_OS@=1',
+                      f'-DBENZINA_COMPILER_IDENTIFIED=1',
+                      f'-DBENZINA_CPU_FAMILY_IDENTIFIED=1',
+                      f'-DBENZINA_OS_IDENTIFIED=1'], language: ['c', 'cpp'])
+
+
+#
+# Add predefined macros for use by the preprocessed assembly code, identifying:
+#
+#   - Pointer size
+#   - Underscore prefixing
+#   - Section/segment+section names and attributes
+#
+# The section names must be <=15 characters long due to
+#   A) macOS's Mach-O binary format imposing a limitation of 16 characters and
+#   B) macOS's Mach-O binary format using a naming convention of
+#          __SEGM,__sect
+#      which we adhere to by underscorifying the equivalent ELF section name
+#      and adding an additional prefix underscore.
+#
+# Because of this, plus other difficulties, we do not currently support
+# preloading Lua modules in Lua states on macOS.
+#
+add_global_arguments([f'-DASM_PTR_SIZE=@VOIDP_SIZE@',
+                      f'-DASM_PTR_DECL=.@VOIDP_SIZE@byte'], language: ['c', 'cpp'])
+SECT_DICT = {
+    'BSS':                 {'name': '.bss',                    'elf_attr': '',                    'macho_segm': '__DATA', 'macho_attr': ''},
+    'CSTRING':             {'name': '.rodata.str1.1',          'elf_attr': '"aMS", @progbits, 1', 'macho_segm': '__TEXT', 'macho_attr': 'cstring_literals'},
+    'LICENSE':             {'name': '.license',                'elf_attr': '"a"',                 'macho_segm': '__TEXT', 'macho_attr': 'regular, no_dead_strip'},
+    'RODATALZ4':           {'name': '.rodata.lz4',             'elf_attr': '"a"',                 'macho_segm': '__TEXT', 'macho_attr': 'regular, no_dead_strip'},
+    'LZ4CMDARRAY':         {'name': '.lz4.cmd_array',          'elf_attr': '"aw"',                'macho_segm': '__DATA', 'macho_attr': 'regular, no_dead_strip'},
+    'TOOLARRAY':           {'name': '.tool_array',             'elf_attr': '"aw"',                'macho_segm': '__DATA', 'macho_attr': 'regular, no_dead_strip'},
+    'LUAOPENARRAY':        {'name': '.lua.open_array',         'elf_attr': '"aw"',                'macho_segm': '__DATA', 'macho_attr': 'regular, no_dead_strip'},
+    'LUAOPENARRAYPRELOAD': {'name': '.lua.open_array.preload', 'elf_attr': '"aw"',                'macho_segm': '__DATA', 'macho_attr': 'regular, no_dead_strip'},
+    'LUATEXTARRAY':        {'name': '.lua.text_array',         'elf_attr': '"aw"',                'macho_segm': '__DATA', 'macho_attr': 'regular, no_dead_strip'},
+}
+foreach sect, dict : SECT_DICT
+  if IS_HOST_DARWIN
+    sect_name = dict['macho_segm'] + ',_' + {
+        'LUAOPENARRAYPRELOAD': '.lua.open_array',  # Name too long for Mach-O
+        'CSTRING':             '.cstring',         # Mach-O uses __cstring for mergeable strings
+    }.get(sect, dict['name']).underscorify()
+    sect_attr = dict['macho_attr']
+  else
+    sect_name = dict['name']
+    sect_attr = dict['elf_attr']
+  endif
+  sect_attr = sect_attr == '' ? sect_attr : ', '+sect_attr
+  add_global_arguments([
+      f'-DASM_SECT_@sect@_NAME="@sect_name@"',
+      f'-DASM_SECT_@sect@_DECL=.section @sect_name@@sect_attr@',
+  ], language: ['c', 'cpp'])
+endforeach
 
 
 #
@@ -166,43 +242,6 @@ libdl       = cc.find_library('dl', required: IS_HOST_LINUX)
 librt       = cc.find_library('rt', required: IS_HOST_LINUX)
 openmp      = dependency('openmp',  required: false)
 threads     = dependency('threads')
-
-
-#
-# Add predefined macros identifying the:
-#   - C & C++ compilers
-#   - CPU family
-#   - Operating System
-#
-MACRO_COMPILER_CC   = 'BENZINA_COMPILER_'
-MACRO_COMPILER_CXX  = 'BENZINA_COMPILER_'
-MACRO_CPU_FAMILY    = 'BENZINA_CPU_FAMILY_'
-MACRO_OS            = 'BENZINA_OS_'
-MACRO_COMPILER_CC  += {'clang-cl': 'clang',
-                       'intel-cl': 'intel'}.get(CC_ID,  CC_ID)
-MACRO_COMPILER_CXX += {'clang-cl': 'clang',
-                       'intel-cl': 'intel'}.get(CXX_ID,  CXX_ID)
-MACRO_CPU_FAMILY   += host_machine.cpu_family()
-MACRO_OS           += host_machine.system()
-MACRO_COMPILER_CC   = MACRO_COMPILER_CC .to_upper().underscorify()
-MACRO_COMPILER_CXX  = MACRO_COMPILER_CXX.to_upper().underscorify()
-MACRO_CPU_FAMILY    = MACRO_CPU_FAMILY  .to_upper().underscorify()
-MACRO_OS            = MACRO_OS          .to_upper().underscorify()
-
-add_project_arguments(['-D'+MACRO_COMPILER_CC+'=1',
-                       '-DBENZINA_COMPILER_IDENTIFIED=1'], language: 'c')
-add_project_arguments(['-D'+MACRO_COMPILER_CXX+'=1',
-                       '-DBENZINA_COMPILER_IDENTIFIED=1'], language: 'cpp')
-
-add_project_arguments(['-D'+MACRO_CPU_FAMILY+'=1',
-                       '-DBENZINA_CPU_FAMILY_IDENTIFIED=1'], language: 'c')
-add_project_arguments(['-D'+MACRO_CPU_FAMILY+'=1',
-                       '-DBENZINA_CPU_FAMILY_IDENTIFIED=1'], language: 'cpp')
-
-add_project_arguments(['-D'+MACRO_OS+'=1',
-                       '-DBENZINA_OS_IDENTIFIED=1'], language: 'c')
-add_project_arguments(['-D'+MACRO_OS+'=1',
-                       '-DBENZINA_OS_IDENTIFIED=1'], language: 'cpp')
 
 
 #

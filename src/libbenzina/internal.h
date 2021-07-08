@@ -52,15 +52,15 @@
 #define __BENZINA_REGISTER(a)     ___BENZINA_REGISTER(a, __COUNTER__)
 #define BENZINA_LUAOPEN_REGISTER(name, func)                      \
     BENZINA_ATTRIBUTE_USED                                        \
-    BENZINA_ATTRIBUTE_SECTION(".lua.open_array")                  \
+    BENZINA_ATTRIBUTE_SECTION(ASM_SECT_LUAOPENARRAY_NAME)         \
     static const luaL_Reg __BENZINA_REGISTER(__benz_luaopen_entry_) = {("" name),(func)};
 #define BENZINA_LUAOPEN_REGISTER_PRELOAD(name, func)              \
     BENZINA_ATTRIBUTE_USED                                        \
-    BENZINA_ATTRIBUTE_SECTION(".lua.open_array.preload")          \
+    BENZINA_ATTRIBUTE_SECTION(ASM_SECT_LUAOPENARRAYPRELOAD_NAME)  \
     static const luaL_Reg __BENZINA_REGISTER(__benz_luaopen_entry_) = {("" name),(func)};
 #define BENZINA_TOOL_REGISTER(name, func)                         \
     BENZINA_ATTRIBUTE_USED                                        \
-    BENZINA_ATTRIBUTE_SECTION(".tool_array")                      \
+    BENZINA_ATTRIBUTE_SECTION(ASM_SECT_TOOLARRAY_NAME)            \
     static const BENZ_TOOL_ENTRY __BENZINA_REGISTER(__benz_tool_entry_) = {("" name),(func)};
 
 
@@ -83,14 +83,14 @@
 BENZINA_HIDDEN extern const char license_benzina[];
 
 
-/*** .lz4.decompress_array ***/
+/*** .lz4.cmd_array ***/
 typedef struct BENZ_LZ4_ENTRY BENZ_LZ4_ENTRY;
 struct BENZ_LZ4_ENTRY{
     const char* src_start, *src_end;
     char*       dst_start, *dst_end;
 };
-BENZINA_HIDDEN extern const BENZ_LZ4_ENTRY __lz4_decompress_array_start[];
-BENZINA_HIDDEN extern const BENZ_LZ4_ENTRY __lz4_decompress_array_end[];
+BENZINA_HIDDEN extern const BENZ_LZ4_ENTRY __lz4_cmd_array_start[];
+BENZINA_HIDDEN extern const BENZ_LZ4_ENTRY __lz4_cmd_array_end[];
 
 
 /*** .tool_array ***/

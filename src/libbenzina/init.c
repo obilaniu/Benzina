@@ -24,8 +24,8 @@ BENZINA_STATIC void benz_init_lz4(void){
     LZ4F_decompressOptions_t    dopt = {.stableDst=1};
     size_t                      dO, dB, dM, sO, sB, sM;
     
-    for(p=__lz4_decompress_array_start;
-        p<__lz4_decompress_array_end; p++){
+    for(p=__lz4_cmd_array_start;
+        p<__lz4_cmd_array_end; p++){
         if(p->src_end>p->src_start && p->dst_end>p->dst_start){
             sB = sM = p->src_end - p->src_start;
             dB = dM = p->dst_end - p->dst_start;

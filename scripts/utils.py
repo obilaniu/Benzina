@@ -105,28 +105,29 @@ class build_ext(setuptools.command.build_ext.build_ext, build_mixin):
         subprocess.check_call(["ninja", "install"],
                               stdin  = subprocess.DEVNULL,
                               cwd    = self.build_meson)
-        # START HACK
-        # Due to Meson build-system shenanigans, what actually ends up installed
-        # does not include the symlinks
-        #     libbenzina.so -> libbenzina.so.X -> libbenzina.so.X.Y.Z
-        # Instead, they are all regular file copies of libbenzina.so.X.Y.Z.
-        # Replace them with the desired symlinks.
-        target_name = "libbenzina.so."
-        for meson_out_file in self._get_meson_outputs():
-            if os.path.basename(meson_out_file).startswith(os.path.basename(target_name)):
-                target_name = meson_out_file
-        libbenzina_so_x_y_z      = target_name
-        libbenzina_so_x          = '.'.join(libbenzina_so_x_y_z.split('.')[:-2])
-        libbenzina_so            = '.'.join(libbenzina_so_x_y_z.split('.')[:-3])
-        base_libbenzina_so_x_y_z = os.path.basename(libbenzina_so_x_y_z)
-        base_libbenzina_so_x     = os.path.basename(libbenzina_so_x)
-        build_libbenzina_so_x    = os.path.join(self.build_lib, libbenzina_so_x)
-        build_libbenzina_so      = os.path.join(self.build_lib, libbenzina_so)
-        os.unlink (build_libbenzina_so_x)
-        os.unlink (build_libbenzina_so)
-        os.symlink(base_libbenzina_so_x_y_z, build_libbenzina_so_x)
-        os.symlink(base_libbenzina_so_x,     build_libbenzina_so)
-        # END HACK
+        if sys.platform != 'darwin':
+            # START HACK
+            # Due to Meson build-system shenanigans, what actually ends up installed
+            # does not include the symlinks
+            #     libbenzina.so -> libbenzina.so.X -> libbenzina.so.X.Y.Z
+            # Instead, they are all regular file copies of libbenzina.so.X.Y.Z.
+            # Replace them with the desired symlinks.
+            target_name = "libbenzina.so."
+            for meson_out_file in self._get_meson_outputs():
+                if os.path.basename(meson_out_file).startswith(os.path.basename(target_name)):
+                    target_name = meson_out_file
+            libbenzina_so_x_y_z      = target_name
+            libbenzina_so_x          = '.'.join(libbenzina_so_x_y_z.split('.')[:-2])
+            libbenzina_so            = '.'.join(libbenzina_so_x_y_z.split('.')[:-3])
+            base_libbenzina_so_x_y_z = os.path.basename(libbenzina_so_x_y_z)
+            base_libbenzina_so_x     = os.path.basename(libbenzina_so_x)
+            build_libbenzina_so_x    = os.path.join(self.build_lib, libbenzina_so_x)
+            build_libbenzina_so      = os.path.join(self.build_lib, libbenzina_so)
+            os.unlink (build_libbenzina_so_x)
+            os.unlink (build_libbenzina_so)
+            os.symlink(base_libbenzina_so_x_y_z, build_libbenzina_so_x)
+            os.symlink(base_libbenzina_so_x,     build_libbenzina_so)
+            # END HACK
         super().run()
     
     def copy_extensions_to_source(self):

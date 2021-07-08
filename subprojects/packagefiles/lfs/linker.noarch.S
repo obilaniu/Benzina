@@ -1,11 +1,15 @@
-.section .license, "a"
+ASM_SECT_LICENSE_DECL
     .ascii  "luafilesystem license:\n\n"
     .incbin "./LICENSE"
     .ascii  "\n\n"
 
-.section .rodata.str1.1, "aMS", @progbits, 1
+ASM_SECT_CSTRING_DECL
 .Llfs_module_name:
     .asciz "lfs"
 
-.section .lua.open_array.preload, "aw"
-    GASPOINTERWORD .Llfs_module_name, luaopen_lfs
+ASM_SECT_LUAOPENARRAYPRELOAD_DECL
+#if BENZINA_OS_DARWIN
+    ASM_PTR_DECL .Llfs_module_name, _luaopen_lfs
+#else
+    ASM_PTR_DECL .Llfs_module_name, luaopen_lfs
+#endif

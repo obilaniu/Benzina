@@ -12,12 +12,12 @@ if __name__ == "__main__":
     
     payload_unc = bytearray()
     with open(out_S, "w") as f:
-        f.write('.section .rodata.str1.1, "aMS", @progbits, 1\n')
+        f.write('ASM_SECT_CSTRING_DECL\n')
         for i, name in enumerate(sortednames):
             f.write(f'    .Lname{i}: .asciz "{name}"\n')
         f.write('\n\n')
-        f.write('.section .bss\n')
-        f.write('.align 4096\n')
+        f.write('ASM_SECT_BSS_DECL\n')
+        f.write('.p2align 12\n')
         f.write('.Ldst_start:\n')
         for i, name in enumerate(sortednames):
             filecontents = open(D[name], "rb").read()
@@ -26,11 +26,11 @@ if __name__ == "__main__":
             f.write(f'.Lend{i}:   .skip 1\n')
         f.write('.Ldst_end:\n')
         f.write('    .skip 8\n')
-        f.write('.align 4096\n')
+        f.write('.p2align 12\n')
         f.write('\n\n')
-        f.write('.section .lua.text_array, "aw", @progbits\n')
+        f.write('ASM_SECT_LUATEXTARRAY_DECL\n')
         for i, name in enumerate(sortednames):
-            f.write(f'    GASPOINTERWORD .Lname{i}, .Lstart{i}, .Lend{i}\n')
+            f.write(f'    ASM_PTR_DECL .Lname{i}, .Lstart{i}, .Lend{i}\n')
         f.write('\n\n')
         
         #
@@ -46,11 +46,11 @@ if __name__ == "__main__":
         incbinpath = os.path.relpath(out_lz4, os.path.dirname(out_S))
         incbinsize = os.stat(out_lz4, follow_symlinks=True).st_size
         
-        f.write('.section .rodata.lz4, "a", @progbits\n')
+        f.write('ASM_SECT_RODATALZ4_DECL\n')
         f.write('.Lsrc_start:\n')
         f.write(f'    .incbin "{incbinpath}", 0, {incbinsize}\n')
         f.write('.Lsrc_end:\n')
         f.write('    .8byte 0\n')
         f.write('\n\n')
-        f.write('.section .lz4.decompress_array, "aw", @progbits\n')
-        f.write('    GASPOINTERWORD .Lsrc_start, .Lsrc_end, .Ldst_start, .Ldst_end\n')
+        f.write('ASM_SECT_LZ4CMDARRAY_DECL\n')
+        f.write('    ASM_PTR_DECL .Lsrc_start, .Lsrc_end, .Ldst_start, .Ldst_end\n')

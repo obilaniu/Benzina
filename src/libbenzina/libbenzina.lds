@@ -12,13 +12,13 @@
  *     - Linker script terminates string concatenation with a NUL byte to make
  *       the symbol above usable as a C string.
  *
- * .section .lz4.decompress_array, "aw"
+ * .section .lz4.cmd_array, "aw"
  *     - A concatenation of entries
  *           struct lz4_entry{const char* src_start, *src_end;
  *                            char*       dst_start, *dst_end;};
  *       somewhat modelled on .init_array.
- *     - Array start:         lz4_entry __lz4_decompress_array_start[]
- *     - Array end:           lz4_entry __lz4_decompress_array_end[]
+ *     - Array start:         lz4_entry __lz4_cmd_array_start[]
+ *     - Array end:           lz4_entry __lz4_cmd_array_end[]
  *     - Every entry represents one decompression order.
  *
  * .section .tool_array, "aw"
@@ -80,10 +80,10 @@ SECTIONS {
 } INSERT AFTER .rodata;
 
 SECTIONS {
-    .lz4.decompress_array : ALIGN(32) {
-        HIDDEN(__lz4_decompress_array_start = .);
-        KEEP(*(.lz4.decompress_array .lz4.decompress_array.*));
-        HIDDEN(__lz4_decompress_array_end = .);
+    .lz4.cmd_array : ALIGN(32) {
+        HIDDEN(__lz4_cmd_array_start = .);
+        KEEP(*(.lz4.cmd_array .lz4.cmd_array.*));
+        HIDDEN(__lz4_cmd_array_end = .);
         QUAD(0); QUAD(0); QUAD(0); QUAD(0); /* NULL sentinel */
     }
     .tool_array : ALIGN(16) {
