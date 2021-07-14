@@ -44,7 +44,7 @@ libbenzina_dict      = {
 }
 subdir('iso')
 subdir('itu')
-
+subdir('lua')
 
 #
 # Pack Lua Code.
