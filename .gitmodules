@@ -1,0 +1,3 @@
+[submodule "annex"]
+	path = annex
+	url = git@github.com:satyaog/Benzina_annex.git
