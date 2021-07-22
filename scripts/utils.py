@@ -62,9 +62,18 @@ class build_configure(setuptools.command.build_ext.build_ext, build_mixin):
             return None
         
         
-        env = os.environ.copy()  # Custom environment for meson configure step.
-        
+        #
+        # Custom environment for meson configure step.
+        #   - PYTHONUNBUFFERED: Prompt display of messages during configure
+        #   - GIT_CONFIG_{COUNT|KEY|VALUE}: Silence polluting detached-head advice.
+        #   - PKG_CONFIG_PATH:  Silence warning about duplicates in env or option.
+        #
+        env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
+        if "GIT_CONFIG_COUNT" not in env:
+            env["GIT_CONFIG_COUNT"]   = "1"
+            env["GIT_CONFIG_KEY_0"]   = "advice.detachedHead"
+            env["GIT_CONFIG_VALUE_0"] = "false"
         
         pkg_config_path_dup = env.pop("PKG_CONFIG_PATH", "").split(":")
         pkg_config_path = []
