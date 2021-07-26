@@ -10,9 +10,11 @@ libbenzina_linkname  = libbenzina_libname+'.so'
 libbenzina_soversion = meson.project_version().split('.')[0]
 libbenzina_soname    = libbenzina_linkname+'.'+libbenzina_soversion
 libbenzina_sonamearg = IS_HOST_DARWIN ? [] : ['-Wl,-soname,'+libbenzina_soname]
-libbenzina_lua       = {}
-libbenzina_lua      += project_lpeg    .get_variable('lpeg_lua')
-libbenzina_lua      += project_penlight.get_variable('penlight_lua')
+libbenzina_incs      = [benzina_incs]
+libbenzina_srcs      = []
+libbenzina_lua_srcs  = {}
+libbenzina_lua_srcs += project_lpeg    .get_variable('lpeg_lua')
+libbenzina_lua_srcs += project_penlight.get_variable('penlight_lua')
 libbenzina_dict      = {
     'c_args':     ['-DBENZINA_IS_SHARED=1', '-DBENZINA_IS_BUILDING=1'],
     'link_args':  libbenzina_sonamearg+force_link_args+special_link_args,
@@ -29,19 +31,18 @@ libbenzina_dict      = {
         project_lpeg     .get_variable('lpeg_dep'),
         project_penlight .get_variable('penlight_dep'),
     ],
-    'incs': [benzina_incs],
-    'srcs': files(
-        'benzina.c',
-        'benzinaproto.c',
-        'endian.c',
-        'init.c',
-        'intops.c',
-        'ptrops.c',
-        'version.c',
-        'internal.noarch.S',
-        'main.c',
-    ),
 }
+libbenzina_srcs += files(
+    'benzina.c',
+    'benzinaproto.c',
+    'endian.c',
+    'init.c',
+    'intops.c',
+    'ptrops.c',
+    'version.c',
+    'internal.noarch.S',
+    'main.c',
+)
 subdir('iso')
 subdir('itu')
 
@@ -49,7 +50,7 @@ subdir('itu')
 #
 # Pack Lua Code.
 #
-# Translate the libbenzina_lua dictionary of {package: files} to a command-line
+# Translate the Lua source dictionary of {package: files} to a command-line
 # invocation of the packer script, which uses a native-built lz4 executable to
 # compress the Lua code into an LZ4 frame. At runtime, the constructor and
 # library initializer unpack themselves into statically-allocated .bss space.
@@ -68,7 +69,7 @@ subdir('itu')
 #
 
 lua_input_list = []
-foreach name, file: libbenzina_lua
+foreach name, file: libbenzina_lua_srcs
   lua_input_list += [name, file]
 endforeach
 if lua_input_list.length() > 0
@@ -78,7 +79,7 @@ if lua_input_list.length() > 0
                 '@OUTPUT0@', '@OUTPUT1@'] + lua_input_list,
       output:  ['packed-lua.S', 'packed-lua.lz4'],
   )
-  libbenzina_dict += {'srcs': libbenzina_dict['srcs'] + [packed_lua[0]]}
+  libbenzina_srcs += [packed_lua[0]] # .S only! It includes the .lz4!
 endif
 
 
@@ -178,8 +179,8 @@ endif
 #
 if IS_HOST_DARWIN
   libbenzina_sha = shared_library(
-      libbenzina_name,       libbenzina_dict['srcs'],
-      include_directories:   libbenzina_dict['incs'],
+      libbenzina_name,       libbenzina_srcs,
+      include_directories:   libbenzina_incs,
       c_args:                libbenzina_dict['c_args'],
       dependencies:          libbenzina_dict['deps'],
       objects:               libbenzina_dict['objs'],
@@ -203,8 +204,8 @@ endif
 libbenzina_sha = declare_dependency(dependencies: libbenzina_dict['deps'])
 libbenzina_sha = libbenzina_sha.partial_dependency(compile_args: true, includes: true)
 libbenzina_sha = static_library( # *STATIC-PIC*! SEE NOTES ABOVE!
-    libbenzina_libname,    libbenzina_dict['srcs'],
-    include_directories:   libbenzina_dict['incs'],
+    libbenzina_libname,    libbenzina_srcs,
+    include_directories:   libbenzina_incs,
     c_args:                libbenzina_dict['c_args'],
     dependencies:          libbenzina_sha,
     gnu_symbol_visibility: 'hidden',
