@@ -91,33 +91,48 @@ endif
 # In Meson, it is not easy to add a linker version script to the build:
 #
 #   - With GNU ld.bfd, it is possible to pass a full, *implicit* linker script
-#     with a VERSION clause to the linker as if it were an "object file".
+#     with a VERSION clause to the linker as if it were an "object file", or
+#     by specifying the -Wl,-dT,linkerscript or -Wl,-T,linkerscript flags.
+#   - With elderly GNU ld.bfd versions (<=2.30?), our linker script, which is
+#     made up exclusively of SECTION {...} INSERT [AFTER|BEFORE] commands,
+#     fails to build when passed with -Wl,-T,linkerscript, but does compile
+#     when passed as -Wl,-dT,linkerscript.
+#   - With newer GNU ld.bfd, -dT still works.
+#   - With LLVM lld/ld.lld, only a subset of GNU ld.bfd's linker script syntax
+#     is supported, thankfully including INSERTs.
+#   - With LLVM lld/ld.lld, -dT is not supported at all but -T does work for
+#     supplying linker scripts.
+#   - With LLVM lld/ld.lld, --version-script= does work.
 #   - With the PGI 19.4 compiler's linker, this fails because a VERSION clause
 #     is always included in the builtin script, and the combination of all
 #     linker scripts may only declare at most one such section.
 #   - With Google's ld.gold, a full implicit linker script is rejected, whereas
 #     the more limited --version-script works=.
-#   - With LLVM lld/ld.lld, only a subset of GNU ld.bfd's linker script syntax
-#     is supported, but the more limited --version-script= works.
 #
-# On balance, therefore, it is preferable to use the --version-script= flag
-# passed to the linker directly. Unfortunately, Meson does not support auto-
-# formatting files() as strings yet, and link_args must be an array of strings.
+# Since we must absolutely use a linker script, we have elsewhere determined
+# whether the default is ld.gold and if so, force the linker to either ld.bfd
+# or ld.lld. Next, we use the --version-script= flag unconditionally, and the
+# -dT or -T flags depending on whether we are forcing ld.bfd or ld.lld.
+#
+# It would be easiest if we could the version script and linker scripts to the
+# linker directly. Unfortunately, Meson does not support auto-formatting
+# files() as strings yet, and link_args must be an array of strings.
 # So we go about it the hard way - get the current source directory and
 # construct the full absolute path to the linker version script, and add that
 # manually as an implicit link (though not compile) dependency.
 #
 
-if cc.get_linker_id() in ['ld.bfd', 'ld.gold', 'ld.lld']
+if CCLD_FORCE_ID in ['ld.bfd', 'ld.lld']
   libbenzina_lds_name = 'libbenzina.lds'
   libbenzina_ver_name = 'libbenzina.ver'
   libbenzina_lds_path = meson.current_source_dir() / libbenzina_lds_name
   libbenzina_ver_path = meson.current_source_dir() / libbenzina_ver_name
   libbenzina_lds_file = files(libbenzina_lds_name)
   libbenzina_ver_file = files(libbenzina_ver_name)
+  libbenzina_lds_flag = CCLD_FORCE_ID == 'ld.bfd' ? '-dT' : '-T'
   libbenzina_dict += {
       'link_args': libbenzina_dict['link_args'] + [
-          '-Wl,-T,'+libbenzina_lds_path,
+          '-Wl,'+libbenzina_lds_flag+','+libbenzina_lds_path,
           '-Wl,--version-script='+libbenzina_ver_path,
       ],
       'link_deps': libbenzina_dict['link_deps'] + [

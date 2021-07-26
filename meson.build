@@ -78,6 +78,7 @@ FUNCP_SIZE  = cc.sizeof(FUNCP)
 assert(CHARP_SIZE == cxx.sizeof(FUNCP), f'C and C++ compilers disagree on sizeof(@FUNCP@)!')
 assert(VOIDP_SIZE == CHARP_SIZE,        f'Pointers to void and char not of equal size!')
 assert(VOIDP_SIZE == FUNCP_SIZE,        f'Pointers to void and function not of equal size!')
+CCLD_FORCE_ID = CCLD_ID
 
 
 #
@@ -205,10 +206,12 @@ if CC_SYNTAX == 'gcc'
       warning('The ld.gold linker does not support our linker script. Forcing '+
               'instead GNU ld.bfd (-fuse-ld=bfd)')
       force_link_args += ['-fuse-ld=bfd']
+      CCLD_FORCE_ID = 'ld.bfd'
     elif cc.has_link_argument('-fuse-ld=lld')
       warning('The ld.gold linker does not support our linker script. Forcing '+
               'instead LLVM ld.lld (-fuse-ld=lld)')
       force_link_args += ['-fuse-ld=lld']
+      CCLD_FORCE_ID = 'ld.lld'
     else
       error  ('The ld.gold linker does not support our linker script, but we '+
               'are unable to force-select an alternative with the flag '+
