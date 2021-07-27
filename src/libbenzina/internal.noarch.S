@@ -11,29 +11,40 @@ ASM_SECT_LICENSE_DECL
 # Then, we define them in terms of section start and end addresses,
 # synthesized by the linker.
 #
+
 .globl _license_benzina
+
 .globl ___lz4_cmd_array_start
 .globl ___lz4_cmd_array_end
+
 .globl ___tool_array_start
 .globl ___tool_array_end
+
 .globl ___lua_open_array_start
 .globl ___lua_open_array_preload_start
 .globl ___lua_open_array_preload_end
 .globl ___lua_open_array_end
+
 .globl ___lua_text_array_start
 .globl ___lua_text_array_end
 
+
 .set   _license_benzina,                section$start$__TEXT$__license
+
 .set   ___lz4_cmd_array_start,          section$start$__DATA$__lz4_cmd_array
-.set   ___lz4_cmd_array_end,            section$start$__DATA$__lz4_cmd_array
+.set   ___lz4_cmd_array_end,            section$end$__DATA$__lz4_cmd_array
+
 .set   ___tool_array_start,             section$start$__DATA$__tool_array
-.set   ___tool_array_end,               section$start$__DATA$__tool_array
+.set   ___tool_array_end,               section$end$__DATA$__tool_array
+
 .set   ___lua_open_array_start,         section$start$__DATA$__lua_open_array
 # Mach-O doesn't support sections with >16-character names, so we disable
-# support for that sub-array. The following two entries are *not* mistakes!
+# support for the sub-array .lua.open_array.preload!
+# The following two entries are *not* mistakes!
 .set   ___lua_open_array_preload_start, section$start$__DATA$__lua_open_array
 .set   ___lua_open_array_preload_end,   section$start$__DATA$__lua_open_array
 .set   ___lua_open_array_end,           section$end$__DATA$__lua_open_array
+
 .set   ___lua_text_array_start,         section$start$__DATA$__lua_text_array
 .set   ___lua_text_array_end,           section$end$__DATA$__lua_text_array
 #endif
