@@ -7,6 +7,7 @@
 libbenzina_name      = 'benzina'
 libbenzina_libname   = 'lib'+libbenzina_name
 libbenzina_linkname  = libbenzina_libname+'.so'
+libbenzina_fullname  = libbenzina_linkname+'.'+meson.project_version()
 libbenzina_soversion = meson.project_version().split('.')[0]
 libbenzina_soname    = libbenzina_linkname+'.'+libbenzina_soversion
 libbenzina_sonamearg = IS_HOST_DARWIN ? [] : ['-Wl,-soname,'+libbenzina_soname]
@@ -17,7 +18,7 @@ libbenzina_srcs      = []
 libbenzina_lua_srcs  = {}
 libbenzina_lua_srcs += project_lpeg    .get_variable('lpeg_lua')
 libbenzina_lua_srcs += project_penlight.get_variable('penlight_lua')
-libbenzina_link_deps = []
+libbenzina_link_only = []
 libbenzina_deps      = [
     threads, libm, libdl,
     project_lz4      .get_variable('lz4_dep'),
@@ -125,7 +126,7 @@ if CCLD_FORCE_ID in ['ld.bfd', 'ld.lld']
   libbenzina_lds_file = files(libbenzina_lds_name)
   libbenzina_ver_file = files(libbenzina_ver_name)
   libbenzina_lds_flag = CCLD_FORCE_ID == 'ld.bfd' ? '-dT' : '-T'
-  libbenzina_link_deps += [libbenzina_lds_file, libbenzina_ver_file]
+  libbenzina_link_only += [libbenzina_lds_file, libbenzina_ver_file]
   libbenzina_link_args += [f'-Wl,@libbenzina_lds_flag@,@libbenzina_lds_path@',
                            f'-Wl,--version-script=@libbenzina_ver_path@']
 endif
@@ -157,8 +158,7 @@ endif
 #      for to block their dlopen()'ing (this may be justified when thread-local
 #      storage or copy relocations are used, but neither is a concern for us).
 #      We choose to manually patch out that flag using a Python script. This
-#      script modifies its input *in-place* for convenience's sake and also
-#      generates the .so and .so.X symlinks.
+#      script also generates the .so and .so.X symlinks.
 #
 # As a result of all this, we manage to declare libbenzina_sha with every type
 # (static_library, executable, custom_target, declare_dependency) except the
@@ -171,7 +171,7 @@ if IS_HOST_DARWIN
       c_args:                libbenzina_c_args + ['-DBENZINA_IS_BUILDING=1'],
       dependencies:          libbenzina_deps,
       link_args:             libbenzina_link_args,
-      link_depends:          libbenzina_link_deps,
+      link_depends:          libbenzina_link_only,
       gnu_symbol_visibility: 'hidden',
       build_rpath:           librpath,
       install_rpath:         librpath,
@@ -179,45 +179,46 @@ if IS_HOST_DARWIN
       install:               true,
   )
 else
-  libbenzina_sha = declare_dependency(dependencies: libbenzina_deps)
-  libbenzina_sha = libbenzina_sha.partial_dependency(compile_args: true, includes: true)
-  libbenzina_sha = static_library( # *STATIC-PIC*! SEE NOTES ABOVE!
-      libbenzina_libname,    libbenzina_srcs,
-      include_directories:   libbenzina_incs,
-      c_args:                libbenzina_c_args + ['-DBENZINA_IS_BUILDING=1'],
-      dependencies:          libbenzina_sha,
-      gnu_symbol_visibility: 'hidden',
-      pic:                   true,
-      install:               false,
+  libbenzina_all_deps  =                     declare_dependency(dependencies: libbenzina_deps)
+  libbenzina_comp_deps = libbenzina_all_deps.partial_dependency(compile_args: true, includes: true)
+  libbenzina_link_deps = libbenzina_all_deps.partial_dependency(link_args:    true, links:    true)
+  
+  ## * Phase I:   Compile benzina-unpatched.a as PIC, but don't link any objects...
+  benzina_sta    = static_library(
+      libbenzina_name+'-unpatched',  libbenzina_srcs,
+      include_directories:           libbenzina_incs,
+      c_args:                        libbenzina_c_args + ['-DBENZINA_IS_BUILDING=1'],
+      dependencies:                  libbenzina_comp_deps,
+      gnu_symbol_visibility:         'hidden',
+      name_prefix:                   '',
+      pic:                           true,
+      prelink:                       false,
   )
-  libbenzina_sha = declare_dependency(dependencies: libbenzina_deps,
-                                      link_whole:   libbenzina_sha)
-  libbenzina_sha = libbenzina_sha.partial_dependency(link_args: true, links: true)
-  libbenzina_sha = executable(
-      libbenzina_libname,    [],   # *MUST BE EMPTY*! SEE NOTES ABOVE!
-      dependencies:          libbenzina_sha,
-      link_args:             libbenzina_link_args,
-      link_depends:          libbenzina_link_deps,
-      name_suffix:           'so.'+meson.project_version(),
-      gnu_symbol_visibility: 'hidden',
-      export_dynamic:        true,
-      build_rpath:           librpath,
-      install_rpath:         librpath,
-      install_dir:           libdir,
-      install:               true,
-      pie:                   true,
+  
+  ## * Phase II:  Link benzina-unpatched      as PIE, but don't compile any sources...
+  benzina_exe    = executable(
+      libbenzina_name+'-unpatched',  [],
+      objects:                       benzina_sta.extract_all_objects(recursive: true),
+      link_depends:                  libbenzina_link_only,
+      link_args:                     libbenzina_link_args,
+      dependencies:                  libbenzina_link_deps,
+      gnu_symbol_visibility:         'hidden',
+      export_dynamic:                true,
+      build_rpath:                   librpath,
+      pie:                           true,
   )
-  libbenzina_sha = custom_target(  # MODIFIES IN-PLACE!
-      'patched '+libbenzina_libname,
+  
+  ## * Phase III: Patch benzina-unpatched     as libbenzina.so{, .X, .X.Y.Z}
+  libbenzina_sha = custom_target(
+      'patched '+libbenzina_linkname,
+      input:            [benzina_exe],
       command:          [python, elf_strip_df_1_pie_py, '@INPUT0@', '@OUTPUT@'],
-      input:            [libbenzina_sha],
-      output:           [libbenzina_soname, libbenzina_linkname],
+      output:           [libbenzina_linkname, libbenzina_soname, libbenzina_fullname],
       depend_files:     [elf_py],
       install_dir:      libdir,
       install:          true,
       build_by_default: true,
-  )
-  libbenzina_sha = libbenzina_sha[1]
+  )[0]
 endif
 
 libbenzina = declare_dependency(

@@ -25,28 +25,27 @@ def strip_df_1_pie(f):
             break
 
 if __name__ == "__main__":
-    path_libbenzina_so_X_Y_Z = sys.argv[1] # Meson @INPUT0@  (*)
-    path_libbenzina_so_X     = sys.argv[2] # Meson @OUTPUT0@
-    path_libbenzina_so       = sys.argv[3] # Meson @OUTPUT1@
-    libbenzina_so_X_Y_Z      = os.path.basename(path_libbenzina_so_X_Y_Z)
+    path_benzina_unpatched   = sys.argv[1] # Meson @INPUT0@
+    path_libbenzina_so       = sys.argv[2] # Meson @OUTPUT0@
+    path_libbenzina_so_X     = sys.argv[3] # Meson @OUTPUT1@
+    path_libbenzina_so_X_Y_Z = sys.argv[4] # Meson @OUTPUT2@
+    libbenzina_so            = os.path.basename(path_libbenzina_so)
     libbenzina_so_X          = os.path.basename(path_libbenzina_so_X)
+    libbenzina_so_X_Y_Z      = os.path.basename(path_libbenzina_so_X_Y_Z)
     
-    #
-    # (*)
-    #
-    # Yes, this script does a really nasty thing. It modifies its input argv[1]
-    # *first* and *in-place*, *then* creates "unrelated" symlinks.
-    # This was done because there is no easier way to modify within Meson a
-    # shared library after it has been build and without losing the ability
-    # to use shared_library() to construct it.
-    #
+    if(os.path.islink(path_libbenzina_so_X_Y_Z) or 
+       os.path.exists(path_libbenzina_so_X_Y_Z)):
+        os.unlink    (path_libbenzina_so_X_Y_Z)
+    
+    shutil.copy2(path_benzina_unpatched, path_libbenzina_so_X_Y_Z)
+    
     with elf.ELF(path_libbenzina_so_X_Y_Z) as f:
         strip_df_1_pie(f)
     
     #
     # Force-create/overwrite output symlinks:
-    #     libbenzina.so.X.Y.Z <- libbenzina.so.X
-    #     libbenzina.so.X     <- libbenzina.so
+    #     libbenzina.so.X -> libbenzina.so.X.Y.Z
+    #     libbenzina.so   -> libbenzina.so.X
     #
     def overwrite_symlink(src, dst):
         if os.path.islink(dst) and os.readlink(dst) == src: return
