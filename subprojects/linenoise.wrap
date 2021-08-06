@@ -1,4 +1,4 @@
 [wrap-git]
-url = https://github.com/yhirose/linenoise.git
+url = https://github.com/obilaniu/linenoise.git
 revision = head
 patch_directory = linenoise
