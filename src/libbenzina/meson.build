@@ -41,7 +41,7 @@ libbenzina_srcs += files(
 )
 subdir('iso')
 subdir('itu')
-
+subdir('lua')
 
 #
 # Pack Lua Code.
