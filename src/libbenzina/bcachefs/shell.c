@@ -176,6 +176,8 @@ BENZINA_STATIC int   eval_line(char* buf, int* exitcode){
  */
 
 BENZINA_STATIC int main_bcachefs_shell(int argc, char* argv[]){
+    (void)argc;
+    (void)argv;
     char*     line;
     char*     histpath=NULL;
     int       exiting, exitcode=EXIT_SUCCESS;
