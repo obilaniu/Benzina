@@ -89,6 +89,20 @@
 # define BENZINA_ATTRIBUTE_SECTION(sectionname)
 #endif
 
+/* Packed */
+#if __GNUC__
+# define BENZINA_ATTRIBUTE_PACKED __attribute__((packed))
+#else
+# define BENZINA_ATTRIBUTE_PACKED
+#endif
+
+/* Aligned */
+#if __GNUC__
+# define BENZINA_ATTRIBUTE_ALIGNED(n) __attribute__((aligned(n)))
+#else
+# define BENZINA_ATTRIBUTE_ALIGNED(n)
+#endif
+
 
 /* End Include Guards */
 #endif
