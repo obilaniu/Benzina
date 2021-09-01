@@ -26,6 +26,7 @@ extern "C" {
 #if __GNUC__
 BENZINA_PUBLIC BENZINA_ATTRIBUTE_ALWAYSINLINE BENZINA_ATTRIBUTE_CONST BENZINA_INLINE unsigned benz_popcnt64(uint64_t x){return __builtin_popcountll(x);}
 BENZINA_PUBLIC BENZINA_ATTRIBUTE_ALWAYSINLINE BENZINA_ATTRIBUTE_CONST BENZINA_INLINE unsigned benz_clz64(uint64_t x){return x ? __builtin_clzll(x) : 64;}
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_ALWAYSINLINE BENZINA_ATTRIBUTE_CONST BENZINA_INLINE unsigned benz_ctz64(uint64_t x){return x ? __builtin_ctzll(x) : 64;}
 #else
 BENZINA_PUBLIC BENZINA_ATTRIBUTE_ALWAYSINLINE BENZINA_ATTRIBUTE_CONST BENZINA_INLINE unsigned benz_popcnt64(uint64_t x){
     /* SWAR */
@@ -43,6 +44,15 @@ BENZINA_PUBLIC BENZINA_ATTRIBUTE_ALWAYSINLINE BENZINA_ATTRIBUTE_CONST BENZINA_IN
     x |= x>> 8;
     x |= x>>16;
     x |= x>>32;
+    return 64-benz_popcnt64(x);
+}
+BENZINA_PUBLIC BENZINA_ATTRIBUTE_ALWAYSINLINE BENZINA_ATTRIBUTE_CONST BENZINA_INLINE unsigned benz_clz64(uint64_t x){
+    x |= x<< 1;
+    x |= x<< 2;
+    x |= x<< 4;
+    x |= x<< 8;
+    x |= x<<16;
+    x |= x<<32;
     return 64-benz_popcnt64(x);
 }
 #endif
