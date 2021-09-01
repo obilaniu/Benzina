@@ -28,6 +28,11 @@ install_headers(
     install_dir: includedir/'benzina'
 )
 install_headers(
+    'bcachefs/bcachefs.h',
+    'bcachefs/bcachefs-types.h',
+    install_dir: includedir/'benzina'/'bcachefs'
+)
+install_headers(
     'iso/bmff.h',
     'iso/bmff-box.h',
     'iso/bmff-intops.h',
