@@ -101,25 +101,25 @@ void test_endian(void){
     tstmessagetap(a64 == benz_htobe64(a64), "benz_htobe64");
     #endif
     
-    tstmessagetap(0x1 == benz_getle8 (c),   "getle8");
-    tstmessagetap(a16 == benz_getle16(c),   "getle16");
-    tstmessagetap(a32 == benz_getle32(c),   "getle32");
-    tstmessagetap(a64 == benz_getle64(c),   "getle64");
+    tstmessagetap(0x1 == benz_getle8 (c,0), "getle8");
+    tstmessagetap(a16 == benz_getle16(c,0), "getle16");
+    tstmessagetap(a32 == benz_getle32(c,0), "getle32");
+    tstmessagetap(a64 == benz_getle64(c,0), "getle64");
     
-    tstmessagetap(0x1 == benz_getbe8 (c),   "getbe8");
-    tstmessagetap(b16 == benz_getbe16(c),   "getbe16");
-    tstmessagetap(b32 == benz_getbe32(c),   "getbe32");
-    tstmessagetap(b64 == benz_getbe64(c),   "getbe64");
+    tstmessagetap(0x1 == benz_getbe8 (c,0), "getbe8");
+    tstmessagetap(b16 == benz_getbe16(c,0), "getbe16");
+    tstmessagetap(b32 == benz_getbe32(c,0), "getbe32");
+    tstmessagetap(b64 == benz_getbe64(c,0), "getbe64");
     
-    tstmessagetap(0xF == benz_putle8 (d, 0xF) && *d == 0xF,                "putle8");
-    tstmessagetap(a16 == benz_putle16(d, a16) && benz_getle16(d) == a16,   "putle16");
-    tstmessagetap(a32 == benz_putle32(d, a32) && benz_getle32(d) == a32,   "putle32");
-    tstmessagetap(a64 == benz_putle64(d, a64) && benz_getle64(d) == a64,   "putle64");
+    tstmessagetap(0xF == benz_putle8 (d,0,0xF) && *d == 0xF,                "putle8");
+    tstmessagetap(a16 == benz_putle16(d,0,a16) && benz_getle16(d,0) == a16, "putle16");
+    tstmessagetap(a32 == benz_putle32(d,0,a32) && benz_getle32(d,0) == a32, "putle32");
+    tstmessagetap(a64 == benz_putle64(d,0,a64) && benz_getle64(d,0) == a64, "putle64");
     
-    tstmessagetap(0xF == benz_putbe8 (d, 0xF) && *d == 0xF,                "putbe8");
-    tstmessagetap(a16 == benz_putbe16(d, a16) && benz_getbe16(d) == a16,   "putbe16");
-    tstmessagetap(a32 == benz_putbe32(d, a32) && benz_getbe32(d) == a32,   "putbe32");
-    tstmessagetap(a64 == benz_putbe64(d, a64) && benz_getbe64(d) == a64,   "putbe64");
+    tstmessagetap(0xF == benz_putbe8 (d,0,0xF) && *d == 0xF,                "putbe8");
+    tstmessagetap(a16 == benz_putbe16(d,0,a16) && benz_getbe16(d,0) == a16, "putbe16");
+    tstmessagetap(a32 == benz_putbe32(d,0,a32) && benz_getbe32(d,0) == a32, "putbe32");
+    tstmessagetap(a64 == benz_putbe64(d,0,a64) && benz_getbe64(d,0) == a64, "putbe64");
 }
 void test_intops(void){
     tstmessagetap(benz_popcnt64(0xFFFFFFFFFFFFFFFFULL) == 64, "popcnt 1");
@@ -131,6 +131,12 @@ void test_intops(void){
     tstmessagetap(benz_clz64(0x0000000000000001ULL) == 63, "clz 3");
     tstmessagetap(benz_clz64(0x0000000000000002ULL) == 62, "clz 4");
     tstmessagetap(benz_clz64(0x003AE3F0F80F05F0ULL) == 10, "clz 5");
+    
+    tstmessagetap(benz_ctz64(0xFFFFFFFFFFFFFFFFULL) ==  0, "ctz 1");
+    tstmessagetap(benz_ctz64(0x0000000000000000ULL) == 64, "ctz 2");
+    tstmessagetap(benz_ctz64(0x8000000000000000ULL) == 63, "ctz 3");
+    tstmessagetap(benz_ctz64(0x4000000000000000ULL) == 62, "ctz 4");
+    tstmessagetap(benz_ctz64(0x003AE3F0F80F05F0ULL) ==  4, "ctz 5");
     
     tstmessagetap(benz_ueto64(0x8000000000000000ULL) == 0, "ue 1");
     tstmessagetap(benz_ueto64(0xFFFFFFFFFFFFFFFFULL) == 0, "ue 2");
@@ -156,7 +162,7 @@ void test_intops(void){
  */
 
 int main(void){
-    tstmessageflush(stdout, "1..57\n");
+    tstmessageflush(stdout, "1..62\n");
     test_symbols();
     test_endian();
     test_intops();

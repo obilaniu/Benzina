@@ -34,21 +34,21 @@ BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint16_t benz_le16toh(uint16_t x);
 BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint32_t benz_le32toh(uint32_t x);
 BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint64_t benz_le64toh(uint64_t x);
 
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint8_t  benz_getbe8 (const void* p);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint16_t benz_getbe16(const void* p);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint32_t benz_getbe32(const void* p);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint64_t benz_getbe64(const void* p);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint8_t  benz_getle8 (const void* p);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint16_t benz_getle16(const void* p);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint32_t benz_getle32(const void* p);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint64_t benz_getle64(const void* p);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint8_t  benz_getbe8 (const void* p, int64_t off);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint16_t benz_getbe16(const void* p, int64_t off);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint32_t benz_getbe32(const void* p, int64_t off);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint64_t benz_getbe64(const void* p, int64_t off);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint8_t  benz_getle8 (const void* p, int64_t off);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint16_t benz_getle16(const void* p, int64_t off);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint32_t benz_getle32(const void* p, int64_t off);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint64_t benz_getle64(const void* p, int64_t off);
 
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint8_t  benz_putbe8 (void* p, uint8_t  x);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint16_t benz_putbe16(void* p, uint16_t x);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint32_t benz_putbe32(void* p, uint32_t x);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint64_t benz_putbe64(void* p, uint64_t x);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint8_t  benz_putle8 (void* p, uint8_t  x);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint16_t benz_putle16(void* p, uint16_t x);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint32_t benz_putle32(void* p, uint32_t x);
-BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint64_t benz_putle64(void* p, uint64_t x);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint8_t  benz_putbe8 (void* p, int64_t off, uint8_t  x);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint16_t benz_putbe16(void* p, int64_t off, uint16_t x);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint32_t benz_putbe32(void* p, int64_t off, uint32_t x);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint64_t benz_putbe64(void* p, int64_t off, uint64_t x);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint8_t  benz_putle8 (void* p, int64_t off, uint8_t  x);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint16_t benz_putle16(void* p, int64_t off, uint16_t x);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint32_t benz_putle32(void* p, int64_t off, uint32_t x);
+BENZINA_PUBLIC BENZINA_EXTERN_INLINE uint64_t benz_putle64(void* p, int64_t off, uint64_t x);
 

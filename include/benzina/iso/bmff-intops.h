@@ -36,16 +36,16 @@ extern "C" {
  */
 
 BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE uint8_t       benz_iso_bmff_as_u8               (const void* p){
-    return benz_getbe8(p);
+    return benz_getbe8(p, 0);
 }
 BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE uint16_t      benz_iso_bmff_as_u16              (const void* p){
-    return benz_getbe16(p);
+    return benz_getbe16(p, 0);
 }
 BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE uint32_t      benz_iso_bmff_as_u32              (const void* p){
-    return benz_getbe32(p);
+    return benz_getbe32(p, 0);
 }
 BENZINA_PUBLIC BENZINA_ATTRIBUTE_PURE BENZINA_INLINE uint64_t      benz_iso_bmff_as_u64              (const void* p){
-    return benz_getbe64(p);
+    return benz_getbe64(p, 0);
 }
 
 /**
@@ -100,19 +100,19 @@ BENZINA_PUBLIC                        BENZINA_INLINE const char*   benz_iso_bmff
  */
 
 BENZINA_PUBLIC                        BENZINA_INLINE void*         benz_iso_bmff_put_u8              (void*       p, uint8_t  x){
-    benz_putbe8(p, x);
+    benz_putbe8(p, 0, x);
     return benz_ptr_addnv(p, sizeof(x));
 }
 BENZINA_PUBLIC                        BENZINA_INLINE void*         benz_iso_bmff_put_u16             (void*       p, uint16_t x){
-    benz_putbe16(p, x);
+    benz_putbe16(p, 0, x);
     return benz_ptr_addnv(p, sizeof(x));
 }
 BENZINA_PUBLIC                        BENZINA_INLINE void*         benz_iso_bmff_put_u32             (void*       p, uint32_t x){
-    benz_putbe32(p, x);
+    benz_putbe32(p, 0, x);
     return benz_ptr_addnv(p, sizeof(x));
 }
 BENZINA_PUBLIC                        BENZINA_INLINE void*         benz_iso_bmff_put_u64             (void*       p, uint64_t x){
-    benz_putbe64(p, x);
+    benz_putbe64(p, 0, x);
     return benz_ptr_addnv(p, sizeof(x));
 }
 BENZINA_PUBLIC                        BENZINA_INLINE void*         benz_iso_bmff_put_ascii           (void*       p, const char* str){

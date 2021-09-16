@@ -1961,7 +1961,7 @@ BENZINA_PLUGIN_STATIC int         nvdecodeFeederThrdCore          (NVDECODE_CTX*
 	 * range [0, MAX_DECODE_SURFACES).
 	 */
 	
-    benz_putbe32(rq->data, 0x00000001); // 0x00 + annexb begin flag
+    benz_putbe32(rq->data, 0, 0x00000001); // 0x00 + annexb begin flag
 
     hevcPP->IrapPicFlag   = 1;
     hevcPP->IdrPicFlag    = 1;

@@ -149,26 +149,20 @@ BENZINA_PUBLIC                void        benz_itu_h26xbs_init(BENZ_ITU_H26XBS* 
  */
 
 BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_fill57b(BENZ_ITU_H26XBS* bs){
-    uint32_t sregoff = bs->sregoff;
-    uint8_t* rbspptr = bs->rbsp + (sregoff >> 3);
-    
-    bs->tailoff = sregoff & ~7;
-    bs->sreg    = benz_getbe64(rbspptr) << (sregoff & 7);
+    bs->tailoff = bs->sregoff & ~7;
+    bs->sreg    = benz_getbe64(bs->rbsp, bs->sregoff>>3) << (bs->sregoff & 7);
 }
 BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_fill64b(BENZ_ITU_H26XBS* bs){
     uint32_t sregoff = bs->sregoff;
     uint8_t* rbspptr = bs->rbsp + (sregoff >> 3);
     
     bs->tailoff = sregoff;
-    bs->sreg    = benz_getbe64(rbspptr+0) <<      (sregoff & 7) |
-        (uint64_t)benz_getbe8 (rbspptr+8) >> (8 - (sregoff & 7));
+    bs->sreg    = benz_getbe64(rbspptr, 0) <<      (sregoff & 7) |
+        (uint64_t)benz_getbe8 (rbspptr, 8) >> (8 - (sregoff & 7));
 }
 BENZINA_PUBLIC BENZINA_INLINE void        benz_itu_h26xbs_fill8B (BENZ_ITU_H26XBS* bs){
-    uint32_t sregoff = bs->sregoff;
-    uint8_t* rbspptr = bs->rbsp + (sregoff >> 3);
-    
-    bs->tailoff = sregoff;
-    bs->sreg    = benz_getbe64(rbspptr);
+    bs->tailoff = bs->sregoff;
+    bs->sreg    = benz_getbe64(bs->rbsp, bs->sregoff>>3);
 }
 
 /**
