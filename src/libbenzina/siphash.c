@@ -107,9 +107,9 @@ BENZINA_PUBLIC uint64_t benz_siphash_digest (const void* buf, uint64_t len,
 /* Lua bindings for SipHash */
 
 /**
- * @brief SipHash of a Lua string with a given key and round parameters.
+ * @brief SipHash-c-d of a Lua string with a given key and round parameters.
  * 
- *   - siphash(data, [k|k0,k1] [, c=2] [, d=4]): 
+ *   - siphash(data, {k | k0,k1} [, c=2 [, d=4]]):
  */
 
 BENZINA_STATIC int benz_lua_siphash(lua_State* L){
@@ -118,6 +118,7 @@ BENZINA_STATIC int benz_lua_siphash(lua_State* L){
     const char* s, *k;
     size_t      len, klen;
     uint64_t    k0,  k1;
+    
     
     /* Mandatory arguments: data and key. */
     if(!(s=lua_tolstring(L, a++, &len)))
@@ -155,7 +156,8 @@ BENZINA_STATIC int benz_lua_siphash(lua_State* L){
         }
     }
     
-    /* Execute hashing operation and return 1 argument. */
+    
+    /* Execute hashing operation and return 1 value on the stack. */
     lua_pushinteger(L, benz_siphash_digest_internal(s, len, k0, k1, c, d));
     return 1;
 }
