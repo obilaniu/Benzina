@@ -35,6 +35,7 @@ libbenzina_srcs += files(
     'init.c',
     'intops.c',
     'ptrops.c',
+    'siphash.c',
     'version.c',
     'internal.noarch.S',
     'main.c',
