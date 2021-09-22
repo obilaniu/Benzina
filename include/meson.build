@@ -1,11 +1,8 @@
 #
 # Benzina Includes
 #
-# We generate the headers
-#     benzina/config.h and
-#     benzina/version.h,
-# which must then be installed.
-#
+
+subdir('benzina')
 
 benzina_incs   = include_directories('.')
 benzina_incdir = meson.current_source_dir()
@@ -35,14 +32,3 @@ benzina_headers = [
 foreach h: benzina_headers
   install_headers('benzina'/h, install_dir: includedir/fs.parent('benzina'/h))
 endforeach
-install_headers(
-    configure_file(configuration: configdata,
-                   input:         'benzina/config.h',
-                   output:        'config.h',
-                   encoding:      'utf-8'),
-    configure_file(configuration: configdata,
-                   input:         'benzina/version.h',
-                   output:        'version.h',
-                   encoding:      'utf-8'),
-    install_dir: includedir/'benzina',
-)
