@@ -459,20 +459,26 @@ static PyObject* NvdecodeDataLoaderIterCore_defineSample            (NvdecodeDat
                                                                      PyObject*                   kwargs){
 	unsigned long long  datasetIndex        = -1;
 	unsigned long long  devicePtr           = 0;
+	PyObject*           pySample            = NULL;
 	PyObject*           pyLocation          = NULL;
 	PyObject*           pyConfigLocation    = NULL;
 	uint64_t            location[2]         = {0, 0};
 	uint64_t            configLocation[2]   = {0, 0};
 	
-	static char *kwargsList[] = {"datasetIndex", "dstPtr", "location", "config_location", NULL};
+	static char *kwargsList[] = {"datasetIndex", "dstPtr", "sample", "location", "config_location", NULL};
 	
-	if(!PyArg_ParseTupleAndKeywords(args, kwargs, "KKOO", kwargsList,
-	                                &datasetIndex, &devicePtr, &pyLocation, &pyConfigLocation)){
+	if(!PyArg_ParseTupleAndKeywords(args, kwargs, "KKOOO", kwargsList,
+	                                &datasetIndex, &devicePtr, &pySample, &pyLocation, &pyConfigLocation)){
 		PyErr_SetString(PyExc_RuntimeError,
 		                "Could not parse arguments!");
 		return NULL;
 	}
 	
+	if(pySample != NULL && !PyMemoryView_Check(pySample)){
+		Py_DECREF(pySample);
+		pySample = NULL;
+	}
+
 	if(pyLocation != NULL && !PyTuple_Check(pyLocation) &&
 	   !PyArg_ParseTuple(pyLocation, "kk", &location[0], &location[1])){
         Py_DECREF(pyLocation);
@@ -485,13 +491,18 @@ static PyObject* NvdecodeDataLoaderIterCore_defineSample            (NvdecodeDat
         pyConfigLocation = NULL;
 	}
 	
-	if(pyLocation == NULL || pyConfigLocation == NULL ||
-	   self->v->defineSample(self->ctx, datasetIndex, (void*)devicePtr, location, configLocation) != 0){
+	if(pySample == NULL || pyLocation == NULL || pyConfigLocation == NULL ||
+	   self->v->defineSample(self->ctx, datasetIndex, (void*)devicePtr, PyMemoryView_GET_BUFFER(pySample)->buf,
+	                         location, configLocation) != 0){
 		PyErr_SetString(PyExc_RuntimeError,
 		                "Error in defineSample()!");
 		return NULL;
 	}
 	
+	// Ownership of sample is kept in benzina.torch.dataloader._DataLoaderIter
+	// Py_DECREF(pySample);
+	Py_DECREF(pyLocation);
+	Py_DECREF(pyConfigLocation);
 	Py_INCREF(Py_None);
 	return Py_None;
 }

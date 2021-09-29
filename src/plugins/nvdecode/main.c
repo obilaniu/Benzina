@@ -75,6 +75,7 @@ struct NVDECODE_RQ{
 	NVDECODE_BATCH* batch;             /* Batch to which this request belongs. */
 	uint64_t        datasetIndex;      /* Dataset index. */
 	float*          devPtr;            /* Target destination on device. */
+	void*           sample;            /* MP4 bytes. */
 	uint64_t        location[2];       /* Image payload location. */
 	uint64_t        config_location[2];/* Video configuration offset and length. */
 	float           H[3][3];           /* Homography */
@@ -630,6 +631,7 @@ BENZINA_PLUGIN_STATIC int         nvdecodeHelpersStart            (NVDECODE_CTX*
 	memset(ctx->request, 0, sizeof(*ctx->request) * ctx->totalSlots);
 	for(i=0;i<ctx->totalSlots;i++){
 		ctx->request[i].picParams = &ctx->picParams[i];
+		ctx->request[i].sample    = NULL;
 		ctx->request[i].data      = NULL;
 		ctx->request[i].hvcCData  = NULL;
 	}
@@ -783,12 +785,16 @@ BENZINA_PLUGIN_STATIC int         nvdecodeMaybeReapMallocs        (NVDECODE_CTX*
 	
 	if(!--ctx->mallocRefCnt){
 		for(i=0;i<ctx->totalSlots;i++){
+			if(ctx->request[i].sample){
+//				free(ctx->request[i].sample);
+				ctx->request[i].sample = NULL;
+			}
 			if(ctx->request[i].data){
-				free(ctx->request[i].data);
+//				free(ctx->request[i].data);
 				ctx->request[i].data = NULL;
 			}
 			if(ctx->request[i].hvcCData){
-				free(ctx->request[i].hvcCData);
+//				free(ctx->request[i].hvcCData);
 				ctx->request[i].hvcCData = NULL;
 			}
 		}
@@ -960,45 +966,45 @@ BENZINA_PLUGIN_STATIC int         nvdecodeReaderThrdWait          (NVDECODE_CTX*
  */
 
 BENZINA_PLUGIN_STATIC int         nvdecodeReaderThrdCore          (NVDECODE_CTX* ctx){
-	NVDECODE_READ_PARAMS rd0 = {0}, rd1 = {0};
+//	NVDECODE_READ_PARAMS rd0 = {0}, rd1 = {0};
 	NVDECODE_RQ*         rq;
-	int                  readsDone;
+//	int                  readsDone;
 	
 	
 	/* Get read parameters */
 	nvdecodeReaderThrdGetCurrRq (ctx, &rq);
 
-	if(nvdecodeReaderThrdFillDataRd  (ctx, rq, &rd0) != 0 ||
-	   nvdecodeReaderThrdFillConfigRd(ctx, rq, &rd1) != 0){
-		return 0;
-	}
+//	if(nvdecodeReaderThrdFillDataRd  (ctx, rq, &rd0) != 0 ||
+//	   nvdecodeReaderThrdFillConfigRd(ctx, rq, &rd1) != 0){
+//		return 0;
+//	}
 	
 	
-	/* Perform reads */
-	pthread_mutex_unlock(&ctx->lock);
-	rd0.lenRead = pread(rd0.fd, rd0.ptr, rd0.len, rd0.off);
-	rd1.lenRead = pread(rd1.fd, rd1.ptr, rd1.len, rd1.off);
-	pthread_mutex_lock(&ctx->lock);
+//	/* Perform reads */
+//	pthread_mutex_unlock(&ctx->lock);
+//	rd0.lenRead = pread(rd0.fd, rd0.ptr, rd0.len, rd0.off);
+//	rd1.lenRead = pread(rd1.fd, rd1.ptr, rd1.len, rd1.off);
+//	pthread_mutex_lock(&ctx->lock);
 	
 	
 	/* Handle any I/O problems */
-	readsDone = (rd0.lenRead==(ssize_t)rd0.len) &&
-	            (rd1.lenRead==(ssize_t)rd1.len);
-	if(!readsDone){
-		free(rd0.ptr);
-		free(rd1.ptr);
-		ctx->reader.err = 1;
-		nvdecodeReaderThrdSetStatus(ctx, THRD_EXITING);
-		return 0;
-	}
+//	readsDone = (rd0.lenRead==(ssize_t)rd0.len) &&
+//	            (rd1.lenRead==(ssize_t)rd1.len);
+//	if(!readsDone){
+//		free(rd0.ptr);
+//		free(rd1.ptr);
+//		ctx->reader.err = 1;
+//		nvdecodeReaderThrdSetStatus(ctx, THRD_EXITING);
+//		return 0;
+//	}
 	
 	/* Otherwise, report success. */
-	rq->data                         = rd0.ptr;
-	rq->hvcCData                     = rd1.ptr;
+	rq->data                         = &((uint8_t*)rq->sample)[rq->location[0]];
+	rq->hvcCData                     = &((uint8_t*)rq->sample)[rq->config_location[0]];
 	ctx->reader.cnt++;
     // Bitstream data
-    rq->picParams->pBitstreamData    = rd0.ptr;
-	rq->picParams->nBitstreamDataLen = rd0.len;
+	rq->picParams->pBitstreamData    = &((const uint8_t*)rq->sample)[rq->location[0]];
+	rq->picParams->nBitstreamDataLen = (uint32_t)rq->location[1];
 	pthread_cond_broadcast(&ctx->feeder.cond);
 	return 0;
 }
@@ -1987,8 +1993,9 @@ BENZINA_PLUGIN_STATIC int         nvdecodeFeederThrdCore          (NVDECODE_CTX*
 	pthread_mutex_lock(&ctx->lock);
 	
 	/* Release data. */
-	free(rq->data);
-	free(rq->hvcCData);
+//	free(rq->data);
+//	free(rq->hvcCData);
+	rq->sample   = NULL;
 	rq->data     = NULL;
 	rq->hvcCData = NULL;
 	if(ret != CUDA_SUCCESS){
@@ -2884,6 +2891,7 @@ BENZINA_PLUGIN_HIDDEN int         nvdecodePeekToken               (NVDECODE_CTX*
  */
 
 BENZINA_PLUGIN_HIDDEN int         nvdecodeDefineSample            (NVDECODE_CTX* ctx, uint64_t i, void* dstPtr,
+                                                                   void* sample,
                                                                    uint64_t* location, uint64_t* config_location){
 	NVDECODE_RQ*    rq;
 	NVDECODE_BATCH* batch;
@@ -2899,6 +2907,7 @@ BENZINA_PLUGIN_HIDDEN int         nvdecodeDefineSample            (NVDECODE_CTX*
 		rq->batch              = batch;
 		rq->datasetIndex       = i;
 		rq->devPtr             = dstPtr;
+		rq->sample             = sample;
 		rq->location[0]        = location[0];
 		rq->location[1]        = location[1];
 		rq->config_location[0] = config_location[0];

@@ -36,8 +36,12 @@ class FileProxy(FileReadMixin):
         if isinstance(disk_file, str):
             self._name = disk_file
         else:
-            self._name = disk_file.name
-            self._file = disk_file
+            try:
+                self._name = disk_file.name
+                self._file = disk_file
+            except AttributeError:
+                self._name = None
+                self._file = disk_file
 
     def __enter__(self):
         self.open()
@@ -59,7 +63,7 @@ class FileProxy(FileReadMixin):
             self._file = open(self._name, mode=self._mode)
 
     def close(self):
-        if not self.closed:
+        if not self.closed and self._name is not None:
             self._file.close()
             self._file = None
 

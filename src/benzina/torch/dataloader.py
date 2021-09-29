@@ -9,8 +9,6 @@ from   torch.utils.data.dataloader import default_collate
 from   contextlib                  import suppress
 from   .                           import operations as ops
 
-from   benzina.utils.file import Track
-
 
 class DataLoader(torch.utils.data.DataLoader):
     """
@@ -227,23 +225,26 @@ class _DataLoaderIter:
         
         self.garbage_collect()
         self.check_or_set_batch_size(self.first_indices)
-        self.multibuffer = torch.zeros([self.multibuffering,
-                                        self.batch_size,
-                                        3,
-                                        self.shape[0],
-                                        self.shape[1]],
-                                       dtype  = torch.float32,
-                                       device = self.device)
-        self.core        = benzina.native.NvdecodeDataLoaderIterCore(
-                               self.dataset_core,
-                               str(self.device),
-                               self.multibuffer,
-                               self.multibuffer.data_ptr(),
-                               self.batch_size,
-                               self.multibuffering,
-                               self.shape[0],
-                               self.shape[1],
-                           )
+        self.multibuffer  = torch.zeros([self.multibuffering,
+                                         self.batch_size,
+                                         3,
+                                         self.shape[0],
+                                         self.shape[1]],
+                                        dtype  = torch.float32,
+                                        device = self.device)
+        self.core         = benzina.native.NvdecodeDataLoaderIterCore(
+                                self.dataset_core,
+                                str(self.device),
+                                self.multibuffer,
+                                self.multibuffer.data_ptr(),
+                                self.batch_size,
+                                self.multibuffering,
+                                self.shape[0],
+                                self.shape[1],
+                            )
+        self._memoryviews = [[None] * self.batch_size
+                             for i in range(self.multibuffering
+                                            if self.multibuffering else 1)]
     
     def push_first_indices(self):
         self.push(self.__dict__.pop("first_indices"))
@@ -254,26 +255,26 @@ class _DataLoaderIter:
     
     def push(self, indices):
         self.check_or_set_batch_size(indices)
-        buffer      = self.multibuffer[self.core.pushes % self.core.multibuffering][:len(indices)]
-        indices     = [int(i)                     for i in indices]
-        ptrs        = [int(buffer[n].data_ptr())  for n in range(len(indices))]
-        samples     = [self.dataset[i]            for i in indices]
-        items, auxd = zip(*[((item.input, item.input_label), item.target) for item in samples])
-        # Use "bzna_thumb" until having a dataloader that is able to load
-        # the size variant images in "bzna_input"
-        inputs      = [Track(item.as_file(), label) for item, label in items]
-        token       = (buffer, *self.collate_fn(auxd))
-        t_args      = (self.shape, self.RNG)
+        buffer                    = self.multibuffer[self.core.pushes % self.core.multibuffering][:len(indices)]
+        memviews                  = self._memoryviews[self.core.pushes % self.core.multibuffering]
+        indices                   = [int(i)                    for i in indices]
+        ptrs                      = [int(buffer[n].data_ptr()) for n in range(len(indices))]
+        samples                   = [self.dataset[i]           for i in indices]
+        memviews[:len(indices)], auxd, tracks = \
+            zip(*[(s.input, s.target, s.track) for s in samples])
+        memviews[len(indices):]   = [None] * (len(indices) - self.batch_size)
+        token                     = (buffer, *self.collate_fn(auxd))
+        t_args                    = (self.shape, self.RNG)
 
         with self.core.batch(token) as batch:
-            for i,ptr,input in zip(indices, ptrs, inputs):
-                with batch.sample(i, ptr, input.sample_location(0),
-                                  input.video_configuration_location()):
-                    self.core.setHomography    (*self.warp_transform (i, input.shape, *t_args))
-                    self.core.selectColorMatrix(*self.color_transform(i, input.shape, *t_args))
-                    self.core.setBias          (*self.bias_transform (i, input.shape, *t_args))
-                    self.core.setScale         (*self.norm_transform (i, input.shape, *t_args))
-                    self.core.setOOBColor      (*self.oob_transform  (i, input.shape, *t_args))
+            for i,ptr,memview,track in zip(indices, ptrs, memviews, tracks):
+                with batch.sample(i, ptr, memview, track.sample_location(0),
+                                  track.video_configuration_location()):
+                    self.core.setHomography    (*self.warp_transform (i, track.shape, *t_args))
+                    self.core.selectColorMatrix(*self.color_transform(i, track.shape, *t_args))
+                    self.core.setBias          (*self.bias_transform (i, track.shape, *t_args))
+                    self.core.setScale         (*self.norm_transform (i, track.shape, *t_args))
+                    self.core.setOOBColor      (*self.oob_transform  (i, track.shape, *t_args))
     
     def pull(self):
         if self.core.pulls >= self.core.pushes:

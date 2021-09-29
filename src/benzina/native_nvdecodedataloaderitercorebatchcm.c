@@ -170,14 +170,20 @@ static PyObject* NvdecodeDataLoaderIterCoreBatchCM_sample           (NvdecodeDat
 	PyObject* ret                      = NULL;
 	unsigned long long index           = 0;
 	unsigned long long dstPtr          = 0;
+	PyObject*          sample          = NULL;
 	PyTupleObject*     location        = NULL;
 	PyTupleObject*     config_location = NULL;
 
-	static char *kwargsList[] = {"index", "dstPtr", "location", "config_location", NULL};
+	static char *kwargsList[] = {"index", "dstPtr", "sample", "location", "config_location", NULL};
 	
-	if(!PyArg_ParseTupleAndKeywords(args, kwargs, "KKOO", kwargsList,
-	                                &index, &dstPtr, &location, &config_location)){
+	if(!PyArg_ParseTupleAndKeywords(args, kwargs, "KKOOO", kwargsList,
+	                                &index, &dstPtr, &sample, &location, &config_location)){
 		return NULL;
+	}
+
+	if(sample != NULL && !PyMemoryView_Check(sample)){
+		Py_DECREF(sample);
+		sample = NULL;
 	}
 
 	if(location != NULL && !PyTuple_Check(location)){
@@ -190,12 +196,13 @@ static PyObject* NvdecodeDataLoaderIterCoreBatchCM_sample           (NvdecodeDat
         config_location = NULL;
 	}
 	
-	if(location == NULL || config_location == NULL){
+	if(sample == NULL || location == NULL || config_location == NULL){
         return NULL;
     }
 	
     ret = PyObject_CallFunction((PyObject*)&NvdecodeDataLoaderIterCoreSampleCMType,
-	                            "OKKOO", self, index, dstPtr, location, config_location);
+	                            "OKKOOO", self, index, dstPtr, sample, location, config_location);
+    // Py_DECREF(sample);
     Py_DECREF(location);
     Py_DECREF(config_location);
     return ret;
