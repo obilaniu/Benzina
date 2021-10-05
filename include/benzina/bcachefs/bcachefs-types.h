@@ -141,7 +141,7 @@ typedef struct bch_bkey_packed          bch_bkey_packed;
 typedef struct bch_bkey_format          bch_bkey_format;
 
 typedef struct bch_deleted              bch_deleted;
-typedef struct bch_discard              bch_discard;
+typedef struct bch_whiteout             bch_whiteout;
 typedef struct bch_error                bch_error;
 typedef struct bch_cookie               bch_cookie;
 typedef struct bch_hash_whiteout        bch_hash_whiteout;
@@ -201,6 +201,7 @@ enum bch_metadata_version{
     BCH_METADATA_VERSION_snapshot                  = 12,
     BCH_METADATA_VERSION_inode_backpointers        = 13,
     BCH_METADATA_VERSION_btree_ptr_sectors_written = 14,
+    BCH_METADATA_VERSION_snapshot_2                = 15,
     BCH_METADATA_VERSION_max,
     BCH_METADATA_VERSION_current = BCH_METADATA_VERSION_max-1,
     BCH_METADATA_VERSION_NR      = BCH_METADATA_VERSION_max
@@ -227,6 +228,8 @@ enum bch_bkey_type{
     BCH_BKEY_btree_ptr_v2,
     BCH_BKEY_indirect_inline_data,
     BCH_BKEY_alloc_v2,               /* 20 */
+    BCH_BKEY_subvolume,
+    BCH_BKEY_snapshot,
     BCH_BKEY_NR
 };
 enum bch_bkey_fields{
@@ -379,6 +382,8 @@ enum bch_btree_id{
     BCH_BTREE_ID_quotas,
     BCH_BTREE_ID_stripes,
     BCH_BTREE_ID_reflink,
+    BCH_BTREE_ID_subvolumes,             /*  8 */
+    BCH_BTREE_ID_snapshots,
     BCH_BTREE_ID_NR
 };
 enum bch_inode_flags{
@@ -679,9 +684,9 @@ struct bch_bkey_format{
 struct /* 0x00 =  0 */ bch_deleted{
     bch_u64 data[0];/* Empty */
 } BENZINA_ATTRIBUTE_PACKED_ALIGNED(8); BENZINA_PRAGMA_POISON(bch_deleted)
-struct /* 0x01 =  1 */ bch_discard{
+struct /* 0x01 =  1 */ bch_whiteout{
     bch_u64 data[0];/* Empty */
-} BENZINA_ATTRIBUTE_PACKED_ALIGNED(8); BENZINA_PRAGMA_POISON(bch_discard)
+} BENZINA_ATTRIBUTE_PACKED_ALIGNED(8); BENZINA_PRAGMA_POISON(bch_whiteout)
 struct /* 0x02 =  2 */ bch_error{
     bch_u64 data[0];/* Empty */
 } BENZINA_ATTRIBUTE_PACKED_ALIGNED(8); BENZINA_PRAGMA_POISON(bch_error)
@@ -844,6 +849,32 @@ struct /* 0x14 = 20 */ bch_alloc_v2{
     bch_u8 oldest_gen;
     bch_u8 data_type;
     bch_u8 data[];
+} BENZINA_ATTRIBUTE_PACKED_ALIGNED(8);
+struct /* 0x15 = 21 */ bch_subvolume{
+    /**
+     * 1x u32, little-endian byte-order
+     *     Bits     |   Name
+     * =============|==================
+     *  (lsb)   1   | ro
+     *          1   | snap   (Is this subvolume a snapshot?)
+     */
+    bch_le32 flags;
+    bch_le32 snapshot;
+    bch_le64 inode;
+} BENZINA_ATTRIBUTE_PACKED_ALIGNED(8);
+struct /* 0x16 = 22 */ bch_snapshot{
+    /**
+     * 1x u32, little-endian byte-order
+     *     Bits     |   Name
+     * =============|==================
+     *  (lsb)   1   | deleted
+     *          1   | subvol  (True if a subvolume points to this snapshot node)
+     */
+    bch_le32 flags;
+    bch_le32 parent;
+    bch_le32 children[2];
+    bch_le32 subvol;
+    bch_le32 pad;
 } BENZINA_ATTRIBUTE_PACKED_ALIGNED(8);
 
 
@@ -1139,7 +1170,7 @@ struct bch_sb{
      * flags[0] |         1   | prjquota
      * flags[0] |         1   | has_errors
      * flags[0] |         1   | has_topology_errors
-     * flags[0] | (msb)   1   | big_endian
+     * flags[0] |         1   | big_endian
      * ---------+-------------+------------------------------------------------
      * flags[1] | (lsb)   4   | str_hash_type        (enum bch_str_hash_type)
      * flags[1] |         4   | compression_type     (enum bch_compression_type)
@@ -1160,6 +1191,7 @@ struct bch_sb{
      * flags[3] | (lsb)  16   | erasure_code
      * flags[3] |        12   | metadata_target
      * flags[3] |         1   | shard_inums
+     * flags[3] |         1   | inodes_use_key_cache
      */
     bch_le64      flags   [8];
     

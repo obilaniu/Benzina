@@ -2,7 +2,7 @@
 BcacheFS tests, using the Test Anything Protocol (TAP)
 --]]
 
-print('1..31')
+print('1..33')
 
 
 -- Small utility function to save typing while defining tests
@@ -57,6 +57,8 @@ t = {
     bi_fields_set             = 0,
     bi_dir                    = 4109,
     bi_dir_offset             = 1788158112371519905,
+    bi_subvol                 = 0,
+    bi_parent_subvol          = 0,
 }
 
 p =    "\x9c\x8b\x9f\x9d\x60\x99\xf0\xcf" -- bch_inode{ hash_seed=0xcff099609d9f8b9c,
@@ -85,7 +87,9 @@ p = p.."\x00\x00\x00\x00\x00\x00\x35\x40" --     [00]                         da
                                           --     [00]                         fields_set
                                           --     [35 40]                      dir
 p = p.."\xff\xa1\x31\x23\x42\x54\xd0\xd0" --     [ff a1 31 23 42 54 d0 d0 18] dir_offset
-p = p.."\x18\x00\x00\x00\x00\x00\x00\x00" --  }
+p = p.."\x18\x00\x00\x00\x00\x00\x00\x00" --     (not present)                subvol
+                                          --     (not present)                parent_subvol
+                                          -- }
 
 u = bcachefs.inode_unpack(p)
 

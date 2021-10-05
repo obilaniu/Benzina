@@ -66,12 +66,12 @@ BENZINA_PUBLIC int   benz_bch_inode_unpack     (bch_inode_unpacked* u,
      * We use this trick because expanding out the inode unpack using macros
      * produces far more code, making it likely an icache miss will occur.
      * 
-     * WARNING: 27 out of 32 possible two-bit bit-groups are now used!
+     * WARNING: 29 out of 32 possible two-bit bit-groups are now used!
      */
     
-    nr_fields = nr_fields<=23 ? nr_fields : 23;
+    nr_fields = nr_fields<=25 ? nr_fields : 25;
     varintc = nr_fields<4 ? nr_fields*2 : nr_fields+4;
-    varintw = 0b111101010101010000100000101010101011111111111111111111;
+    varintw = 0b1010111101010101010000100000101010101011111111111111111111;
     for(o=0; varintc--; varintw>>=2){
         f  = benz_ctz64(*r+1)+1;
         r += f;
@@ -225,7 +225,9 @@ BENZINA_STATIC int benz_lua_bch_inode_unpack(lua_State* L){
             INODE_FIELD     (bi_erasure_code)            \
             INODE_FIELD     (bi_fields_set)              \
             INODE_FIELD     (bi_dir)                     \
-            INODE_FIELD     (bi_dir_offset)
+            INODE_FIELD     (bi_dir_offset)              \
+            INODE_FIELD     (bi_subvol)                  \
+            INODE_FIELD     (bi_parent_subvol)           \
     
     #define INODE_FIELD(name)      +1
     #define INODE_FIELD_WIDE(name) +2

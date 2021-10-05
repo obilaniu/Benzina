@@ -64,6 +64,8 @@ struct bch_inode_unpacked{
     bch_u16 bi_fields_set;             /* |  16-bit varint        */
     bch_u64 bi_dir;                    /* |  64-bit varint        */
     bch_u64 bi_dir_offset;             /* |  64-bit varint        */
+    bch_u32 bi_subvol;                 /* |  32-bit varint        */
+    bch_u32 bi_parent_subvol;          /* |  32-bit varint        */
 };
 
 

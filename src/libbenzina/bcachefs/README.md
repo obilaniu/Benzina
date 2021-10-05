@@ -86,6 +86,7 @@ One copy of this data structure always begins at an `offset` of `BCH_SB_SECTOR` 
 |`flags[3]`|`16`| `0`|`erasure_code`               |`16`|       |                                                                                   |
 |`flags[3]`|`28`|`16`|`metadata_target`            |`12`|       |                                                                                   |
 |`flags[3]`|`29`|`28`|`shard_inums`                | `1`|       |                                                                                   |
+|`flags[3]`|`30`|`29`|`inodes_use_key_cache`       | `1`|       |                                                                                   |
 
 
 #### 2.1.2. Features
@@ -138,7 +139,7 @@ One copy of this data structure always begins at an `offset` of `BCH_SB_SECTOR` 
 
 The size of this structure is exactly 16 bytes in all circumstances. The 80-bit AEAD construction exists because in B+tree nodes, truncating at 80 bits can save 8 bytes and maintain the size of an extent at 32 bytes; However, in the superblock, no space saving is obtained.
 
-Which of these checksum types depends on `bch_sb->flags` in the superblock.
+Which of these checksum types is in use depends on `bch_sb->flags` in the superblock.
 
 
 
