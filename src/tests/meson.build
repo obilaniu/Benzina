@@ -17,3 +17,5 @@ test('low-level', test_lowlevel, suite: 'low-level', protocol: 'tap')
 test('itu',       test_itu,      suite: 'itu',       protocol: 'tap')
 test('siphash',   benzina_benz,  suite: 'lua',       protocol: 'tap',
      args: ['lua', files('test_siphash.lua')])
+test('bcachefs',  benzina_benz,  suite: 'lua',       protocol: 'tap',
+     args: ['lua', files('test_bcachefs.lua')])

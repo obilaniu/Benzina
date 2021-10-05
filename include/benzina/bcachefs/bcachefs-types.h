@@ -95,6 +95,7 @@ typedef enum bch_compression_opts            bch_compression_opts;
 typedef enum bch_sb_field_type               bch_sb_field_type;
 typedef enum bch_jset_entry_type             bch_jset_entry_type;
 typedef enum bch_btree_id                    bch_btree_id;
+typedef enum bch_inode_flags                 bch_inode_flags;
 #endif
 
 
@@ -379,6 +380,18 @@ enum bch_btree_id{
     BCH_BTREE_ID_stripes,
     BCH_BTREE_ID_reflink,
     BCH_BTREE_ID_NR
+};
+enum bch_inode_flags{
+    BCH_INODE_FLAG_sync              = (1UL <<  0),
+    BCH_INODE_FLAG_immutable         = (1UL <<  1),
+    BCH_INODE_FLAG_append            = (1UL <<  2),
+    BCH_INODE_FLAG_nodump            = (1UL <<  3),
+    BCH_INODE_FLAG_noatime           = (1UL <<  4),
+    BCH_INODE_FLAG_i_size_dirty      = (1UL <<  5),
+    BCH_INODE_FLAG_i_sectors_dirty   = (1UL <<  6),
+    BCH_INODE_FLAG_unlinked          = (1UL <<  7),
+    BCH_INODE_FLAG_backptr_untrusted = (1UL <<  8),
+    BCH_INODE_FLAG_new_varint        = (1UL << 31),
 };
 
 

@@ -8,6 +8,7 @@
  */
 
 #include "benzina/bcachefs/bcachefs-types.h"
+#include "benzina/bcachefs/bcachefs-ops.h"
 
 
 #endif

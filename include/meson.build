@@ -18,6 +18,7 @@ benzina_headers = [
     'ptrops.h',
     'visibility.h',
     'bcachefs/bcachefs.h',
+    'bcachefs/bcachefs-ops.h',
     'bcachefs/bcachefs-types.h',
     'iso/bmff.h',
     'iso/bmff-box.h',
