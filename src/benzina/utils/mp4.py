@@ -141,12 +141,11 @@ def get_sample_size_at(file, stbl_pos=None):
     stsz_buf = file.read(box_size)
     sample_size = int.from_bytes(stsz_buf[header_size:header_size + 4], "big")
     if sample_size > 0:
-        sz_buf = None
-        sz = sample_size
+        sz_buf = stsz_buf[header_size:header_size + 4]
     else:
         sz_buf = stsz_buf[header_size +
                           4 +   # sample_size: uint32
                           4:]   # sample_count: uint32
-        sz = np.frombuffer(sz_buf, np.dtype(">u4"))
+    sz = np.frombuffer(sz_buf, np.dtype(">u4"))
 
     return sz, sz_buf
