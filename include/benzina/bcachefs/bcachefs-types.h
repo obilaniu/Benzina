@@ -208,7 +208,7 @@ enum bch_metadata_version{
 };
 enum bch_bkey_type{
     BCH_BKEY_deleted,                /* 0 */
-    BCH_BKEY_discard,
+    BCH_BKEY_whiteout,
     BCH_BKEY_error,
     BCH_BKEY_cookie,
     BCH_BKEY_hash_whiteout,          /* 4 */
