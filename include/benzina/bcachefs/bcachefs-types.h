@@ -202,6 +202,7 @@ enum bch_metadata_version{
     BCH_METADATA_VERSION_inode_backpointers        = 13,
     BCH_METADATA_VERSION_btree_ptr_sectors_written = 14,
     BCH_METADATA_VERSION_snapshot_2                = 15,
+    BCH_METADATA_VERSION_reflink_p_fix             = 16,
     BCH_METADATA_VERSION_max,
     BCH_METADATA_VERSION_current = BCH_METADATA_VERSION_max-1,
     BCH_METADATA_VERSION_NR      = BCH_METADATA_VERSION_max
@@ -813,9 +814,8 @@ struct /* 0x0e = 14 */ bch_stripe{
 } BENZINA_ATTRIBUTE_PACKED_ALIGNED(8);
 struct /* 0x0f = 15 */ bch_reflink_p{
     bch_le64 idx;
-    bch_le32 reservation_generation;
-    bch_u8   nr_replicas;
-    bch_u8   pad[3];
+    bch_le32 front_pad;
+    bch_le32 back_pad;
 } BENZINA_ATTRIBUTE_PACKED_ALIGNED(8);
 struct /* 0x10 = 16 */ bch_reflink_v{
     bch_le64         refcount;
