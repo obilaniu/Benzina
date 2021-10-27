@@ -203,6 +203,7 @@ enum bch_metadata_version{
     BCH_METADATA_VERSION_btree_ptr_sectors_written = 14,
     BCH_METADATA_VERSION_snapshot_2                = 15,
     BCH_METADATA_VERSION_reflink_p_fix             = 16,
+    BCH_METADATA_VERSION_subvol_dirent             = 17,
     BCH_METADATA_VERSION_max,
     BCH_METADATA_VERSION_current = BCH_METADATA_VERSION_max-1,
     BCH_METADATA_VERSION_NR      = BCH_METADATA_VERSION_max
@@ -761,7 +762,24 @@ struct /* 0x09 =  9 */ bch_inode_generation{
     bch_le32 pad;
 } BENZINA_ATTRIBUTE_PACKED_ALIGNED(8);
 struct /* 0x0a = 10 */ bch_dirent{
-    bch_le64 d_inum;/* Target inode number */
+    /**
+     * Dirent Target
+     * 
+     *   - For non-subvolumes (d_type != DT_SUBVOL):
+     *     Dirent maps name to inode number d_inum.
+     * 
+     *   - For subvolumes     (d_type == DT_SUBVOL):
+     *     Dirent maps name to child subvolume id. Also records parent
+     *     subvolume id.
+     */
+    union{
+        bch_le64 d_inum;/* Target inode number */
+        struct{
+            bch_le32 d_child_subvol;
+            bch_le32 d_parent_subvol;
+        } subvol;
+    };
+    
     /*
      * Copy of mode bits 12-15 from the target inode - so userspace can get
      * the filetype without having to do a stat()
