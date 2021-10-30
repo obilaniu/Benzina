@@ -166,8 +166,8 @@ BENZINA_STATIC const luaL_Reg siphashlib[] = {
   {"siphash", benz_lua_siphash},
   {NULL,      NULL}
 };
-BENZINA_STATIC int luaopen_benz_siphash(lua_State* L){
+BENZINA_STATIC int luaopen_benzina_siphash(lua_State* L){
     luaL_newlib(L, siphashlib);
     return 1;
 }
-BENZINA_LUAOPEN_REGISTER("benz.siphash", luaopen_benz_siphash);
+BENZINA_LUAOPEN_REGISTER("benzina.siphash", luaopen_benzina_siphash);

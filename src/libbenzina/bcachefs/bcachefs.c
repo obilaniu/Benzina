@@ -287,8 +287,8 @@ BENZINA_STATIC const luaL_Reg bcachefslib[] = {
     {"inode_unpack_size", benz_lua_bch_inode_unpack_size},
     {NULL,           NULL}
 };
-BENZINA_STATIC int luaopen_benz_bcachefs(lua_State* L){
+BENZINA_STATIC int luaopen_benzina_bcachefs(lua_State* L){
   luaL_newlib(L, bcachefslib);  /* new module */
   return 1;
 }
-BENZINA_LUAOPEN_REGISTER("benz.bcachefs", luaopen_benz_bcachefs)
+BENZINA_LUAOPEN_REGISTER("benzina.bcachefs", luaopen_benzina_bcachefs)

@@ -13,8 +13,8 @@ function tstmessagetap(name, cond)
 end
 
 
-bcachefs = require 'benz.bcachefs'
-siphash  = require 'benz.siphash'.siphash
+bcachefs = require 'benzina.bcachefs'
+siphash  = require 'benzina.siphash'.siphash
 
 
 
