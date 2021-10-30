@@ -874,7 +874,8 @@ struct /* 0x15 = 21 */ bch_subvolume{
      *     Bits     |   Name
      * =============|==================
      *  (lsb)   1   | ro
-     *          1   | snap   (Is this subvolume a snapshot?)
+     *          1   | snap       (Is this subvolume a snapshot?)
+     *          1   | unlinked   (Is this subvolume unlinked?)
      */
     bch_le32 flags;
     bch_le32 snapshot;
