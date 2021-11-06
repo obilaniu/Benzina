@@ -161,6 +161,10 @@ typedef struct bch_inline_data          bch_inline_data;
 typedef struct bch_btree_ptr_v2         bch_btree_ptr_v2;
 typedef struct bch_indirect_inline_data bch_indirect_inline_data;
 typedef struct bch_alloc_v2             bch_alloc_v2;
+typedef struct bch_subvolume            bch_subvolume;
+typedef struct bch_snapshot             bch_snapshot;
+typedef struct bch_inode_v2             bch_inode_v2;
+typedef struct bch_alloc_v3             bch_alloc_v3;
 
 typedef struct bch_jset_entry               bch_jset_entry;
 typedef struct bch_jset_entry_blacklist     bch_jset_entry_blacklist;
@@ -204,6 +208,7 @@ enum bch_metadata_version{
     BCH_METADATA_VERSION_snapshot_2                = 15,
     BCH_METADATA_VERSION_reflink_p_fix             = 16,
     BCH_METADATA_VERSION_subvol_dirent             = 17,
+    BCH_METADATA_VERSION_inode_v2                  = 18,
     BCH_METADATA_VERSION_max,
     BCH_METADATA_VERSION_current = BCH_METADATA_VERSION_max-1,
     BCH_METADATA_VERSION_NR      = BCH_METADATA_VERSION_max
@@ -232,6 +237,8 @@ enum bch_bkey_type{
     BCH_BKEY_alloc_v2,               /* 20 */
     BCH_BKEY_subvolume,
     BCH_BKEY_snapshot,
+    BCH_BKEY_inode_v2,
+    BCH_BKEY_alloc_v3,               /* 24 */
     BCH_BKEY_NR
 };
 enum bch_bkey_fields{
@@ -895,6 +902,70 @@ struct /* 0x16 = 22 */ bch_snapshot{
     bch_le32 subvol;
     bch_le32 pad;
 } BENZINA_ATTRIBUTE_PACKED_ALIGNED(8);
+struct /* 0x17 = 23 */ bch_inode_v2{
+    bch_le64 bi_journal_seq;
+    bch_le64 bi_hash_seed;
+    
+    /**
+     * 1x u32, little-endian byte-order
+     *       Bits  |   Name
+     * ============|==================
+     * (lsb)   1   | BCH_INODE_SYNC
+     *         1   | BCH_INODE_IMMUTABLE
+     *         1   | BCH_INODE_APPEND
+     *         1   | BCH_INODE_NODUMP
+     *         1   | BCH_INODE_NOATIME
+     *         1   | BCH_INODE_I_SIZE_DIRTY
+     *         1   | BCH_INODE_I_SECTORS_DIRTY
+     *         1   | BCH_INODE_UNLINKED
+     *         1   | BCH_INODE_BACKPTR_UNTRUSTED
+     *        11   | unused
+     *         4   | str_hash
+     *         7   | nr_fields
+     */
+    bch_le32 bi_flags;
+    
+    /**
+     * 1x u16, little-endian byte-order
+     *       Bits  |   Name
+     * ============|==================
+     * (lsb)   3   | Other rwx permissions (S_I[RWX]USR)
+     *         3   | Group rwx permissions (S_I[RWX]GRP)
+     *         3   | Owner rwx permissions (S_I[RWX]OTH)
+     *         1   | Sticky bit            (S_ISVRX)
+     *         1   | Setgid bit            (S_ISGID)
+     *         1   | Setuid bit            (S_ISUID)
+     * (msb)   4   | Inode mode. Extractable with (stat.st_mode & S_IFMT).
+     *             | Possible values (octal):
+     *             |     S_IFSOCK   0140000   socket
+     *             |     S_IFLNK    0120000   symbolic link
+     *             |     S_IFREG    0100000   regular file
+     *             |     S_IFBLK    0060000   block device
+     *             |     S_IFDIR    0040000   directory
+     *             |     S_IFCHR    0020000   character device
+     *             |     S_IFIFO    0010000   FIFO
+     * ------------+------------------
+     * References: `man 7 inode`
+     */
+    bch_le16 bi_mode;
+    bch_u8   fields[];
+} BENZINA_ATTRIBUTE_PACKED_ALIGNED(8);
+struct /* 0x18 = 24 */ bch_alloc_v3{
+    bch_le64 bi_journal_seq;
+    
+    /**
+     * 1x u32, little-endian byte-order
+     *       Bits  |   Name
+     * ============|==================
+     */
+    bch_le32 bi_flags;
+    bch_u8   nr_fields;
+    bch_u8   gen;
+    bch_u8   oldest_gen;
+    bch_u8   data_type;
+    bch_u8   data[];
+} BENZINA_ATTRIBUTE_PACKED_ALIGNED(8);
+
 
 
 /**
