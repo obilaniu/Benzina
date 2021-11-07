@@ -7,37 +7,18 @@
 
 
 
-/* Data Structure Forward Declarations & Typedefs */
-typedef struct BENZ_SIPHASH_STATE BENZ_SIPHASH_STATE;
-
-
-
-/* Data Structure Definitions */
-
-/**
- * @brief SipHash state
- * 
- * Size: 256 bits (4x 64-bit words)
- */
-
-struct BENZ_SIPHASH_STATE{
-    uint64_t v[4];
-};
-
-
-
 /* Static Function Definitions */
-BENZINA_STATIC inline void benz_siphash_init(BENZ_SIPHASH_STATE* s, uint64_t k0, uint64_t k1){
-    s->v[0] = k0 ^ 0x736f6d6570736575; /* "somepseu" */
-    s->v[1] = k1 ^ 0x646f72616e646f6d; /* "dorandom" */
-    s->v[2] = k0 ^ 0x6c7967656e657261; /* "lygenera" */
-    s->v[3] = k1 ^ 0x7465646279746573; /* "tedbytes" */
+BENZINA_STATIC inline void benz_siphash_init(uint64_t v[4], uint64_t k0, uint64_t k1){
+    v[0] = k0 ^ 0x736f6d6570736575; /* "somepseu" */
+    v[1] = k1 ^ 0x646f72616e646f6d; /* "dorandom" */
+    v[2] = k0 ^ 0x6c7967656e657261; /* "lygenera" */
+    v[3] = k1 ^ 0x7465646279746573; /* "tedbytes" */
 }
-BENZINA_STATIC inline void benz_siphash_rounds(BENZ_SIPHASH_STATE* s, uint64_t m, unsigned r){
-    uint64_t v0 = s->v[0];
-    uint64_t v1 = s->v[1];
-    uint64_t v2 = s->v[2];
-    uint64_t v3 = s->v[3];
+BENZINA_STATIC inline void benz_siphash_rounds(uint64_t v[4], uint64_t m, unsigned r){
+    uint64_t v0 = v[0];
+    uint64_t v1 = v[1];
+    uint64_t v2 = v[2];
+    uint64_t v3 = v[3];
     
     v3 ^= m;
     
@@ -62,31 +43,31 @@ BENZINA_STATIC inline void benz_siphash_rounds(BENZ_SIPHASH_STATE* s, uint64_t m
     
     v0 ^= m;
     
-    s->v[0] = v0;
-    s->v[1] = v1;
-    s->v[2] = v2;
-    s->v[3] = v3;
+    v[0] = v0;
+    v[1] = v1;
+    v[2] = v2;
+    v[3] = v3;
 }
 BENZINA_STATIC inline uint64_t benz_siphash_padword(const void* buf, uint64_t len){
     uint64_t m=0;
     memcpy(&m, benz_ptr_addcv(buf, len&~7), len&7);
     return benz_getle64(&m, 0) | len<<56;
 }
-BENZINA_STATIC inline uint64_t benz_siphash_finalize(BENZ_SIPHASH_STATE* s, unsigned d){
-    s->v[2] ^= 0xFFU;
-    benz_siphash_rounds(s, 0, d);
-    return s->v[0]^s->v[1]^s->v[2]^s->v[3];
+BENZINA_STATIC inline uint64_t benz_siphash_finalize(uint64_t v[4], unsigned d){
+    v[2] ^= 0xFFU;
+    benz_siphash_rounds(v, 0, d);
+    return v[0]^v[1]^v[2]^v[3];
 }
 BENZINA_STATIC inline uint64_t benz_siphash_digest_internal(const void* buf, uint64_t len,
                                                             uint64_t    k0,  uint64_t k1,
                                                             unsigned    c,   unsigned d){
     uint64_t l;
-    BENZ_SIPHASH_STATE s;
-    benz_siphash_init(&s, k0, k1);
+    uint64_t v[4];
+    benz_siphash_init(v, k0, k1);
     for(l=0;l+7<len;l+=8)
-        benz_siphash_rounds(&s, benz_getle64(buf, l), c);
-    benz_siphash_rounds(&s, benz_siphash_padword(buf, len), c);
-    return benz_siphash_finalize(&s, d);
+        benz_siphash_rounds(v, benz_getle64(buf, l), c);
+    benz_siphash_rounds(v, benz_siphash_padword(buf, len), c);
+    return benz_siphash_finalize(v, d);
 }
 
 
