@@ -7,7 +7,7 @@ ASM_SECT_CSTRING_DECL
 .Llfs_module_name:
     .asciz "lfs"
 
-ASM_SECT_LUAOPENARRAYPRELOAD_DECL
+ASM_SECT_LUAOPENARRAY_DECL
 #if BENZINA_OS_DARWIN
     ASM_PTR_DECL .Llfs_module_name, _luaopen_lfs
 #else

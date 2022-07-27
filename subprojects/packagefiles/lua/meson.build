@@ -93,7 +93,6 @@ custom_lua_sta = static_library(
         '-DLUA_USE_LINENOISE_HISTCONTROL',
         '-DLUATEXT_EXTRA=__lua_text_array',
         '-DLUAOPEN_EXTRA=__lua_open_array',
-        '-DLUAOPEN_PRELOAD_EXTRA=__lua_open_array_preload',
         '-Dmain_lua=main_lua',
         '-Dmain_luac=main_luac',
     ],

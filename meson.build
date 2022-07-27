@@ -124,27 +124,22 @@ add_global_arguments([f'-D@MACRO_CPU_FAMILY@=1',
 #      which we adhere to by underscorifying the equivalent ELF section name
 #      and adding an additional prefix underscore.
 #
-# Because of this, plus other difficulties, we do not currently support
-# preloading Lua modules in Lua states on macOS.
-#
 add_global_arguments([f'-DASM_PTR_SIZE=@VOIDP_SIZE@',
                       f'-DASM_PTR_DECL=.@VOIDP_SIZE@byte'], language: ['c', 'cpp'])
 SECT_DICT = {
-    'BSS':                 {'name': '.bss',                    'elf_attr': '',                    'macho_segm': '__DATA', 'macho_attr': ''},
-    'CSTRING':             {'name': '.rodata.str1.1',          'elf_attr': '"aMS", @progbits, 1', 'macho_segm': '__TEXT', 'macho_attr': 'cstring_literals'},
-    'LICENSE':             {'name': '.license',                'elf_attr': '"a"',                 'macho_segm': '__TEXT', 'macho_attr': 'regular, no_dead_strip'},
-    'RODATALZ4':           {'name': '.rodata.lz4',             'elf_attr': '"a"',                 'macho_segm': '__TEXT', 'macho_attr': 'regular, no_dead_strip'},
-    'LZ4CMDARRAY':         {'name': '.lz4.cmd_array',          'elf_attr': '"aw"',                'macho_segm': '__DATA', 'macho_attr': 'regular, no_dead_strip'},
-    'TOOLARRAY':           {'name': '.tool_array',             'elf_attr': '"aw"',                'macho_segm': '__DATA', 'macho_attr': 'regular, no_dead_strip'},
-    'LUAOPENARRAY':        {'name': '.lua.open_array',         'elf_attr': '"aw"',                'macho_segm': '__DATA', 'macho_attr': 'regular, no_dead_strip'},
-    'LUAOPENARRAYPRELOAD': {'name': '.lua.open_array.preload', 'elf_attr': '"aw"',                'macho_segm': '__DATA', 'macho_attr': 'regular, no_dead_strip'},
-    'LUATEXTARRAY':        {'name': '.lua.text_array',         'elf_attr': '"aw"',                'macho_segm': '__DATA', 'macho_attr': 'regular, no_dead_strip'},
+    'BSS':                 {'name': '.bss',            'elf_attr': '',                    'macho_segm': '__DATA', 'macho_attr': ''},
+    'CSTRING':             {'name': '.rodata.str1.1',  'elf_attr': '"aMS", @progbits, 1', 'macho_segm': '__TEXT', 'macho_attr': 'cstring_literals'},
+    'LICENSE':             {'name': '.license',        'elf_attr': '"a"',                 'macho_segm': '__TEXT', 'macho_attr': 'regular, no_dead_strip'},
+    'RODATALZ4':           {'name': '.rodata.lz4',     'elf_attr': '"a"',                 'macho_segm': '__TEXT', 'macho_attr': 'regular, no_dead_strip'},
+    'LZ4CMDARRAY':         {'name': '.lz4.cmd_array',  'elf_attr': '"aw"',                'macho_segm': '__DATA', 'macho_attr': 'regular, no_dead_strip'},
+    'TOOLARRAY':           {'name': '.tool_array',     'elf_attr': '"aw"',                'macho_segm': '__DATA', 'macho_attr': 'regular, no_dead_strip'},
+    'LUAOPENARRAY':        {'name': '.lua.open_array', 'elf_attr': '"aw"',                'macho_segm': '__DATA', 'macho_attr': 'regular, no_dead_strip'},
+    'LUATEXTARRAY':        {'name': '.lua.text_array', 'elf_attr': '"aw"',                'macho_segm': '__DATA', 'macho_attr': 'regular, no_dead_strip'},
 }
 foreach sect, dict : SECT_DICT
   if IS_HOST_DARWIN
     sect_name = dict['macho_segm'] + ',_' + {
-        'LUAOPENARRAYPRELOAD': '.lua.open_array',  # Name too long for Mach-O
-        'CSTRING':             '.cstring',         # Mach-O uses __cstring for mergeable strings
+        'CSTRING': '.cstring',         # Mach-O uses __cstring for mergeable strings
     }.get(sect, dict['name']).underscorify()
     sect_attr = dict['macho_attr']
   else

@@ -21,8 +21,6 @@ ASM_SECT_LICENSE_DECL
 .globl ___tool_array_end
 
 .globl ___lua_open_array_start
-.globl ___lua_open_array_preload_start
-.globl ___lua_open_array_preload_end
 .globl ___lua_open_array_end
 
 .globl ___lua_text_array_start
@@ -38,11 +36,6 @@ ASM_SECT_LICENSE_DECL
 .set   ___tool_array_end,               section$end$__DATA$__tool_array
 
 .set   ___lua_open_array_start,         section$start$__DATA$__lua_open_array
-# Mach-O doesn't support sections with >16-character names, so we disable
-# support for the sub-array .lua.open_array.preload!
-# The following two entries are *not* mistakes!
-.set   ___lua_open_array_preload_start, section$start$__DATA$__lua_open_array
-.set   ___lua_open_array_preload_end,   section$start$__DATA$__lua_open_array
 .set   ___lua_open_array_end,           section$end$__DATA$__lua_open_array
 
 .set   ___lua_text_array_start,         section$start$__DATA$__lua_text_array

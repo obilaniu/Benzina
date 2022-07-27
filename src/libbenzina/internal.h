@@ -32,9 +32,6 @@
  *   - BENZINA_LUAOPEN_REGISTER(name, func): Registers a Lua module with the
  *     Lua searcher for statically-linked modules. If module "name" is
  *     requested, the associated func(lua_State* L) function is called.
- *   - BENZINA_LUAOPEN_REGISTER_PRELOAD(name, func): As with
- *     BENZINA_LUAOPEN_REGISTER(name, func), but additionally mark the module
- *     for preloading into every Lua state.
  *   - BENZINA_TOOL_REGISTER(name, func): Registers a tool's main() entry
  *     point with the libbenzina main() entry point to enable dispatch. If
  *     tool "name" is requested, the associated int main(int argc, char* argv[])
@@ -53,10 +50,6 @@
 #define BENZINA_LUAOPEN_REGISTER(name, func)                      \
     BENZINA_ATTRIBUTE_USED                                        \
     BENZINA_ATTRIBUTE_SECTION(ASM_SECT_LUAOPENARRAY_NAME)         \
-    static const luaL_Reg __BENZINA_REGISTER(__benz_luaopen_entry_) = {("" name),(func)};
-#define BENZINA_LUAOPEN_REGISTER_PRELOAD(name, func)              \
-    BENZINA_ATTRIBUTE_USED                                        \
-    BENZINA_ATTRIBUTE_SECTION(ASM_SECT_LUAOPENARRAYPRELOAD_NAME)  \
     static const luaL_Reg __BENZINA_REGISTER(__benz_luaopen_entry_) = {("" name),(func)};
 #define BENZINA_TOOL_REGISTER(name, func)                         \
     BENZINA_ATTRIBUTE_USED                                        \
@@ -104,8 +97,6 @@ BENZINA_HIDDEN extern const BENZ_TOOL_ENTRY __tool_array_end[];
 
 /*** .lua.open_array ***/
 BENZINA_HIDDEN extern const luaL_Reg __lua_open_array_start[];
-BENZINA_HIDDEN extern const luaL_Reg __lua_open_array_preload_start[];
-BENZINA_HIDDEN extern const luaL_Reg __lua_open_array_preload_end[];
 BENZINA_HIDDEN extern const luaL_Reg __lua_open_array_end[];
 
 
