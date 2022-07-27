@@ -49,7 +49,7 @@ nvcc_opt_flags      = []
 nvcc_ccbin_flag     = []
 nvcc                = find_program(nvcc_path, 'nvcc', required: false, disabler: true)
 if nvcc.found()
-  NVCC_RUN = run_command(nvcc, ['-V'])
+  NVCC_RUN = run_command(nvcc, ['-V'], check: false)
   if NVCC_RUN.returncode() == 0
     CUDA_VERSION = NVCC_RUN.stdout().split('V')[-1].strip()
     #
@@ -124,7 +124,7 @@ else
       nvidiasmi = find_program('nvidia-smi', required: false, disabler: true)
       if nvidiasmi.found()
         NVIDIA_SMI_RUN = run_command(nvidiasmi, ['--query-gpu=driver_version',
-                                                 '--format=csv,noheader,nounits'])
+                                                 '--format=csv,noheader,nounits'], check: false)
         if NVIDIA_SMI_RUN.returncode() == 0
           NVIDIA_DRIVER     = NVIDIA_SMI_RUN.stdout().strip()
           NVIDIA_DRIVER_MIN = NVIDIA_DRIVER
@@ -160,7 +160,7 @@ else
       modinfo = find_program('modinfo', dirs: ['/sbin', '/usr/sbin'],
                              required: false, disabler: true)
       if modinfo.found()
-        MODINFO_RUN = run_command(modinfo, ['-F', 'version', 'nvidia'])
+        MODINFO_RUN = run_command(modinfo, ['-F', 'version', 'nvidia'], check: false)
         if MODINFO_RUN.returncode() == 0
           NVIDIA_DRIVER     = MODINFO_RUN.stdout().strip()
           NVIDIA_DRIVER_MIN = NVIDIA_DRIVER
@@ -263,8 +263,8 @@ if nvcc.found()
   gpuarchs = []
   if CUDA_ARCH == 'Auto'
     detectGPUargs   = ['-w', '-cudart', 'static', detectgpus_c, '--run']
-    detectGPU       = run_command(nvcc, detectGPUargs)
-    detectGPUclean  = run_command(nvcc, detectGPUargs+['--clean-targets'])
+    detectGPU       = run_command(nvcc, detectGPUargs, check: false)
+    detectGPUclean  = run_command(nvcc, detectGPUargs+['--clean-targets'], check: false)
     detectGPUstdout = detectGPU.stdout().strip()
     detectGPUstderr = detectGPU.stderr().strip()
     if detectGPU.returncode() == 0
