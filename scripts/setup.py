@@ -109,7 +109,7 @@ setup(
     command_options={
         'build_sphinx':{
             'project':   ("setup.py", package_name),
-            'copyright': ("setup.py", "2020, {}".format(author)),
+            'copyright': ("setup.py", "2022, {}".format(author)),
             'version':   ("setup.py", versioning.ver_release),
             'release':   ("setup.py", versioning.ver_public)
         }
