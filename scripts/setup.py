@@ -92,6 +92,7 @@ setup(
                                              "lib")],
                   runtime_library_dirs=[os.path.join("$ORIGIN", "lib")],
                   define_macros=[("PY_SSIZE_T_CLEAN", None)],
+                  extra_compile_args=['-Wno-cpp'],
                   libraries=["benzina"],
         ),
     ],

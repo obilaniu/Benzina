@@ -802,7 +802,7 @@ static PyTypeObject NvdecodeDataLoaderIterCoreType = {
     0,                                                 /* tp_descr_set */
     0,                                                 /* tp_dictoffset */
     (initproc)NvdecodeDataLoaderIterCore_init,         /* tp_init */
-    0,                                                 /* tp_alloc */
+    NvdecodeDataLoaderIterCore_alloc,                  /* tp_alloc */
     NvdecodeDataLoaderIterCore_new,                    /* tp_new */
     0,                                                 /* tp_free */
     0,                                                 /* tp_is_gc */
