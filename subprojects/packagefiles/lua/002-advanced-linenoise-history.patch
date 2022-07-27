@@ -1,0 +1,663 @@
+Author: Olexa Bilaniuk <obilaniu@gmail.com>
+Date:   Wed Jun 29 15:52:10 2022 -0400
+
+    Advanced history and line completion support.
+    
+    Adds Bash-like environment and history support, controllable through
+    environment variables
+      - LUA_HISTORY
+      - LUA_HISTSIZE
+      - LUA_HISTFILESIZE
+      - LUA_HISTCONTROL
+    
+    Line-editing libraries supported:
+    
+      - readline
+      - linenoise
+    
+    The supported feature-set varies between the two.
+    
+    Co-authored-by: Mike Pall <mike>
+    Co-authored-by: Sean Bolton <sean@smbolton.com>
+
+diff --git a/lua.c b/lua.c
+index 28abd014..7f93255a 100644
+--- a/lua.c
++++ b/lua.c
+@@ -438,6 +438,18 @@ static int handle_luainit (lua_State *L) {
+ #define lua_saveline(L,line)	((void)L, add_history(line))
+ #define lua_freeline(L,b)	((void)L, free(b))
+ 
++#elif defined(LUA_USE_LINENOISE) ||    \
++      defined(LUA_USE_LINENOISE_UTF8)
++
++#include "linenoise.h"
++#if  defined(LUA_USE_LINENOISE_UTF8)
++#include "encodings/utf8.h"
++#endif
++#define lua_initreadline(L)  ((void)L)
++#define lua_readline(L,b,p)	((void)L, ((b)=linenoise(p)) != NULL)
++#define lua_saveline(L,line)	((void)L, linenoiseHistoryAdd(line))
++#define lua_freeline(L,b)	((void)L, linenoiseFree(b))
++
+ #else				/* }{ */
+ 
+ #define lua_initreadline(L)  ((void)L)
+@@ -452,6 +464,600 @@ static int handle_luainit (lua_State *L) {
+ #endif				/* } */
+ 
+ 
++/* ------------------------------------------------------------------------ */
++
++/*
++** Environment variables and default values:
++**
++**   - LUA_HISTORY, envvar pointing to history file
++**       (default envvar name: "LUA_HISTORY")
++**   - LUA_HISTSIZE, envvar specifying size of in-memory history, in lines
++**       (default envvar name: "LUA_HISTSIZE")
++**   - LUA_HISTFILESIZE, envvar specifying size of history file, in lines
++**       (default envvar name: "LUA_HISTFILESIZE")
++**   - LUA_HISTCONTROL, envvar specifying handling of history.
++**       (default envvar name: "LUA_HISTCONTROL")
++**        This is a colon-separated list of values:
++**          - ignorespace:  A line beginning with whitespace is not added to history.
++**          - ignoredups:   A line identical to the previous line is not added to history.
++**          - ignoreboth:   Equivalent to "ignorespace:ignoredups"
++**          - erasedups:    A line added to history erases all previous duplicates.
++**        Unknown values are silently ignored.
++**   - LUA_HISTORY_DEFAULT, default name of history file,
++**       should the envvar LUA_HISTORY be unset.
++**       (default file name: "~/.lua_history<MAJOR>.<MINOR>")
++**   - LUA_HISTSIZE_DEFAULT, default size of in-memory history, in lines
++**       (default history size: 500)
++*/
++#if !defined(LUA_HISTORY)
++#define LUA_HISTORY               "LUA_HISTORY"
++#endif
++#if !defined(LUA_HISTSIZE)
++#define LUA_HISTSIZE              "LUA_HISTSIZE"
++#endif
++#if !defined(LUA_HISTFILESIZE)
++#define LUA_HISTFILESIZE          "LUA_HISTFILESIZE"
++#endif
++#if !defined(LUA_HISTCONTROL)
++#define LUA_HISTCONTROL           "LUA_HISTCONTROL"
++#endif
++#if !defined(LUA_HISTORY_DEFAULT)
++#define LUA_HISTORY_DEFAULT       "~/.lua_history" LUA_VERSION_MAJOR "." LUA_VERSION_MINOR
++#endif
++#if !defined(LUA_HISTSIZE_DEFAULT)
++#define LUA_HISTSIZE_DEFAULT      500
++#endif
++
++
++/* ------------------------------------------------------------------------ */
++
++/*
++** Global state for access by readline/linenoise callbacks.
++**
++** This is necessary because neither framework supports userdata.
++*/
++#define HISTCONTROL_NONE        0UL
++#define HISTCONTROL_IGNORESPACE 1UL <<  0
++#define HISTCONTROL_IGNOREDUPS  1UL <<  1
++#define HISTCONTROL_IGNOREBOTH  (HISTCONTROL_IGNORESPACE |\
++                                 HISTCONTROL_IGNOREDUPS)
++#define HISTCONTROL_ERASEDUPS   1UL <<  2
++
++static lua_State*  lua_rl_L = NULL;
++static char*       lua_rl_history = NULL;
++static long        lua_rl_histsize = 0;
++static long        lua_rl_histfilesize = 0;
++static long        lua_rl_histcontrol = HISTCONTROL_NONE;
++
++
++/* ------------------------------------------------------------------------ */
++
++/*
++** Return the path that should be used in the place of this filename.
++**
++** Cases to be handled:
++**   - For a NULL filename:
++**     - If LUA_HISTORY_DEFAULT is NULL, return NULL
++**     - Else substitute filename with LUA_HISTORY_DEFAULT and proceed.
++**   - For a filename equal to "", "." or "..", or ending with
++**     "/", "/." or "/..", return NULL
++**   - For a filename starting with "~/", or with no separator,
++**         return $HOME+"/"+filename (with "~/" prefix deleted)
++**   - Otherwise, return a copy of filename
++**
++** The returned path must be free()'d afterwards.
++*/
++static char* lua_rl_history_compute(const char* name){
++  char*  pathbuf;
++  size_t pathlen;
++  int    need_home;
++  const char* segm;
++  const char* tail;
++  const char* home = "";
++  const char* sepr = "";
++
++  if(!name && !(name = LUA_HISTORY_DEFAULT))
++    return NULL;
++
++  segm = strrchr(name, '/');
++  tail = segm ? segm+1 : name;
++  if(strcmp(tail, "")   == 0 ||
++     strcmp(tail, ".")  == 0 ||
++     strcmp(tail, "..") == 0)
++    return NULL;
++
++  if(strncmp(name, "~/", 2) == 0)
++    need_home = 1, name += 2;
++  else
++    need_home = !segm;
++
++  if(need_home){
++    sepr = "/";
++    home = getenv("HOME");
++#if defined(_WIN32)
++    if(!home) /* Cargo-culting from GNU readline */
++      home = getenv("APPDATA");
++#endif
++    if(!home)
++      return NULL;
++  }
++
++  pathlen = snprintf(NULL, 0, "%s%s%s", home, sepr, name);
++  pathbuf = (char*)malloc(++pathlen);
++  if(!pathbuf)
++    return NULL;
++  snprintf(pathbuf, pathlen,  "%s%s%s", home, sepr, name);
++  return pathbuf;
++}
++
++
++/*
++** Return the analyzed history-control flags from their string form.
++**
++** Cases to be handled:
++**   - ignoredups
++**   - ignorespace
++**   - ignoreboth (ignorespace+ignoredups)
++**   - erasedups
++*/
++static long lua_rl_histcontrol_compute(const char* p){
++  const char* q;
++  long flags = HISTCONTROL_NONE;
++  if(!p)
++    return HISTCONTROL_IGNORESPACE;
++  do{
++    q = strchr(p, ':');
++    q = q ? q : p+strlen(p);
++    switch(q-p){
++      case  9: if(memcmp(p, "erasedups", q-p) == 0)
++                 flags |= HISTCONTROL_ERASEDUPS;
++               break;
++      case 10: if(memcmp(p, "ignoredups", q-p) == 0)
++                 flags |= HISTCONTROL_IGNOREDUPS;
++               if(memcmp(p, "ignoreboth", q-p) == 0)
++                 flags |= HISTCONTROL_IGNOREBOTH;
++               break;
++      case 11: if(memcmp(p, "ignorespace", q-p) == 0)
++                 flags |= HISTCONTROL_IGNORESPACE;
++      default: break;
++    }
++  }while(*q);
++  return flags;
++}
++
++
++/*
++** Lua 5.4.4 advanced readline support for the GNU readline and history
++** libraries or compatible replacements.
++**
++** Author: Mike Pall.
++** Maintainer: Sean Bolton (sean at smbolton dot com).
++**
++** Copyright (C) 2004-2006, 2014 Mike Pall. Same license as Lua. See lua.h.
++**
++** Advanced features:
++** - Completion of keywords and global variable names.
++** - Recursive and metatable-aware completion of variable names.
++** - Context sensitive delimiter completion.
++** - Save/restore of the history to/from a file (LUA_HISTORY env variable).
++** - Setting a limit for the size of the history (LUA_HISTSIZE env variable).
++** - Setting the app name to allow for $if lua ... $endif in ~/.inputrc.
++**
++** Start lua and try these (replace ~ with the TAB key):
++**
++** ~~
++** fu~foo() ret~fa~end<CR>
++** io~~~s~~~o~~~w~"foo\n")<CR>
++**
++** The ~~ are just for demonstration purposes (io~s~o~w~ suffices, of course).
++**
++** If you are used to zsh/tcsh-style completion support, try adding
++** 'TAB: menu-complete' and 'C-d: possible-completions' to your ~/.inputrc.
++**
++** The patch has been successfully tested with:
++**
++** GNU    readline 8.1    (2022-06-29)
++**
++** Change Log:
++** 2004-2006  Mike Pall   - original patch
++** 2009/08/24 Sean Bolton - updated for GNU readline version 6
++** 2011/11/15 Sean Bolton - updated for Lua 5.2
++** 2011/12/14 Sean Bolton - fixed segfault when using Mac OS X libedit 2.11
++** 2014/08/07 Sean Bolton - updated for Lua 5.3.0-alpha
++** 2015/06/17 Sean Bolton - updated for Lua 5.3.1
++** 2015/06/17 Olexa Bilaniuk - updated for Lua 5.4.4 + linenoise.
++*/
++
++#include <ctype.h>
++
++
++/* Reserved keywords. */
++static const char *const lua_rl_keywords[] = {
++  "and", "break", "do", "else", "elseif", "end", "false",
++  "for", "function", "goto", "if", "in", "local", "nil", "not", "or",
++  "repeat", "return", "then", "true", "until", "while", NULL
++};
++
++static int valididentifier(const char *s)
++{
++  if (!(isalpha(*s) || *s == '_')) return 0;
++  while(*++s) if (!(isalpha(*s) || isdigit(*s) || *s == '_')) return 0;
++  return 1;
++}
++
++/* Get __index field of metatable of object on top of stack. */
++static int lua_rl_getmetaindex(lua_State *L)
++{
++  if (!lua_getmetatable(L, -1)) { lua_pop(L, 1); return 0; }
++  lua_pushstring(L, "__index");
++  lua_rawget(L, -2);
++  lua_replace(L, -2);
++  if (lua_isnil(L, -1) || lua_rawequal(L, -1, -2)) { lua_pop(L, 2); return 0; }
++  lua_replace(L, -2);
++  return 1;
++}  /* 1: obj -- val, 0: obj -- */
++
++/* Get field from object on top of stack. Avoid calling metamethods. */
++static int lua_rl_getfield(lua_State *L, const char *s, size_t n)
++{
++  int i = 20;  /* Avoid infinite metatable loops. */
++  do {
++    if (lua_istable(L, -1)) {
++      lua_pushlstring(L, s, n);
++      lua_rawget(L, -2);
++      if (!lua_isnil(L, -1)) { lua_replace(L, -2); return 1; }
++      lua_pop(L, 1);
++    }
++  } while (--i > 0 && lua_rl_getmetaindex(L));
++  lua_pop(L, 1);
++  return 0;
++}  /* 1: obj -- val, 0: obj -- */
++
++
++#if defined(LUA_USE_READLINE)
++
++/* Dynamically resizable match list. */
++typedef struct {
++  char **list;
++  size_t idx, allocated, matchlen;
++} dmlist;
++
++/* Add prefix + string + suffix to list and compute common prefix. */
++static int lua_rl_dmadd(dmlist *ml, const char *p, size_t pn, const char *s,
++			int suf)
++{
++  char *t = NULL;
++
++  if (ml->idx+1 >= ml->allocated &&
++      !(ml->list = realloc(ml->list, sizeof(char *)*(ml->allocated += 32))))
++    return -1;
++
++  if (s) {
++    size_t n = strlen(s);
++    if (!(t = (char *)malloc(sizeof(char)*(pn+n+(suf?2:1))))) return 1;
++    memcpy(t, p, pn);
++    memcpy(t+pn, s, n);
++    n += pn;
++    t[n] = suf;
++    if (suf) t[++n] = '\0';
++
++    if (ml->idx == 0) {
++      ml->matchlen = n;
++    } else {
++      size_t i;
++      for (i = 0; i < ml->matchlen && i < n && ml->list[1][i] == t[i]; i++) ;
++      ml->matchlen = i;  /* Set matchlen to common prefix. */
++    }
++  }
++
++  ml->list[++ml->idx] = t;
++  return 0;
++}
++
++/* Completion callback. */
++static char **lua_rl_complete(const char *text, int start, int end)
++{
++  lua_State *L = lua_rl_L;
++  dmlist ml;
++  const char *s;
++  size_t i, n, dot, loop;
++  int savetop;
++
++  if (!(text[0] == '\0' || isalpha(text[0]) || text[0] == '_')) return NULL;
++
++  ml.list = NULL;
++  ml.idx = ml.allocated = ml.matchlen = 0;
++
++  savetop = lua_gettop(L);
++  lua_pushglobaltable(L);
++  for (n = (size_t)(end-start), i = dot = 0; i < n; i++)
++    if (text[i] == '.' || text[i] == ':') {
++      if (!lua_rl_getfield(L, text+dot, i-dot))
++        goto error;  /* Invalid prefix. */
++      dot = i+1;  /* Points to first char after dot/colon. */
++    }
++
++  /* Add all matches against keywords if there is no dot/colon. */
++  if (dot == 0)
++    for (i = 0; (s=lua_rl_keywords[i]); i++)
++      if (!strncmp(s, text, n) && lua_rl_dmadd(&ml, NULL, 0, s, ' '))
++        goto error;
++
++  /* Add all valid matches from all tables/metatables. */
++  loop = 0;  /* Avoid infinite metatable loops. */
++  lua_pushglobaltable(L);
++  lua_insert(L, -2);
++  do {
++    if (lua_istable(L, -1) && (loop == 0 || !lua_rawequal(L, -1, -2)))
++      for (lua_pushnil(L); lua_next(L, -2); lua_pop(L, 1))
++  if (lua_type(L, -2) == LUA_TSTRING) {
++    s = lua_tostring(L, -2);
++    /* Only match names starting with '_' if explicitly requested. */
++    if (!strncmp(s, text+dot, n-dot) && valididentifier(s) &&
++        (*s != '_' || text[dot] == '_')) {
++      int suf = ' ';  /* Default suffix is a space. */
++      switch (lua_type(L, -1)) {
++      case LUA_TTABLE:	suf = '.'; break;  /* No way to guess ':'. */
++      case LUA_TFUNCTION:	suf = '('; break;
++      case LUA_TUSERDATA:
++        if (lua_getmetatable(L, -1)) { lua_pop(L, 1); suf = ':'; }
++        break;
++      }
++      if (lua_rl_dmadd(&ml, text, dot, s, suf)) goto error;
++    }
++  }
++  } while (++loop < 20 && lua_rl_getmetaindex(L));
++  lua_pop(L, 1);
++
++  if (ml.idx == 0) {
++error:
++    lua_settop(L, savetop);
++    return NULL;
++  } else {
++    /* list[0] holds the common prefix of all matches (may be ""). */
++    /* If there is only one match, list[0] and list[1] will be the same. */
++    if (!(ml.list[0] = (char *)malloc(sizeof(char)*(ml.matchlen+1))))
++      goto error;
++    memcpy(ml.list[0], ml.list[1], ml.matchlen);
++    ml.list[0][ml.matchlen] = '\0';
++    /* Add the NULL list terminator. */
++    if (lua_rl_dmadd(&ml, NULL, 0, NULL, 0)) goto error;
++  }
++
++  lua_settop(L, savetop);
++#if RL_READLINE_VERSION >= 0x0600
++  rl_completion_suppress_append = 1;
++#endif
++  return ml.list;
++}
++
++#elif defined(LUA_USE_LINENOISE) || \
++      defined(LUA_USE_LINENOISE_UTF8)
++
++static void lua_rl_dmadd(linenoiseCompletions *lc, const char *fmt, ...) {
++    va_list ap;
++    size_t len;
++    char *copy;
++
++    va_start(ap, fmt);
++    len = vsnprintf(NULL, 0, fmt, ap);
++    va_end(ap);
++
++    copy = (char*)malloc(len+1);
++    if (!copy) return;
++
++    va_start(ap, fmt);
++    vsnprintf(copy, len+1, fmt, ap);
++    va_end(ap);
++
++    linenoiseAddCompletion(lc, copy);
++    free(copy);
++}
++
++static void lua_rl_complete(const char *t, linenoiseCompletions *lc){
++  lua_State* L = lua_rl_L;
++  const char *s;
++  size_t i, n, dot, loop;
++  int savetop;
++
++  if(!(*t == '\0' || *t == '_' || isalpha(*t))) return;
++
++  /* Drill down from global table. */
++  savetop = lua_gettop(L);
++  lua_pushglobaltable(L);
++  for(n=strlen(t), i=dot=0; i<n; i++)
++    if(t[i] == '.' || t[i] == ':'){
++      if(!lua_rl_getfield(L, t+dot, i-dot))
++        goto error;  /* Invalid prefix. */
++      dot = i+1;  /* Points to first char after dot/colon. */
++    }
++
++  /* Add all matches against keywords if there is no dot/colon. */
++  if(!dot)
++    for(i=0; (s=lua_rl_keywords[i]); i++)
++      if(strncmp(s, t, n) == 0)
++        lua_rl_dmadd(lc, "%s ", s);
++
++  /* Add all valid matches from all tables/metatables. */
++  loop = 0;  /* Avoid infinite metatable loops. */
++  lua_pushglobaltable(L);
++  lua_insert(L, -2);
++  do{
++    if(lua_istable(L, -1) && (loop == 0 || !lua_rawequal(L, -1, -2)))
++      for(lua_pushnil(L); lua_next(L, -2); lua_pop(L, 1))
++        if(lua_type(L, -2) == LUA_TSTRING){
++          s = lua_tostring(L, -2);
++          /* Only match names starting with '_' if explicitly requested. */
++          if(!strncmp(s, t+dot, n-dot) && valididentifier(s) &&
++             (*s != '_' || t[dot] == '_')){
++            int suf = ' ';  /* Default suffix is a space. */
++            switch(lua_type(L, -1)){
++              case LUA_TTABLE:    suf = '.'; break;  /* No way to guess ':'. */
++              case LUA_TFUNCTION: suf = '('; break;
++              case LUA_TUSERDATA:
++                if(lua_getmetatable(L, -1)){
++                  lua_pop(L, 1); suf = ':';
++                }
++              break;
++            }
++            lua_rl_dmadd(lc, "%*.*s%s%c", (int)dot, (int)dot, t, s, suf);
++          }
++        }
++  }while(++loop < 20 && lua_rl_getmetaindex(L));
++  lua_pop(L, 1);
++
++  error:
++  lua_settop(L, savetop);
++}
++
++static char* lua_rl_hints(const char *t, int *color, int *bold){
++  *color = 0;
++  *bold  = 0;
++  (void)t;
++  return NULL;
++}
++
++#endif
++
++
++/* Initialize readline library. */
++static void lua_rl_init(lua_State *L){
++  char* p;
++
++  /*
++  ** Lua context: Autocomplete callbacks don't accept userdata, must use
++  ** global contexts.
++  */
++  lua_rl_L = L;
++
++  /*
++  ** LUA_HISTORY: The path to the command history file.
++  ** If NULL, history is not saved.
++  ** If not openable for reading, the in-memory history is not initialized.
++  ** If not openable for writing, history is not saved on exit.
++  **
++  ** LUA_HISTCONTROL: Options for history handling.
++  **   - LUA_USE_READLINE:  Ignored
++  **   - LUA_USE_LINENOISE: Ignored if LUA_USE_LINENOISE_HISTCONTROL not set.
++  */
++  lua_rl_history     = lua_rl_history_compute    (getenv(LUA_HISTORY));
++  lua_rl_histcontrol = lua_rl_histcontrol_compute(getenv(LUA_HISTCONTROL));
++
++  /*
++  ** LUA_HISTSIZE: The size of the in-memory command history. If 0, no
++  ** commands are saved in the history. If unset, LUA_HISTSIZE_DEFAULT
++  ** commands are saved. If negative or non-integer, then:
++  **   - LUA_USE_READLINE:  No limit on history.
++  **   - LUA_USE_LINENOISE: LUA_HISTSIZE_DEFAULT lines are saved
++  **                        (linenoise does not support unlimited history)
++  */
++  p = getenv(LUA_HISTSIZE);
++  if(p){
++    lua_rl_histsize = strtol(p, &p, 0);
++    if(*p || lua_rl_histsize < 0)
++      lua_rl_histsize = -1;
++  }else{
++    lua_rl_histsize = LUA_HISTSIZE_DEFAULT;
++  }
++
++  /*
++  ** LUA_HISTFILESIZE: The size of the command history file, LUA_HISTORY.
++  ** When set to a non-negative integer, the history file will be truncated to
++  ** that size on exit. If set to a negative or non-integer value, history is
++  ** not saved to LUA_HISTORY, and it is not truncated. If unset, inherits the
++  ** value of LUA_HISTSIZE.
++  */
++  p = getenv(LUA_HISTFILESIZE);
++  if(p){
++    lua_rl_histfilesize = strtol(p, &p, 0);
++    if(*p || lua_rl_histfilesize < 0)
++      lua_rl_histfilesize = -1;
++  }else{
++    lua_rl_histfilesize = lua_rl_histsize;
++  }
++
++#if   defined(LUA_USE_READLINE)
++  /* The following is adapted from Mike Pall's & Sean Bolton's Lua patches. */
++  /* This allows for $if lua ... $endif in ~/.inputrc. */
++  rl_readline_name = "lua";
++  /* Break words at every non-identifier character except '.' and ':'. */
++  rl_completer_word_break_characters =
++    "\t\r\n !\"#$%&'()*+,-/;<=>?@[\\]^`{|}~";
++  rl_completer_quote_characters = "\"'";
++#if RL_READLINE_VERSION < 0x0600
++  rl_completion_append_character = '\0';
++#endif
++  rl_attempted_completion_function = lua_rl_complete;
++  rl_initialize();
++
++  /* Start using history, optionally set history size and load history file. */
++  using_history();
++  if(lua_rl_histsize < 0)
++    unstifle_history();
++  else
++    stifle_history(lua_rl_histsize);
++
++  if(lua_rl_history)
++    read_history(lua_rl_history);
++
++#elif defined(LUA_USE_LINENOISE) || \
++      defined(LUA_USE_LINENOISE_UTF8)
++
++  linenoiseSetMultiLine(1);
++  linenoiseHistorySetMaxLen(lua_rl_histsize);
++  linenoiseSetCompletionCallback(lua_rl_complete);
++  linenoiseSetHintsCallback(lua_rl_hints);
++#if defined(LUA_USE_LINENOISE_UTF8)
++  linenoiseSetEncodingFunctions(linenoiseUtf8PrevCharLen,
++                                linenoiseUtf8NextCharLen,
++                                linenoiseUtf8ReadCode);
++#endif
++#if defined(LUA_USE_LINENOISE_HISTCONTROL)
++  linenoiseSetIgnoreSpaces(!!(lua_rl_histcontrol & HISTCONTROL_IGNORESPACE));
++  linenoiseSetIgnoreDups  (!!(lua_rl_histcontrol & HISTCONTROL_IGNOREDUPS));
++  linenoiseSetEraseDups   (!!(lua_rl_histcontrol & HISTCONTROL_ERASEDUPS));
++#endif
++  if(lua_rl_history)
++    linenoiseHistoryLoad(lua_rl_history);
++
++#endif
++}
++
++
++/* Finalize readline library. */
++static void lua_rl_exit(lua_State *L){
++  char* tmp;
++  (void)L; /* Avoid 'unused parameter' warning. */
++
++#if   defined(LUA_USE_READLINE)
++
++  if(lua_rl_histfilesize >= 0){
++    stifle_history(lua_rl_histfilesize);
++    if(lua_rl_history)
++      write_history(lua_rl_history);
++  }
++
++#elif defined(LUA_USE_LINENOISE) || \
++      defined(LUA_USE_LINENOISE_UTF8)
++
++  if(lua_rl_histfilesize >= 0){
++    linenoiseHistorySetMaxLen(lua_rl_histfilesize);
++    if(lua_rl_history)
++      linenoiseHistorySave(lua_rl_history);
++  }
++
++#endif
++
++  /* free() the lua_rl_history malloc()'ed in lua_rl_init() here */
++  tmp = lua_rl_history;
++  lua_rl_history = NULL;
++  free(tmp);
++}
++
++/* ------------------------------------------------------------------------ */
++
++
++
+ /*
+ ** Return the string to be used as a prompt by the interpreter. Leave
+ ** the string (or nil, if using the default value) on the stack, to keep
+@@ -595,7 +1201,7 @@ static void doREPL (lua_State *L) {
+   int status;
+   const char *oldprogname = progname;
+   progname = NULL;  /* no 'progname' on errors in interactive mode */
+-  lua_initreadline(L);
++  lua_rl_init(L);
+   while ((status = loadline(L)) != -1) {
+     if (status == LUA_OK)
+       status = docall(L, 0, LUA_MULTRET);
+@@ -604,6 +1210,7 @@ static void doREPL (lua_State *L) {
+   }
+   lua_settop(L, 0);  /* clear stack */
+   lua_writeline();
++  lua_rl_exit(L);
+   progname = oldprogname;
+ }
+ 

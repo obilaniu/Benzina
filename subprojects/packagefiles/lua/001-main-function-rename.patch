@@ -1,22 +1,29 @@
-diff -ru a/src/lua.c b/src/lua.c
---- a/src/lua.c	2021-05-24 21:06:04.037710151 -0400
-+++ b/src/lua.c	2021-06-11 23:07:15.637915973 -0400
-@@ -640,7 +640,10 @@
+Author: Olexa Bilaniuk <obilaniu@gmail.com>
+Date:   Wed Feb 23 13:54:01 2022 -0500
+
+    Enable renaming main function of Lua interpreter and compiler
+
+diff --git a/lua.c b/lua.c
+index 7f7dc2b2..28abd014 100644
+--- a/lua.c
++++ b/lua.c
+@@ -658,7 +658,10 @@ static int pmain (lua_State *L) {
  }
  
  
 -int main (int argc, char **argv) {
-+#ifndef  main_lua
-+# define main_lua main
++#ifndef main_lua
++#define main_lua main
 +#endif
 +int main_lua (int argc, char **argv) {
    int status, result;
    lua_State *L = luaL_newstate();  /* create state */
    if (L == NULL) {
-diff -ru a/src/luac.c b/src/luac.c
---- a/src/luac.c	2021-05-24 21:06:04.037710151 -0400
-+++ b/src/luac.c	2021-06-11 23:07:41.766879167 -0400
-@@ -194,7 +194,10 @@
+diff --git a/luac.c b/luac.c
+index 52f41ca0..4dd3bf41 100644
+--- a/luac.c
++++ b/luac.c
+@@ -196,7 +196,10 @@ static int pmain(lua_State* L)
   return 0;
  }
  

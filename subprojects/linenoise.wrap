@@ -2,3 +2,9 @@
 url = https://github.com/obilaniu/linenoise.git
 revision = head
 patch_directory = linenoise
+
+#
+# Known good revision:
+#     bdee19c752227361a4bb27cb5f8f608469b12dc7
+#     (June 21, 2022 06:02 EDT)
+#

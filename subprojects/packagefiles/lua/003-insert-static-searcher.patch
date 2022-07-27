@@ -1,0 +1,30 @@
+Author: Olexa Bilaniuk <obilaniu@gmail.com>
+Date:   Sun Oct 31 06:28:24 2021 -0400
+
+    Add static module search mechanism
+
+diff --git a/loadlib.c b/loadlib.c
+index d792dffa..b24cb47f 100644
+--- a/loadlib.c
++++ b/loadlib.c
+@@ -621,6 +621,12 @@ static int searcher_preload (lua_State *L) {
+ }
+ 
+ 
++static int searcher_static (lua_State* L) {
++  const char *name = luaL_checkstring(L, 1);
++  lua_pushfstring(L, "no module '%s' statically linked in", name);
++  return 1;
++}
++
+ static void findloader (lua_State *L, const char *name) {
+   int i;
+   luaL_Buffer msg;  /* to build error message */
+@@ -710,6 +716,7 @@ static const luaL_Reg ll_funcs[] = {
+ static void createsearcherstable (lua_State *L) {
+   static const lua_CFunction searchers[] = {
+     searcher_preload,
++    searcher_static,
+     searcher_Lua,
+     searcher_C,
+     searcher_Croot,

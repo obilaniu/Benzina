@@ -1,0 +1,55 @@
+diff --git a/loadlib.c b/loadlib.c
+index b24cb47f..b5edf45f 100644
+--- a/loadlib.c
++++ b/loadlib.c
+@@ -623,6 +623,50 @@ static int searcher_preload (lua_State *L) {
+ 
+ static int searcher_static (lua_State* L) {
+   const char *name = luaL_checkstring(L, 1);
++#define CONCATX(x,y) x ## y
++#define CONCAT(x,y)  CONCATX(x,y)
++#ifdef LUAOPEN_EXTRA
++# define ARRAY(n) CONCAT(LUAOPEN_EXTRA, n)
++  {
++    const luaL_Reg* lib;
++    extern const luaL_Reg ARRAY(_start)[];
++    extern const luaL_Reg ARRAY(_end)[];
++    for (lib = ARRAY(_start); lib < ARRAY(_end); lib++) {
++      if (strcmp(lib->name, name) == 0) { /* hit? */
++        lua_pushcfunction(L, lib->func);
++        lua_pushliteral(L, ":static_C:");
++        return 2;
++      }
++    }
++  }
++# undef ARRAY
++#endif
++#ifdef LUATEXT_EXTRA
++# define ARRAY(n) CONCAT(LUATEXT_EXTRA, n)
++  {
++    typedef struct{
++        const char* name;
++        const char* start;
++        const char* end;
++    } text_entry;
++    const text_entry* lib;
++    extern const text_entry ARRAY(_start)[];
++    extern const text_entry ARRAY(_end)[];
++    for (lib = ARRAY(_start); lib < ARRAY(_end); lib++) {
++      if (strcmp(lib->name, name) == 0) { /* hit? */
++        int stat = (luaL_loadbuffer(L, lib->start, lib->end-lib->start, name) == LUA_OK);
++        if (l_likely(stat))
++          return lua_pushliteral(L, ":static_Lua:"), 2;
++        else
++          return lua_pushfstring(L, "error loading statically-linked module '%s':\n\t%s",
++                                    name, lua_tostring(L, -1)), 1;
++      }
++    }
++  }
++# undef ARRAY
++#endif
++#undef CONCATX
++#undef CONCAT
+   lua_pushfstring(L, "no module '%s' statically linked in", name);
+   return 1;
+ }

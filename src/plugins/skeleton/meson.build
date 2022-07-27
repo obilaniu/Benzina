@@ -13,7 +13,7 @@ endif
 
 ### C code compilation
 libbenzina_plugin_skeletonSrcs = files('main.c')
-libbenzina_plugin_skeletonDeps = [threads, libm, libdl,
+libbenzina_plugin_skeletonDeps = [threads, dl, libm,
                                   libcuda, libcudart, libcudadevrt, libnvcuvid,
                                   libbenzina, plugin]
 libbenzina_plugin_skeletonSha  = shared_library('benzina-plugin-skeleton',

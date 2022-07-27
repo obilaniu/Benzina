@@ -1,6 +1,6 @@
 project('lz4', 'c',
     version:         '1.9.3',
-    meson_version:   '>=0.58.1',
+    meson_version:   '>=0.63.0',
     license:         'BSD',
     default_options: [
         'warning_level=2',
@@ -12,9 +12,19 @@ cc = meson.get_compiler('c')
 size_opt_args = cc.get_supported_arguments(['-ffunction-sections'])
 
 
-lz4_lib_files  = files('lib/lz4.c', 'lib/lz4hc.c', 'lib/lz4frame.c', 'lib/xxhash.c')
-lz4_prog_files = files('programs/bench.c',  'programs/datagen.c',
-                       'programs/lz4cli.c', 'programs/lz4io.c')
+lz4_lib_files  = files(
+    'lib/lz4.c',
+    'lib/lz4hc.c',
+    'lib/lz4frame.c',
+    'lib/lz4file.c',
+    'lib/xxhash.c',
+)
+lz4_prog_files = files(
+    'programs/bench.c',
+    'programs/datagen.c',
+    'programs/lz4cli.c',
+    'programs/lz4io.c',
+)
 lz4_inc        = include_directories('lib')
 lz4_c_args     = [
     '-DXXH_NAMESPACE=LZ4_',   # Avoid xxhash symbol conflicts with an LZ4-specific prefix.

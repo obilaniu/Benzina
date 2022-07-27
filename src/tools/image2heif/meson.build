@@ -20,7 +20,7 @@ endif
 ### C code compilation
 benzina_image2heif_srcs = files('main.c')
 benzina_image2heif_deps = [libavcodec, libavformat, libavfilter, libavutil, libswscale,
-                           threads, libm, libdl, libbenzina]
+                           threads, dl, libm, libbenzina]
 benzina_image2heif      = executable('benzina-image2heif', benzina_image2heif_srcs,
                                      dependencies        : benzina_image2heif_deps,
                                      build_rpath         : toolrpath,

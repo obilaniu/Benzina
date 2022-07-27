@@ -2,3 +2,9 @@
 url = https://github.com/keplerproject/luafilesystem.git
 revision = head
 patch_directory = lfs
+
+#
+# Known good revision:
+#     912e06714fc276c15b4d5d1b42bd2b11edb8deff
+#     (July 26, 2022 11:40 EDT)
+#

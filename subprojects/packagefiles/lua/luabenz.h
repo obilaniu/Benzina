@@ -6,25 +6,6 @@
 /* Imports */
 #include <stdlib.h>
 #include <pthread.h>
-#include "linenoise.h"      /* linenoise */
-#include "encodings/utf8.h" /* linenoise UTF-8 support */
-
-
-/**
- * We wish to use linenoise in our build, so make it available.
- * We also define the Lua readline macros in terms of linenoise functions.
- */
-
-#define lua_initreadline(L)    ((void)L, linenoiseSetMultiLine(1),        \
-                                         linenoiseHistorySetMaxLen(1000), \
-                                         linenoiseSetEncodingFunctions(   \
-                                             linenoiseUtf8PrevCharLen,    \
-                                             linenoiseUtf8NextCharLen,    \
-                                             linenoiseUtf8ReadCode        \
-                                         ))
-#define lua_readline(L,b,p)    ((void)L, ((b)=linenoise(p)) != NULL)
-#define lua_saveline(L,line)   ((void)L, linenoiseHistoryAdd(line))
-#define lua_freeline(L,b)      ((void)L, free(b))
 
 
 /**

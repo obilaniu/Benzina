@@ -51,7 +51,7 @@ libbenzina_plugin_nvdecodeCuda_dep = declare_dependency(
 ### C code compilation
 libbenzina_plugin_nvdecode_srcs = files('main.c')
 libbenzina_plugin_nvdecode_deps = [
-    threads, libm, libdl,
+    threads, dl, libm,
     libcuda, libcudart, libcudadevrt, libnvcuvid,
     libbenzina, plugin,
     libbenzina_plugin_nvdecodeCuda_dep

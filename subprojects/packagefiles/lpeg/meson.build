@@ -1,6 +1,6 @@
 project('lpeg', 'c',
     version:         '1.0.2',
-    meson_version:   '>=0.58.1',
+    meson_version:   '>=0.63.0',
     license:         'MIT',
     default_options: [
         'warning_level=1',

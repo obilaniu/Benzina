@@ -167,7 +167,6 @@ project_linenoise = subproject('linenoise')
 project_lua       = subproject('lua')
 project_lfs       = subproject('lfs')
 project_lpeg      = subproject('lpeg')
-project_penlight  = subproject('penlight')
 
 
 #
@@ -201,21 +200,21 @@ endif
 force_link_args = []
 special_link_args = []
 if CC_SYNTAX == 'gcc'
-  if CCLD_ID == 'ld.gold'
+  if CCLD_ID == 'ld.gold' or CCLD_ID == 'ld.mold'
     if   cc.has_link_argument('-fuse-ld=bfd')
-      warning('The ld.gold linker does not support our linker script. Forcing '+
-              'instead GNU ld.bfd (-fuse-ld=bfd)')
+      warning(f'The @CCLD_ID@ linker does not support our linker script. '+
+              f'Forcing instead GNU ld.bfd (-fuse-ld=bfd)')
       force_link_args += ['-fuse-ld=bfd']
       CCLD_FORCE_ID = 'ld.bfd'
     elif cc.has_link_argument('-fuse-ld=lld')
-      warning('The ld.gold linker does not support our linker script. Forcing '+
-              'instead LLVM ld.lld (-fuse-ld=lld)')
+      warning(f'The @CCLD_ID@ linker does not support our linker script. '+
+              f'Forcing instead LLVM ld.lld (-fuse-ld=lld)')
       force_link_args += ['-fuse-ld=lld']
       CCLD_FORCE_ID = 'ld.lld'
     else
-      error  ('The ld.gold linker does not support our linker script, but we '+
-              'are unable to force-select an alternative with the flag '+
-              '-fuse-ld=[bfd|lld]. Aborting.')
+      error  (f'The @CCLD_ID@ linker does not support our linker script, '+
+              f'but we are unable to force-select an alternative with the '+
+              f'compiler flag -fuse-ld=[bfd|lld]. Aborting.')
     endif
   endif
   #
@@ -241,8 +240,8 @@ if CC_SYNTAX == 'gcc'
   endforeach
 endif
 libm        = cc.find_library('m',  required: IS_HOST_LINUX)
-libdl       = cc.find_library('dl', required: IS_HOST_LINUX)
 librt       = cc.find_library('rt', required: IS_HOST_LINUX)
+dl          = dependency('dl',      required: IS_HOST_LINUX)
 openmp      = dependency('openmp',  required: false)
 threads     = dependency('threads')
 

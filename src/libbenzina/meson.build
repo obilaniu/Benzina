@@ -16,17 +16,15 @@ libbenzina_c_args    = ['-DBENZINA_IS_SHARED=1']
 libbenzina_incs      = [benzina_incs]
 libbenzina_srcs      = []
 libbenzina_lua_srcs  = {}
-libbenzina_lua_srcs += project_lpeg    .get_variable('lpeg_lua')
-libbenzina_lua_srcs += project_penlight.get_variable('penlight_lua')
+libbenzina_lua_srcs += project_lpeg.get_variable('lpeg_lua')
 libbenzina_link_only = []
 libbenzina_deps      = [
-    threads, libm, libdl,
+    threads, dl, libm,
     project_lz4      .get_variable('lz4_dep'),
     project_linenoise.get_variable('linenoise_dep'),
     project_lua      .get_variable('custom_lua_dep'),
     project_lfs      .get_variable('lfs_dep'),
     project_lpeg     .get_variable('lpeg_dep'),
-    project_penlight .get_variable('penlight_dep'),
 ]
 libbenzina_srcs += files(
     'benzina.c',
@@ -105,15 +103,17 @@ endif
 #     is always included in the builtin script, and the combination of all
 #     linker scripts may only declare at most one such section.
 #   - With Google's ld.gold, a full implicit linker script is rejected, whereas
-#     the more limited --version-script works=.
+#     the more limited --version-script= works.
+#   - With Rui Ueyama's ld.mold, a very limited subset of the linker script
+#     language is supported, whereas the more limited --version-script= works.
 #
 # Since we must absolutely use a linker script, we have elsewhere determined
 # whether the default is ld.gold and if so, force the linker to either ld.bfd
 # or ld.lld. Next, we use the --version-script= flag unconditionally, and the
 # -dT or -T flags depending on whether we are forcing ld.bfd or ld.lld.
 #
-# It would be easiest if we could the version script and linker scripts to the
-# linker directly. Unfortunately, Meson does not support auto-formatting
+# It would be easiest if we could pass the version script and linker scripts
+# to the linker directly. Unfortunately, Meson does not support auto-formatting
 # files() as strings yet, and link_args must be an array of strings.
 # So we go about it the hard way - get the current source directory and
 # construct the full absolute path to the linker version script, and add that
