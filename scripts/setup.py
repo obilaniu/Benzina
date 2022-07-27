@@ -76,10 +76,14 @@ setup(
     install_requires     = [
         "meson>=0.63.0",
         "numpy>=1.10",
-        "pytest==6.0.1",
-        "pybenzinaparse @ git+https://github.com/satyaog/pybenzinaparse.git@0.2.2#egg=pybenzinaparse-0.2.2",
-        "bcachefs @ git+https://github.com/mila-iqia/bcachefs.git@0.1.9#egg=bcachefs-0.1.9"
+        "pytest>=6.0.1",
+        "bcachefs",
     ],
+    extras_require       = {
+        "mp4": [
+            "pybenzinaparse @ git+https://github.com/satyaog/pybenzinaparse.git@0.2.2#egg=pybenzinaparse-0.2.2",
+        ],
+    },
     packages             = find_packages("src"),
     package_dir          = {'': 'src'},
     ext_modules          = [
