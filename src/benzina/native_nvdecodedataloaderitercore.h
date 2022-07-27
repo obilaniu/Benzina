@@ -6,7 +6,6 @@
  * Includes
  */
 
-#define  PY_SSIZE_T_CLEAN     /* So we get Py_ssize_t args. */
 #include <Python.h>           /* Because of "reasons", the Python header must be first. */
 #include <stddef.h>
 #include <stdint.h>
