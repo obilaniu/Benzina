@@ -24,7 +24,9 @@ dynlink_cuda_h  = files('dynlink_cuda.h')
 # Infer Video Codec SDK version from NVIDIA driver version.
 #
 if NVDEC_VERSION == 'auto'
-  if   NVIDIA_DRIVER.version_compare('>='+NVIDIA_DRIVER_11_0)
+  if   NVIDIA_DRIVER.version_compare('>='+NVIDIA_DRIVER_11_1)
+    NVDEC_VERSION = '11.1'
+  elif NVIDIA_DRIVER.version_compare('>='+NVIDIA_DRIVER_11_0)
     NVDEC_VERSION = '11.0'
   elif NVIDIA_DRIVER.version_compare('>='+NVIDIA_DRIVER_10_0)
     NVDEC_VERSION = '10.0'
@@ -48,6 +50,12 @@ endif
 #
 if   NVDEC_VERSION == 'unknown'
   warning('Found Video Codec SDK < 8.0, too old!')
+elif NVDEC_VERSION.version_compare('>=11.1')
+  message('Found Video Codec SDK >= 11.1, requires NVIDIA Driver >= '+NVIDIA_DRIVER_11_1+' and mandatory CUDA Toolkit >= 11.0')
+  if CUDA_VERSION != 'unknown' and CUDA_VERSION.version_compare('<11.0')
+    warning('Warning: CUDA Toolkit @0@ too old!'.format(CUDA_VERSION))
+  endif
+  nvcuvid_cdefs += ['-DNVDECODE=11001']
 elif NVDEC_VERSION.version_compare('>=11.0')
   message('Found Video Codec SDK >= 11.0, requires NVIDIA Driver >= '+NVIDIA_DRIVER_11_0+' and mandatory CUDA Toolkit >= 11.0')
   if CUDA_VERSION != 'unknown' and CUDA_VERSION.version_compare('<11.0')
