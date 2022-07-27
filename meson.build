@@ -1,6 +1,6 @@
 project('Benzina', 'c', 'cpp',
     version:          files('scripts/VERSION.txt'),
-    meson_version:    '>=0.58.1',
+    meson_version:    '>=0.63.0',
     license:          'MIT',
     default_options:  [
         'c_std=gnu99',

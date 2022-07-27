@@ -71,10 +71,10 @@ setup(
     zip_safe             = False,
     python_requires      = '>=3.6',
     setup_requires       = [
-        "meson>=0.58.1",
+        "meson>=0.63.0",
     ],
     install_requires     = [
-        "meson>=0.58.1",
+        "meson>=0.63.0",
         "numpy>=1.10",
         "pytest==6.0.1",
         "pybenzinaparse @ git+https://github.com/satyaog/pybenzinaparse.git@0.2.2#egg=pybenzinaparse-0.2.2",
