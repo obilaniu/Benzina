@@ -18,7 +18,7 @@ from .       import git
 #
 
 ver_release = open(Path(__file__).with_name('VERSION.txt')).read().strip()
-ver_public  = ver_release
+ver_public  = ver_release+".dev0"
 
 #
 # Information computed from the public version.
