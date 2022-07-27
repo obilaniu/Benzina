@@ -26,31 +26,13 @@ def strip_df_1_pie(f):
 
 if __name__ == "__main__":
     path_benzina_unpatched   = sys.argv[1] # Meson @INPUT0@
-    path_libbenzina_so       = sys.argv[2] # Meson @OUTPUT0@
-    path_libbenzina_so_X     = sys.argv[3] # Meson @OUTPUT1@
-    path_libbenzina_so_X_Y_Z = sys.argv[4] # Meson @OUTPUT2@
-    libbenzina_so            = os.path.basename(path_libbenzina_so)
-    libbenzina_so_X          = os.path.basename(path_libbenzina_so_X)
-    libbenzina_so_X_Y_Z      = os.path.basename(path_libbenzina_so_X_Y_Z)
+    path_libbenzina_so_X_Y_Z = sys.argv[2] # Meson @OUTPUT0@
     
-    if(os.path.islink(path_libbenzina_so_X_Y_Z) or 
-       os.path.exists(path_libbenzina_so_X_Y_Z)):
-        os.unlink    (path_libbenzina_so_X_Y_Z)
+    if(os.path.islink (path_libbenzina_so_X_Y_Z) or
+       os.path.lexists(path_libbenzina_so_X_Y_Z)):
+        os.unlink     (path_libbenzina_so_X_Y_Z)
     
     shutil.copy2(path_benzina_unpatched, path_libbenzina_so_X_Y_Z)
     
     with elf.ELF(path_libbenzina_so_X_Y_Z) as f:
         strip_df_1_pie(f)
-    
-    #
-    # Force-create/overwrite output symlinks:
-    #     libbenzina.so.X -> libbenzina.so.X.Y.Z
-    #     libbenzina.so   -> libbenzina.so.X
-    #
-    def overwrite_symlink(src, dst):
-        if os.path.islink(dst) and os.readlink(dst) == src: return
-        if os.path.exists(dst):    os.unlink(dst)
-        os.symlink(src, dst)
-    
-    overwrite_symlink(libbenzina_so_X_Y_Z, path_libbenzina_so_X)
-    overwrite_symlink(libbenzina_so_X,     path_libbenzina_so)

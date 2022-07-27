@@ -159,8 +159,7 @@ endif
 #      flag DF_1_PIE on PIE executables, which the GNU C library >= 2.30 checks
 #      for to block their dlopen()'ing (this may be justified when thread-local
 #      storage or copy relocations are used, but neither is a concern for us).
-#      We choose to manually patch out that flag using a Python script. This
-#      script also generates the .so and .so.X symlinks.
+#      We choose to manually patch out that flag using a Python script.
 #
 # As a result of all this, we manage to declare libbenzina_sha with every type
 # (static_library, executable, custom_target, declare_dependency) except the
@@ -185,42 +184,60 @@ else
   libbenzina_comp_deps = libbenzina_all_deps.partial_dependency(compile_args: true, includes: true)
   libbenzina_link_deps = libbenzina_all_deps.partial_dependency(link_args:    true, links:    true)
   
-  ## * Phase I:   Compile benzina-unpatched.a as PIC, but don't link any objects...
-  benzina_sta    = static_library(
-      libbenzina_name+'-unpatched',  libbenzina_srcs,
-      include_directories:           libbenzina_incs,
-      c_args:                        libbenzina_c_args + ['-DBENZINA_IS_BUILDING=1'],
-      dependencies:                  libbenzina_comp_deps,
-      gnu_symbol_visibility:         'hidden',
-      name_prefix:                   '',
-      pic:                           true,
-      prelink:                       false,
+  ## * Phase I:   Compile libbenzina.so.X.Y.Z.unpatched.a as PIC, but don't link any objects...
+  benzina_sta    = static_library(libbenzina_fullname+'.unpatched', libbenzina_srcs,
+      include_directories:              libbenzina_incs,
+      c_args:                           libbenzina_c_args + ['-DBENZINA_IS_BUILDING=1'],
+      dependencies:                     libbenzina_comp_deps,
+      gnu_symbol_visibility:            'hidden',
+      name_prefix:                      '',
+      pic:                              true,
+      prelink:                          false,
   )
   
-  ## * Phase II:  Link benzina-unpatched      as PIE, but don't compile any sources...
-  benzina_exe    = executable(
-      libbenzina_name+'-unpatched',  [],
-      objects:                       benzina_sta.extract_all_objects(recursive: true),
-      link_depends:                  libbenzina_link_only,
-      link_args:                     libbenzina_link_args,
-      dependencies:                  libbenzina_link_deps,
-      gnu_symbol_visibility:         'hidden',
-      export_dynamic:                true,
-      build_rpath:                   librpath,
-      pie:                           true,
+  ## * Phase II:  Link libbenzina.so.X.Y.Z.unpatched as PIE, but don't compile any sources...
+  benzina_exe    = executable(libbenzina_fullname+'.unpatched', [],
+      objects:               benzina_sta.extract_all_objects(recursive: true),
+      link_depends:          libbenzina_link_only,
+      link_args:             libbenzina_link_args,
+      dependencies:          libbenzina_link_deps,
+      gnu_symbol_visibility: 'hidden',
+      name_prefix:           '',
+      export_dynamic:        true,
+      build_rpath:           librpath,
+      pie:                   true,
   )
   
-  ## * Phase III: Patch benzina-unpatched     as libbenzina.so{, .X, .X.Y.Z}
-  libbenzina_sha = custom_target(
-      'patched '+libbenzina_linkname,
-      input:            [benzina_exe],
-      command:          [python, elf_strip_df_1_pie_py, '@INPUT0@', '@OUTPUT@'],
-      output:           [libbenzina_linkname, libbenzina_soname, libbenzina_fullname],
-      depend_files:     [elf_py],
-      install_dir:      libdir,
-      install:          true,
-      build_by_default: true,
-  )[0]
+  ## * Phase III: Patch libbenzina.so.X.Y.Z.unpatched as libbenzina.so.X.Y.Z, and install
+  libbenzina_sha = custom_target(libbenzina_fullname,
+      command:      [python, elf_strip_df_1_pie_py, '@INPUT@', '@OUTPUT@'],
+      input:        [benzina_exe],
+      output:       [libbenzina_fullname],
+      depend_files: [elf_py],
+      install_mode: 'rwxr-xr-x',
+      install_dir:  libdir,
+      install:      true,
+  )
+  
+  ## * Phase IV:  Create symlink libbenzina.so.X -> libbenzina.so.X.Y.Z, but do not install
+  libbenzina_sha = custom_target(libbenzina_soname,
+      command: ['ln', '-sf', '@PLAINNAME@', '@OUTPUT@'],
+      input:   libbenzina_sha,
+      output:  libbenzina_soname,
+      install: false,
+  )
+  
+  ## * Phase V:   Create symlink libbenzina.so -> libbenzina.so.X, but do not install
+  libbenzina_sha = custom_target(libbenzina_linkname,
+      command: ['ln', '-sf', '@PLAINNAME@', '@OUTPUT@'],
+      input:   libbenzina_sha,
+      output:  libbenzina_linkname,
+      install: false,
+  )
+  
+  ## * Phase VI:  Install symlinks libbenzina.so -> libbenzina.so.X -> libbenzina.so.X.Y.Z
+  install_symlink(libbenzina_soname,   install_dir: libdir,  pointing_to: libbenzina_fullname)
+  install_symlink(libbenzina_linkname, install_dir: libdir,  pointing_to: libbenzina_soname)
 endif
 
 libbenzina = declare_dependency(
