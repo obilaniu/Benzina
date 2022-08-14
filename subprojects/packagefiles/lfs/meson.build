@@ -1,6 +1,6 @@
 project('lfs', 'c',
     version:         '1.8.0',
-    meson_version:   '>=0.63.0',
+    meson_version:   '>=0.63.1',
     license:         'MIT',
 )
 

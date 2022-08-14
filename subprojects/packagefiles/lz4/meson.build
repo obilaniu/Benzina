@@ -1,6 +1,6 @@
 project('lz4', 'c',
     version:         '1.9.3',
-    meson_version:   '>=0.63.0',
+    meson_version:   '>=0.63.1',
     license:         'BSD',
     default_options: [
         'warning_level=2',
