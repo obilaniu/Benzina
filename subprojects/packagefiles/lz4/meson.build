@@ -1,5 +1,5 @@
 project('lz4', 'c',
-    version:         '1.9.3',
+    version:         '1.9.4',
     meson_version:   '>=0.63.1',
     license:         'BSD',
     default_options: [
