@@ -12,14 +12,6 @@ import subprocess
 
 
 
-def get_build_platlib():
-    build_platlib = get_platform()
-    build_platlib = ".%s-%d.%d" % (build_platlib, *sys.version_info[:2])
-    if hasattr(sys, "gettotalrefcount"):
-        build_platlib += "-pydebug"
-    build_platlib = os.path.join("build", "lib"+build_platlib)
-    return build_platlib
-
 def get_meson_build_root(build_temp):
     meson_build_root = os.path.basename(build_temp)
     meson_build_root = os.path.join(os.path.dirname(build_temp),
@@ -106,6 +98,12 @@ class build_configure(setuptools.command.build_ext.build_ext, build_mixin):
 
 
 class build_ext(setuptools.command.build_ext.build_ext, build_mixin):
+    def finalize_options(self):
+        super().finalize_options() # Inits self.build_lib and self.library_dirs
+        benzina_library_dir = os.path.join(self.build_lib, 'benzina', 'lib')
+        if benzina_library_dir not in self.library_dirs:
+            self.library_dirs.insert(0, benzina_library_dir)
+    
     def run(self):
         self.run_command("build_configure")
         subprocess.check_call(["ninja"],
