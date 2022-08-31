@@ -1,6 +1,6 @@
 [wrap-git]
 url = https://github.com/lua/lua.git
-revision = d61b0c60287c38008d312ddd11724a15b1737f7b
+revision = 997f11f54322883c3181225f29d101a597f31730
 patch_directory = lua
 diff_files = lua/001-main-function-rename.patch,
              lua/002-advanced-linenoise-history.patch,
