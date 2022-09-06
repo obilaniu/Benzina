@@ -21,7 +21,7 @@ class ClassificationDataset(torch.utils.data.Dataset):
 
     @property
     def filename(self):
-        return self._cursor.path
+        return self._cursor.filename
 
     def __len__(self):
         return len(self._samples)
@@ -31,7 +31,7 @@ class ClassificationDataset(torch.utils.data.Dataset):
             self._cursor.open()
 
         sample, target = self._samples[index]
-        sample = self._cursor.read_file(sample.inode)
+        sample = self._cursor.read(sample.inode)
 
         return self.Item(sample, target)
 
@@ -39,7 +39,7 @@ class ClassificationDataset(torch.utils.data.Dataset):
         raise NotImplementedError()
 
     def find_samples(self):
-        classes = [de for de in self._cursor.ls()
+        classes = [de for de in self._cursor.scandir()
                    if de.is_dir and de.name != "lost+found"]
         class_to_idx = {cls.name: i for i, cls in enumerate(classes)}
 
@@ -82,6 +82,6 @@ class ImageDataset(ClassificationDataset):
 class ImageNet(ImageDataset):
     def __init__(self,
                  bch_cursor: Cursor,
-                 split: ["train", "val", "test"],
+                 split: ["train", "val", "test"] = "train",
                  input_label: str = "bzna_thumb"):
         ImageDataset.__init__(self, bch_cursor.cd(split), input_label)

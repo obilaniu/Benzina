@@ -77,7 +77,8 @@ setup(
         "meson>=0.63.1",
         "numpy>=1.10",
         "pytest>=6.0.1",
-        "bcachefs",
+        "bcachefs>=0.1.12",
+        "pybenzinaparse>=0.2.2",
     ],
     extras_require       = {
         "mp4": [
