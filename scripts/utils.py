@@ -1,14 +1,16 @@
 from . import git
 import setuptools.command.build_ext
+import setuptools.command.install
+import setuptools.command.develop
+import setuptools.command.build
 import distutils.command.clean
-import distutils.command.build
-from   distutils.util      import get_platform
 from   distutils.file_util import copy_file
 from   distutils.dir_util  import copy_tree
 import ast
 import glob
 import os, shlex, sys, shutil
 import subprocess
+import warnings
 
 
 
@@ -28,12 +30,15 @@ class build_mixin:
 class build_configure(setuptools.command.build_ext.build_ext, build_mixin):
     description  = "Configure Meson build system."
     user_options = [
-        ('reconfigure', 'r', 'Whether to forcibly reconfigure or not')
+        ('reconfigure',     'r', 'Whether to forcibly reconfigure or not'),
+        ('meson_require=', None, 'The Meson build system requirement'),
     ]
+    boolean_options = ['reconfigure']
     
     def initialize_options(self):
         super().initialize_options()
-        self.reconfigure = 0
+        self.reconfigure = None
+        self.meson_require = None
     
     def run(self):
         """
@@ -76,6 +81,25 @@ class build_configure(setuptools.command.build_ext.build_ext, build_mixin):
         
         extra_args = shlex.split(env.pop("MESON_ARGS", ""))
         
+        
+        #
+        # The setuptools support for packages to be installed at setup time,
+        # the keyword setup_requires=..., is deprecated and never worked
+        # properly for Meson anyways. Try to ensure it is available here.
+        #
+        if not shutil.which("meson"):
+            subprocess.check_call(
+                [sys.executable, '-m', 'pip', 'install', '-q', self.meson_require],
+                env    = env,
+                cwd    = self.build_meson,
+                stdin  = subprocess.DEVNULL,
+            )
+        
+        
+        #
+        # Properly invoke Meson, now that it is definitely available.
+        # It could still fail due to the Meson on the path being too old.
+        #
         cmd  = [
             "meson",            git.get_src_root(),
             "--prefix",         os.path.abspath(self.build_lib),
@@ -176,7 +200,7 @@ class clean(distutils.command.clean.clean, build_mixin):
         return super().run()
 
 
-class meson_test(distutils.command.build.build, build_mixin):
+class meson_test(setuptools.command.build.build, build_mixin):
     description  = "Run Meson tests."
     
     def run(self):
@@ -184,5 +208,21 @@ class meson_test(distutils.command.build.build, build_mixin):
         subprocess.check_call(["meson", "test"],
                               stdin = subprocess.DEVNULL,
                               cwd   = self.build_meson)
+
+
+class develop(setuptools.command.develop.develop):
+    def initialize_options(self):
+        with warnings.catch_warnings():
+            if hasattr(setuptools, 'SetuptoolsDeprecationWarning'):
+                warnings.simplefilter('ignore', setuptools.SetuptoolsDeprecationWarning)
+            super().initialize_options()
+
+
+class install(setuptools.command.install.install):
+    def initialize_options(self):
+        with warnings.catch_warnings():
+            if hasattr(setuptools, 'SetuptoolsDeprecationWarning'):
+                warnings.simplefilter('ignore', setuptools.SetuptoolsDeprecationWarning)
+            super().initialize_options()
 
 
