@@ -53,49 +53,49 @@ if   NVDEC_VERSION == 'unknown'
 elif NVDEC_VERSION.version_compare('>=11.1')
   message('Found Video Codec SDK >= 11.1, requires NVIDIA Driver >= '+NVIDIA_DRIVER_11_1+' and mandatory CUDA Toolkit >= 11.0')
   if CUDA_VERSION != 'unknown' and CUDA_VERSION.version_compare('<11.0')
-    warning('Warning: CUDA Toolkit @0@ too old!'.format(CUDA_VERSION))
+    warning('CUDA Toolkit @0@ too old!'.format(CUDA_VERSION))
   endif
   nvcuvid_cdefs += ['-DNVDECODE=11001']
 elif NVDEC_VERSION.version_compare('>=11.0')
   message('Found Video Codec SDK >= 11.0, requires NVIDIA Driver >= '+NVIDIA_DRIVER_11_0+' and mandatory CUDA Toolkit >= 11.0')
   if CUDA_VERSION != 'unknown' and CUDA_VERSION.version_compare('<11.0')
-    warning('Warning: CUDA Toolkit @0@ too old!'.format(CUDA_VERSION))
+    warning('CUDA Toolkit @0@ too old!'.format(CUDA_VERSION))
   endif
   nvcuvid_cdefs += ['-DNVDECODE=11000']
 elif NVDEC_VERSION.version_compare('>=10.0')
   message('Found Video Codec SDK >= 10.0, requires NVIDIA Driver >= '+NVIDIA_DRIVER_10_0+' and mandatory CUDA Toolkit >= 10.1')
   if CUDA_VERSION != 'unknown' and CUDA_VERSION.version_compare('<10.1')
-    warning('Warning: CUDA Toolkit @0@ too old!'.format(CUDA_VERSION))
+    warning('CUDA Toolkit @0@ too old!'.format(CUDA_VERSION))
   endif
   nvcuvid_cdefs += ['-DNVDECODE=10000']
 elif NVDEC_VERSION.version_compare('>=9.1')
   message('Found Video Codec SDK >= 9.1, requires NVIDIA Driver >= '+NVIDIA_DRIVER_9_1+' and mandatory CUDA Toolkit >= 10.0')
   if CUDA_VERSION != 'unknown' and CUDA_VERSION.version_compare('<10.0')
-    warning('Warning: CUDA Toolkit @0@ too old!'.format(CUDA_VERSION))
+    warning('CUDA Toolkit @0@ too old!'.format(CUDA_VERSION))
   endif
   nvcuvid_cdefs += ['-DNVDECODE=9001']
 elif NVDEC_VERSION.version_compare('>=9.0')
   message('Found Video Codec SDK >= 9.0, requires NVIDIA Driver >= '+NVIDIA_DRIVER_9_0+' and mandatory CUDA Toolkit >= 10.0')
   if CUDA_VERSION != 'unknown' and CUDA_VERSION.version_compare('<10.0')
-    warning('Warning: CUDA Toolkit @0@ too old!'.format(CUDA_VERSION))
+    warning('CUDA Toolkit @0@ too old!'.format(CUDA_VERSION))
   endif
   nvcuvid_cdefs += ['-DNVDECODE=9000']
 elif NVDEC_VERSION.version_compare('>=8.2')
   message('Found Video Codec SDK >= 8.2, requires NVIDIA Driver >= '+NVIDIA_DRIVER_8_2+' and mandatory CUDA Toolkit >= 8.0')
   if CUDA_VERSION != 'unknown' and CUDA_VERSION.version_compare('<8.0')
-    warning('Warning: CUDA Toolkit @0@ too old!'.format(CUDA_VERSION))
+    warning('CUDA Toolkit @0@ too old!'.format(CUDA_VERSION))
   endif
   nvcuvid_cdefs += ['-DNVDECODE=8002']
 elif NVDEC_VERSION.version_compare('>=8.1')
   message('Found Video Codec SDK == 8.1, requires NVIDIA Driver >= '+NVIDIA_DRIVER_8_1+' and mandatory CUDA Toolkit >= 8.0')
   if CUDA_VERSION != 'unknown' and CUDA_VERSION.version_compare('<8.0')
-    warning('Warning: CUDA Toolkit @0@ too old!'.format(CUDA_VERSION))
+    warning('CUDA Toolkit @0@ too old!'.format(CUDA_VERSION))
   endif
   nvcuvid_cdefs += ['-DNVDECODE=8001']
 elif NVDEC_VERSION.version_compare('>=8.0')
   message('Found Video Codec SDK == 8.0, requires NVIDIA Driver >= '+NVIDIA_DRIVER_8_0+' and optional  CUDA Toolkit >= 8.0')
   if CUDA_VERSION != 'unknown' and CUDA_VERSION.version_compare('<8.0')
-    warning('Warning: CUDA Toolkit @0@ too old!'.format(CUDA_VERSION))
+    warning('CUDA Toolkit @0@ too old!'.format(CUDA_VERSION))
   endif
   nvcuvid_cdefs += ['-DNVDECODE=8000']
 else
