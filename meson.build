@@ -220,19 +220,17 @@ if CC_SYNTAX == 'gcc'
   # it tests linker arguments individually rather than in unison with any
   # -fuse-ld= flag determined above.
   #
-  foreach link_arg: [
-      '-Wl,-z,now',
-      '-Wl,-z,relro',
-      '-Wl,-z,combreloc',
-      '-Wl,-z,noseparate-code',
-      '-Wl,-z,noexecstack',
-      '-Wl,-z,nocopyreloc',
-      '-Wl,-z,text',
-    ]
-    if cc.has_multi_link_arguments(force_link_args+[link_arg])
+  foreach link_arg: ['now', 'relro', 'combreloc', 'noseparate-code',
+                     'noexecstack', 'nocopyreloc', 'text']
+    if cc.has_multi_link_arguments(force_link_args+['-Wl,-z,'+link_arg])
       special_link_args += [link_arg]
     endif
   endforeach
+  if special_link_args.length() > 0
+    special_link_args = ['-Wl,-z,'+',-z,'.join(special_link_args)]
+  else
+    special_link_args = []
+  endif
 endif
 libm        = cc.find_library('m',  required: IS_HOST_LINUX)
 librt       = cc.find_library('rt', required: IS_HOST_LINUX)
