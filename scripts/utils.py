@@ -3,9 +3,9 @@ import setuptools.command.build_ext
 import setuptools.command.install
 import setuptools.command.develop
 import setuptools.command.build
-import distutils.command.clean
-from   distutils.file_util import copy_file
-from   distutils.dir_util  import copy_tree
+log         = setuptools.distutils.log                  # from setuptools.XXX import does not work
+copy_file   = setuptools.distutils.file_util.copy_file  # from setuptools.XXX import does not work
+remove_tree = setuptools.distutils.dir_util.remove_tree # from setuptools.XXX import does not work
 import ast
 import glob
 import os, shlex, sys, shutil
@@ -192,12 +192,74 @@ class build_ext(setuptools.command.build_ext.build_ext, build_mixin):
         return meson_targets
 
 
-class clean(distutils.command.clean.clean, build_mixin):
+#
+# The `clean` command is provided by the deprecated distutils, and is not easily
+# importable for subclassing by setuptools because it is not supposed to be used:
+# Direct invocation of `python setup.py`, including `python setup.py clean` is
+# deprecated as well.
+#
+# However, the source code of Lib/distutils/command/clean.py has, functionally,
+# **NOT CHANGED IN 20 YEARS**, and is less than <80 lines of code:
+#
+#     https://github.com/python/cpython/blob/main/Lib/distutils/command/clean.py
+#     Copied to and lightly adapted:
+#     https://github.com/pypa/setuptools/blob/main/setuptools/_distutils/command/clean.py
+#
+# Be that as it may, instead of attempting to import difficult-to-import,
+# soon-to-be-removed code, we copy it, remove noisy cruft and make it aware of
+# the Meson build directory as well while we're at it.
+#
+class clean(setuptools.Command, build_mixin):
+    description  = "clean up temporary files from 'build' command"
+    user_options = [
+        ('build-base=',    'b',  "base build directory (default: 'build.build-base')"),
+        ('build-lib=',     None, "build directory for all modules (default: 'build.build-lib')"),
+        ('build-temp=',    't',  "temporary build directory (default: 'build.build-temp')"),
+        ('build-scripts=', None, "build directory for scripts (default: 'build.build-scripts')"),
+        ('bdist-base=',    None, "temporary directory for built distributions"),
+        ('all',            'a',  "remove all build output, not just temporary by-products"),
+    ]
+    boolean_options = ['all']
+
+    def initialize_options(self):
+        self.build_base    = None
+        self.build_lib     = None
+        self.build_temp    = None
+        self.build_scripts = None
+        self.bdist_base    = None
+        self.all           = None
+
+    def finalize_options(self):
+        self.set_undefined_options(
+            'build',
+            ('build_base',    'build_base'),
+            ('build_lib',     'build_lib'),
+            ('build_scripts', 'build_scripts'),
+            ('build_temp',    'build_temp'),
+        )
+        self.set_undefined_options('bdist', ('bdist_base', 'bdist_base'))
+
     def run(self):
+        # remove the build/{temp,meson}.<plat> directory (unless it's already gone)
+        if os.path.exists(self.build_temp):
+            remove_tree(self.build_temp,  dry_run=self.dry_run)
         if os.path.exists(self.build_meson):
-            distutils.dir_util.remove_tree(self.build_meson, dry_run=self.dry_run)
-        
-        return super().run()
+            remove_tree(self.build_meson, dry_run=self.dry_run)
+
+        if self.all:
+            # remove build directories
+            for directory in (self.build_lib, self.bdist_base, self.build_scripts):
+                if os.path.exists(directory):
+                    remove_tree(directory, dry_run=self.dry_run)
+
+        # just for the heck of it, try to remove the base build directory:
+        # we might have emptied it right now, but if not we don't care
+        if not self.dry_run:
+            try:
+                os.rmdir(self.build_base)
+                log.info("removing '%s'", self.build_base)
+            except OSError:
+                pass
 
 
 class meson_test(setuptools.command.build.build, build_mixin):
