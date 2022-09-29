@@ -1,7 +1,8 @@
-Author: Olexa Bilaniuk <obilaniu@gmail.com>
-Date:   Sun Oct 31 06:28:24 2021 -0400
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Olexa Bilaniuk <obilaniu@gmail.com>
+Date: Sun, 31 Oct 2021 06:28:24 -0400
+Subject: [PATCH] Add static searcher mechanism
 
-    Add static module search mechanism
 
 diff --git a/loadlib.c b/loadlib.c
 index d792dffa..b24cb47f 100644

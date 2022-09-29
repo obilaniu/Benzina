@@ -1,3 +1,9 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Olexa Bilaniuk <obilaniu@gmail.com>
+Date: Sun, 31 Oct 2021 06:28:24 -0400
+Subject: [PATCH] Implement static searcher mechanism
+
+
 diff --git a/loadlib.c b/loadlib.c
 index b24cb47f..b5edf45f 100644
 --- a/loadlib.c

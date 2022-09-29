@@ -1,7 +1,8 @@
-Author: Olexa Bilaniuk <obilaniu@gmail.com>
-Date:   Wed Feb 23 13:54:01 2022 -0500
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Olexa Bilaniuk <obilaniu@gmail.com>
+Date: Wed, 23 Feb 2022 13:54:01 -0500
+Subject: [PATCH] Enable renaming main functions
 
-    Enable renaming main function of Lua interpreter and compiler
 
 diff --git a/lua.c b/lua.c
 index 7f7dc2b2..28abd014 100644
