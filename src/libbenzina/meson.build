@@ -8,6 +8,7 @@ libbenzina_name      = 'benzina'
 libbenzina_libname   = 'lib'+libbenzina_name
 libbenzina_linkname  = libbenzina_libname+'.so'
 libbenzina_fullname  = libbenzina_linkname+'.'+meson.project_version()
+libbenzina_unpatched = libbenzina_fullname+'.unpatched'
 libbenzina_soversion = meson.project_version().split('.')[0]
 libbenzina_soname    = libbenzina_linkname+'.'+libbenzina_soversion
 libbenzina_sonamearg = IS_HOST_DARWIN ? [] : ['-Wl,-soname,'+libbenzina_soname]
@@ -185,26 +186,28 @@ else
   libbenzina_link_deps = libbenzina_all_deps.partial_dependency(link_args:    true, links:    true)
   
   ## * Phase I:   Compile libbenzina.so.X.Y.Z.unpatched.a as PIC, but don't link any objects...
-  benzina_sta    = static_library(libbenzina_fullname+'.unpatched', libbenzina_srcs,
-      include_directories:              libbenzina_incs,
-      c_args:                           libbenzina_c_args + ['-DBENZINA_IS_BUILDING=1'],
-      dependencies:                     libbenzina_comp_deps,
-      gnu_symbol_visibility:            'hidden',
-      name_prefix:                      '',
-      pic:                              true,
-      prelink:                          false,
+  benzina_sta    = static_library(
+      libbenzina_unpatched,  libbenzina_srcs,
+      include_directories:   libbenzina_incs,
+      c_args:                libbenzina_c_args + ['-DBENZINA_IS_BUILDING=1'],
+      dependencies:          libbenzina_comp_deps,
+      gnu_symbol_visibility: 'hidden',
+      name_prefix:           '',
+      pic:                   true,
+      prelink:               false,
   )
   
   ## * Phase II:  Link libbenzina.so.X.Y.Z.unpatched as PIE, but don't compile any sources...
-  benzina_exe    = executable(libbenzina_fullname+'.unpatched', [],
+  benzina_exe    = executable(
+      libbenzina_unpatched,  [],
       objects:               benzina_sta.extract_all_objects(recursive: true),
       link_depends:          libbenzina_link_only,
       link_args:             libbenzina_link_args,
       dependencies:          libbenzina_link_deps,
+      build_rpath:           librpath,
       gnu_symbol_visibility: 'hidden',
       name_prefix:           '',
       export_dynamic:        true,
-      build_rpath:           librpath,
       pie:                   true,
   )
   
