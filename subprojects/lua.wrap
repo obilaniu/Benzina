@@ -1,6 +1,7 @@
 [wrap-git]
 url = https://github.com/lua/lua.git
 revision = 26be27459b11feabed52cf40aaa76f86c7edc977
+depth = 1
 patch_directory = lua
 diff_files =
     lua/patches/0001-Enable-renaming-main-functions.patch,
