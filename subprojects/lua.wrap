@@ -2,8 +2,9 @@
 url = https://github.com/lua/lua.git
 revision = 26be27459b11feabed52cf40aaa76f86c7edc977
 patch_directory = lua
-diff_files = lua/patches/0001-Enable-renaming-main-functions.patch,
-             lua/patches/0002-Advanced-history-and-line-completion-support.patch,
-             lua/patches/0003-Add-static-searcher-mechanism.patch,
-             lua/patches/0004-Implement-static-searcher-mechanism.patch,
-             lua/patches/9999-Empty.patch
+diff_files =
+    lua/patches/0001-Enable-renaming-main-functions.patch,
+    lua/patches/0002-Advanced-history-and-line-completion-support.patch,
+    lua/patches/0003-Add-static-searcher-mechanism.patch,
+    lua/patches/0004-Implement-static-searcher-mechanism.patch,
+    lua/patches/9999-Empty.patch
