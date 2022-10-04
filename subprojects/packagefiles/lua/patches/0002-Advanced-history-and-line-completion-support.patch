@@ -21,7 +21,7 @@ Co-authored-by: Mike Pall <mike>
 Co-authored-by: Sean Bolton <sean@smbolton.com>
 
 diff --git a/lua.c b/lua.c
-index 28abd014..7f93255a 100644
+index 28abd014..8fc2043d 100644
 --- a/lua.c
 +++ b/lua.c
 @@ -438,6 +438,18 @@ static int handle_luainit (lua_State *L) {
@@ -312,7 +312,7 @@ index 28abd014..7f93255a 100644
 +  char *t = NULL;
 +
 +  if (ml->idx+1 >= ml->allocated &&
-+      !(ml->list = realloc(ml->list, sizeof(char *)*(ml->allocated += 32))))
++      !(ml->list = (char**)realloc(ml->list, sizeof(char *)*(ml->allocated += 32))))
 +    return -1;
 +
 +  if (s) {
@@ -565,7 +565,7 @@ index 28abd014..7f93255a 100644
 +  rl_readline_name = "lua";
 +  /* Break words at every non-identifier character except '.' and ':'. */
 +  rl_completer_word_break_characters =
-+    "\t\r\n !\"#$%&'()*+,-/;<=>?@[\\]^`{|}~";
++    (char*)"\t\r\n !\"#$%&'()*+,-/;<=>?@[\\]^`{|}~";
 +  rl_completer_quote_characters = "\"'";
 +#if RL_READLINE_VERSION < 0x0600
 +  rl_completion_append_character = '\0';
