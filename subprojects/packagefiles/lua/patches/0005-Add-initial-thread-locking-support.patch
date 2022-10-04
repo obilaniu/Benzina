@@ -1,0 +1,206 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Olexa Bilaniuk <obilaniu@gmail.com>
+Date: Sat, 13 Nov 2021 06:38:04 -0500
+Subject: [PATCH] Add initial thread-locking support.
+
+
+diff --git a/llimits.h b/llimits.h
+index 52a32f92..6ae76514 100644
+--- a/llimits.h
++++ b/llimits.h
+@@ -247,7 +247,12 @@ typedef l_uint32 Instruction;
+ ** macros that are executed whenever program enters the Lua core
+ ** ('lua_lock') and leaves the core ('lua_unlock')
+ */
+-#if !defined(lua_lock)
++#if defined(LUA_USE_THREADING)
++#undef lua_lock
++#undef lua_unlock
++LUAI_FUNC int lua_lock(lua_State *L);
++LUAI_FUNC int lua_unlock(lua_State *L);
++#elif !defined(lua_lock)
+ #define lua_lock(L)	((void) 0)
+ #define lua_unlock(L)	((void) 0)
+ #endif
+diff --git a/lstate.c b/lstate.c
+index 1ffe1a0f..83c8967d 100644
+--- a/lstate.c
++++ b/lstate.c
+@@ -10,6 +10,9 @@
+ #include "lprefix.h"
+ 
+ 
++#if defined(LUA_USE_THREADING)
++#include <errno.h>
++#endif
+ #include <stddef.h>
+ #include <string.h>
+ 
+@@ -225,6 +228,123 @@ static void init_registry (lua_State *L, global_State *g) {
+ }
+ 
+ 
++/*
++** Lock and unlock Lua state.
++*/
++#if defined(LUA_USE_THREADING)
++LUAI_FUNC int lua_lock (lua_State *L) {
++  int ret = pthread_mutex_lock(&G(L)->lock);
++# if _POSIX_C_SOURCE >= 200809L
++  if (ret == EOWNERDEAD) {
++    return pthread_mutex_consistent(&G(L)->lock);
++  }
++# endif
++  return ret;
++}
++LUAI_FUNC int lua_unlock (lua_State *L) {
++  return pthread_mutex_unlock(&G(L)->lock);
++}
++#endif
++
++
++/*
++** Initialize global lock and condition variable for global state.
++** If it is successfully created, the lock is *not* held on return.
++*/
++static int luaE_initlocking (global_State *g) {
++#if !defined(LUA_USE_THREADING)
++  return (void)g, LUA_OK;
++#else
++  pthread_mutexattr_t mutexattr;
++  if (pthread_cond_init(&g->cond, NULL) == 0) {
++    if (pthread_mutexattr_init(&mutexattr) == 0) {
++      if (pthread_mutexattr_settype(&mutexattr, PTHREAD_MUTEX_ERRORCHECK) == 0 &&
++# if _POSIX_C_SOURCE >= 200809L
++          pthread_mutexattr_setrobust(&mutexattr, PTHREAD_MUTEX_ROBUST) == 0 &&
++# endif
++          pthread_mutex_init(&g->lock, &mutexattr) == 0) {
++        pthread_mutexattr_destroy(&mutexattr);
++        return LUA_OK;
++      }
++      pthread_mutexattr_destroy(&mutexattr);
++    }
++    pthread_cond_destroy(&g->cond);
++  }
++  return LUA_ERRRUN;
++#endif
++}
++
++
++/*
++** Free global lock and condition variable for global state.
++** The lock may or may not be held when this function is called, depending on
++** how it is entered. Notably,
++**
++**     lua_close()
++**      -> lua_lock()
++**      -> close_state()
++**          -> luaE_freelocking()
++**
++** can enter this function with the lock held.
++*/
++static void luaE_freelocking (global_State *g) {
++#if !defined(LUA_USE_THREADING)
++  return (void)g;
++#else
++  /*
++   * Wake up any threads waiting for some reason on this state.
++   * They have no business doing so, as it would be a race condition, but we
++   * do this because it makes bad code fail faster and louder.
++   */
++  pthread_cond_broadcast(&g->cond);
++  /**
++   * A mutex can only be destroyed while unlocked, so try-lock, unlock and
++   * finally destroy it.
++   */
++  switch (pthread_mutex_trylock(&g->lock)) {
++# if _POSIX_C_SOURCE >= 200809L
++    /* A first thread had it, died, it was taken by a second thread, which
++     * unlocked it without making it pthread_mutex_consistent(), and it is now
++     * permanently irrecoverable. The only legal operation upon it is
++     * pthread_mutex_destroy(), which we were about to do anyways. */
++    case ENOTRECOVERABLE:
++      if (g->warnf)
++        (*g->warnf)(g->ud_warn, "[LUA MT LOCKING ERROR] Destroying lua_State "
++                                "while mutex is irrecoverable!", 0);
++      break;
++    /* The previous thread had it and died. We are being warned here. As we
++     * are the new owners, make the mutex consistent, then unlock it. */
++    case EOWNERDEAD:
++      pthread_mutex_consistent(&g->lock);
++# endif
++      /* fallthrough */
++    /**
++     * Three scenarios:
++     *   Mutex successfully taken by us (0):
++     *     May happen if state destroyed before it is fully initialized.
++     *   Mutex already owned by us (EBUSY, unlock 0):
++     *     May happen if lock not released before the state is destroyed. Happens
++     *     when entering via lua_close().
++     *   Mutex is owned by someone else (EBUSY, unlock EPERM):
++     *     This is not supposed to happen. We will soon unlock and destroy the
++     *     mutex under that thread's feet. This is entering the realm of UB,
++     *     but we will soon do that anyways, because the global_State
++     *     containing this lock is about to be deallocated. Very ugly.
++     * We tell apart the last two scenarios from the return value of unlock().
++     */
++    default:
++      if (pthread_mutex_unlock(&g->lock) == EPERM) /* Owned by someone else */
++        if (g->warnf)
++          (*g->warnf)(g->ud_warn, "[LUA MT LOCKING ERROR] Destroying lua_State "
++                                  "while mutex is held by unknown thread!", 0);
++  }
++  pthread_mutex_destroy(&g->lock);
++  pthread_cond_destroy(&g->cond);
++#endif
++}
++
++
++
+ /*
+ ** open parts of the state that may cause memory-allocation errors.
+ */
+@@ -279,6 +399,7 @@ static void close_state (lua_State *L) {
+   luaM_freearray(L, G(L)->strt.hash, G(L)->strt.size);
+   freestack(L);
+   lua_assert(gettotalbytes(g) == sizeof(LG));
++  luaE_freelocking(g);
+   (*g->frealloc)(g->ud, fromstate(L), sizeof(LG), 0);  /* free main block */
+ }
+ 
+@@ -360,6 +481,10 @@ LUA_API lua_State *lua_newstate (lua_Alloc f, void *ud) {
+   if (l == NULL) return NULL;
+   L = &l->l.l;
+   g = &l->g;
++  if(luaE_initlocking(g) != LUA_OK){
++    (*f)(ud, cast(LG *, l), sizeof(LG), 0);
++    return NULL;
++  }
+   L->tt = LUA_VTHREAD;
+   g->currentwhite = bitmask(WHITE0BIT);
+   L->marked = luaC_white(g);
+diff --git a/lstate.h b/lstate.h
+index 61e82cde..4cc4fd7c 100644
+--- a/lstate.h
++++ b/lstate.h
+@@ -8,6 +8,9 @@
+ #define lstate_h
+ 
+ #include "lua.h"
++#if defined(LUA_USE_THREADING)
++#include <pthread.h>
++#endif
+ 
+ #include "lobject.h"
+ #include "ltm.h"
+@@ -295,6 +298,10 @@ typedef struct global_State {
+   TString *strcache[STRCACHE_N][STRCACHE_M];  /* cache for strings in API */
+   lua_WarnFunction warnf;  /* warning function */
+   void *ud_warn;         /* auxiliary data to 'warnf' */
++#if defined(LUA_USE_THREADING)
++  pthread_mutex_t lock;  /* global state lock */
++  pthread_cond_t  cond;  /* global state condvar */
++#endif
+ } global_State;
+ 
+ 

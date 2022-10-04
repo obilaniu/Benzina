@@ -69,9 +69,7 @@ luac_filenames = ['luac.c']
 #
 # Compiler and Linker Flags
 #
-# Four macros of the utmost importance are defined here:
-#   - LUA_USER_H: Lua can import a custom header if this is defined.
-#         We set it to "luabenz.h".
+# A few macros of the utmost importance are defined here:
 #   - LUA*_EXTRA: We have patched Lua to optionally allow one to
 #         statically link Lua code into the core. We enable these options.
 #   - main_lua & main_luac: We rename main() to main_lua() and main_luac() for
@@ -82,29 +80,32 @@ c_args  = []
 c_args += IS_HOST_POSIX ? ['-DLUA_USE_POSIX']  : []
 c_args += IS_HOST_SUNOS ? ['-D_REENTRANT']     : []
 c_args += dl.found()    ? ['-DLUA_USE_DLOPEN'] : []
-c_args += ['-DLUA_USER_H="luabenz.h"']
-custom_lua_sta = static_library(
-    'lua',
+
+c_private_args  = [
+    '-Dmain_lua=main_lua',
+    '-Dmain_luac=main_luac',
+    '-DLUATEXT_EXTRA=__lua_text_array',
+    '-DLUAOPEN_EXTRA=__lua_open_array',
+    '-DLUA_USE_THREADING',
+    '-DLUA_USE_LINENOISE',
+    '-DLUA_USE_LINENOISE_UTF8',
+    '-DLUA_USE_LINENOISE_HISTCONTROL',
+    '-ULUA_USE_READLINE',
+]
+c_private_args += IS_HOST_LINUX ? ['-D_DEFAULT_SOURCE'] : []
+
+custom_lua_sta  = static_library('lua',
     files(core_filenames+aux_filenames+lib_filenames+lua_filenames+luac_filenames),
-    c_args: c_args + [
-        '-ULUA_USE_READLINE',
-        '-DLUA_USE_LINENOISE',
-        '-DLUA_USE_LINENOISE_UTF8',
-        '-DLUA_USE_LINENOISE_HISTCONTROL',
-        '-DLUATEXT_EXTRA=__lua_text_array',
-        '-DLUAOPEN_EXTRA=__lua_open_array',
-        '-Dmain_lua=main_lua',
-        '-Dmain_luac=main_luac',
-    ],
-    pic:          true,
-    name_prefix:  '',
-    dependencies: [linenoise, threads, dl],
-    override_options: [
+    dependencies:        [linenoise, threads, dl],
+    c_args:              c_args+c_private_args,
+    pic:                 true,
+    name_prefix:         '',
+    override_options:    [
         'optimization=s',
         'buildtype=minsize',
     ],
 )
-custom_lua_dep = declare_dependency(
+custom_lua_dep  = declare_dependency(
     dependencies:        [linenoise, threads, dl],
     include_directories: lua_inc,
     compile_args:        c_args,

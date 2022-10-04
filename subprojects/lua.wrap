@@ -8,4 +8,5 @@ diff_files =
     lua/patches/0002-Advanced-history-and-line-completion-support.patch,
     lua/patches/0003-Add-static-searcher-mechanism.patch,
     lua/patches/0004-Implement-static-searcher-mechanism.patch,
+    lua/patches/0005-Add-initial-thread-locking-support.patch,
     lua/patches/9999-Empty.patch
