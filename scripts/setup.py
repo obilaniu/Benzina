@@ -75,9 +75,15 @@ setup(
     install_requires     = [
         "numpy>=1.10",
         "pytest>=6.0.1",
-        "bcachefs>=0.1.12",
+        "bcachefs>=0.1.16",
         "pybenzinaparse>=0.2.2",
     ],
+    extras_require       = {
+        "coco": [
+            "torchvision",
+            "pycocotools>=2.0.5"
+        ],
+    },
     packages             = find_packages("src"),
     package_dir          = {'': 'src'},
     ext_modules          = [

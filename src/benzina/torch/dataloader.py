@@ -261,7 +261,7 @@ class _DataLoaderIter:
         ptrs                      = [int(buffer[n].data_ptr()) for n in range(len(indices))]
         samples                   = [self.dataset[i]           for i in indices]
         memviews[:len(indices)], auxd, tracks = \
-            zip(*[(memoryview(s.input), s.target, s.track) for s in samples])
+            zip(*[(memoryview(s.input), s.aux, s.track) for s in samples])
         memviews[len(indices):]   = [None] * (len(indices) - self.batch_size)
         token                     = (buffer, *self.collate_fn(auxd))
         t_args                    = (self.shape, self.RNG)

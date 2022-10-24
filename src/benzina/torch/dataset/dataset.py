@@ -1,21 +1,44 @@
 # -*- coding: utf-8 -*-
 import io
 from dataclasses import dataclass
+from typing import Callable, Optional
 
 import torch.utils.data
-from bcachefs import Cursor
+import bcachefs as bch
 
 from benzina.utils.file import File, Track
 
 
-class ClassificationDataset(torch.utils.data.Dataset):
+class BenzinaDatasetMixin(torch.utils.data.Dataset):
     @dataclass
     class Item:
         input: memoryview = None
-        target: int = -1
+        track: Track = None
+        aux: tuple = None
 
-    def __init__(self, bch_cursor: Cursor):
-        super(ClassificationDataset, self).__init__()
+    def __init__(self, bch_cursor: bch.Cursor, input_label: str = "bzna_thumb"):
+        torch.utils.data.Dataset.__init__(self)
+        self._cursor = bch_cursor
+        self._input_label = input_label
+
+    @property
+    def filename(self):
+        return self._cursor.filename
+
+    def __add__(self, other):
+        del other
+        raise NotImplementedError()
+
+    def __getitem__(self, index: int):
+        item = super().__getitem__(index)
+        return BenzinaDatasetMixin.Item(input=item[0], aux=tuple(item[1:]),
+            track=Track(File(io.BytesIO(item[0])), self._input_label))
+
+
+class ClassificationDatasetMixin(torch.utils.data.Dataset):
+    def __init__(self, bch_cursor: bch.Cursor, target_transform: Optional[Callable] = None):
+        torch.utils.data.Dataset.__init__(self)
+        self.target_transform = target_transform
         self._cursor = bch_cursor
         self._samples = self.find_samples()
 
@@ -33,10 +56,10 @@ class ClassificationDataset(torch.utils.data.Dataset):
         sample, target = self._samples[index]
         sample = self._cursor.read(sample.inode)
 
-        return self.Item(sample, target)
+        if self.target_transform:
+            target = self.target_transform(target)
 
-    def __add__(self, other):
-        raise NotImplementedError()
+        return sample, target
 
     def find_samples(self):
         classes = [de for de in self._cursor.scandir()
@@ -63,25 +86,7 @@ class ClassificationDataset(torch.utils.data.Dataset):
         return instances
 
 
-class ImageDataset(ClassificationDataset):
-    @dataclass
-    class Item(ClassificationDataset.Item):
-        track: Track = None
-
-    def __init__(self, bch_cursor: Cursor, input_label: str = "bzna_thumb"):
-        ClassificationDataset.__init__(self, bch_cursor)
-        self._input_label = input_label
-
-    def __getitem__(self, index: int):
-        item = ClassificationDataset.__getitem__(self, index)
-        return self.Item(input=item.input, target=(item.target,),
-                         track=Track(File(io.BytesIO(item.input)),
-                                     self._input_label))
-
-
-class ImageNet(ImageDataset):
-    def __init__(self,
-                 bch_cursor: Cursor,
-                 split: ["train", "val", "test"] = "train",
-                 input_label: str = "bzna_thumb"):
-        ImageDataset.__init__(self, bch_cursor.cd(split), input_label)
+class ImageDataset(BenzinaDatasetMixin, ClassificationDatasetMixin):
+    def __init__(self, bch_cursor: bch.Cursor, target_transform: Optional[Callable] = None, input_label: str = "bzna_thumb"):
+        BenzinaDatasetMixin.__init__(self, bch_cursor=bch_cursor, input_label=input_label)
+        ClassificationDatasetMixin.__init__(self, bch_cursor=bch_cursor, target_transform=target_transform)
