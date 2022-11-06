@@ -14,6 +14,7 @@ LUA_SUBPROJECT="$(pwd)/subprojects/packagefiles/lua"
 
 
 # Remove old set of patches and regenerate with git format-patches.
+mkdir -p "$LUA_SUBPROJECT/patches"
 rm -f  "$LUA_SUBPROJECT/patches"/????-*.patch
 touch  "$LUA_SUBPROJECT/patches/9999-Empty.patch"
 git -C "$LUA_FORK" format-patch  \
