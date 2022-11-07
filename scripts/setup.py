@@ -105,7 +105,7 @@ setup(
         "meson_test":      utils.meson_test,
     },
     command_options={
-        'build_configure': {'meson_require': ("setup.py", "meson>=0.63.1")},
+        'build_configure': {'meson_require': ("setup.py", "meson>=0.64.0")},
         'build_sphinx':    {
             'project':   ("setup.py", package_name),
             'copyright': ("setup.py", "2022, {}".format(author)),

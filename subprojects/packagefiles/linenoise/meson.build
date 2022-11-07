@@ -1,6 +1,6 @@
 project('linenoise', 'c',
     version:         '1.0',
-    meson_version:   '>=0.63.1',
+    meson_version:   '>=0.64.0',
     license:         'MIT',
     default_options: [
         'warning_level=0',

@@ -1,6 +1,6 @@
 project('Lua', 'c',
     version:         '5.4.4',
-    meson_version:   '>=0.63.1',
+    meson_version:   '>=0.64.0',
     license:         'MIT',
     default_options: [
         'warning_level=2',
