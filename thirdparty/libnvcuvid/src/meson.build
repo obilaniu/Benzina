@@ -11,9 +11,7 @@
 nvcuvid_linkargs = []
 nvcuvid_cargs    = ['-D__CUVID_INTERNAL']
 nvcuvid_kwargs   = IS_HOST_WINDOWS ? {} : {'soversion': '1'}
-cuda_h           = configure_file(input:  dynlink_cuda_h,
-                                  copy:   true,
-                                  output: 'cuda.h')
+cuda_h           = fs.copyfile(dynlink_cuda_h, 'cuda.h')
 
 
 #
