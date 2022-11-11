@@ -101,7 +101,7 @@ class build_configure(setuptools.command.build_ext.build_ext, build_mixin):
         # It could still fail due to the Meson on the path being too old.
         #
         cmd  = [
-            "meson",            git.get_src_root(),
+            "meson",  "setup",  git.get_src_root(),
             "--prefix",         os.path.abspath(self.build_lib),
             "-Dbuilding_py_pkg="+"true",
             "-Dpy_interpreter=" +sys.executable,
